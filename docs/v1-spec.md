@@ -11,6 +11,7 @@
 - 5 種元件的拖拉、連線、刪除、參數編輯
 - 後端穩態（steady-state）計算：使用率、平均延遲、丟棄量、瓶頸
 - 結果視覺化：節點變色、邊上 RPS、指標表、Sankey
+- 畫布效果：邊上的流量粒子動畫、節點依 ρ 發光、深色主題（可切換淺色），見第 6 節
 - 拓撲驗證與錯誤提示
 - JSON 匯入／匯出、1 個內建範例
 
@@ -19,6 +20,9 @@
 - ❌ 故障注入、timeout、retry（→ v2）
 - ❌ Message Queue、CDN、read replica、sharding（→ v2 / v3）
 - ❌ 有環（cycle）的拓撲
+- ❌ 阻塞式呼叫模型：Service 等待下游時占用 worker（→ v2 DES，見 3.2）
+- ❌ 數字過場動畫、丟棄粒子動畫（→ v2，搭配 DES 時間序列一起做）
+- ❌ 前端自動化測試（→ v2 再考慮 Playwright）
 - ❌ 帳號、資料庫、雲端存檔、部署上線（v1 只在本機跑）
 
 ---
@@ -30,9 +34,15 @@
 | 後端    | Java 21、Spring Boot 3、JUnit 5、springdoc-openapi                  |
 | 建置    | Gradle（Kotlin DSL）多模組、Gradle Wrapper                             |
 | 前端    | React + Vite + TypeScript、Tailwind CSS v4                        |
-| UI 元件 | `@cloudflare/kumo`（Sidebar、Tabs、Table、Slider、Meter、Toast、Charts） |
-| 畫布    | `@xyflow/react`（React Flow）                                      |
+| UI 元件 | shadcn/ui（元件原始碼複製進專案，可完全客製）                                  |
+| 圖表    | ECharts（Sankey）                                                  |
+| 動畫    | Motion                                                           |
+| 畫布    | `@xyflow/react`（React Flow），可搭配官方 React Flow UI（shadcn 版）元件          |
 | 型別同步  | springdoc 產出 OpenAPI → `openapi-typescript` 產生前端型別               |
+
+**型別同步流程**：Gradle task 產生 `openapi.json` 並 commit 進 repo，前端從這個檔案產生型別，不需要先啟動後端。`api` 模組有一個測試比對「目前程式碼產生的 OpenAPI」和 repo 裡的 `openapi.json`，不一致就失敗，避免忘記重新產生。
+
+**開發連線**：Vite dev server 把 `/api` proxy 到 Spring（`localhost:8080`），瀏覽器只跟同一個 origin 溝通，後端不開 CORS。
 
 ### 專案結構
 
@@ -77,6 +87,8 @@ system-design-simulator/
 - 容量 `capacity = c × μ`
 
 > **簡化假設**：多個 instance 視為一個共用佇列（假設前面有完美的負載平衡）。真實情況會比這更差，v2 的 DES 可以模擬不平均的分流。
+>
+> **簡化假設**：Service 呼叫下游時**不占用 worker**（相當於非阻塞 I/O），所以 ρ 只由 `serviceTimeMs` 決定。真實的同步服務（thread-per-request）在等待下游時 thread 會被卡住，DB 變慢會連帶拖垮 Service。這種連鎖過載留給 v2 的 DES 模擬。
 
 ### 3.3 元件
 
@@ -99,12 +111,31 @@ system-design-simulator/
 | `callsPerRequest` | 每個請求呼叫幾次（Service 用） | 1 |
 | `latencyMs` | 網路延遲（單程） | 1 |
 
+- 欄位只在對應的起點有意義：`weight` 只用在 Client／LB 的邊，`callsPerRequest` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（匯出的檔案一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
+- 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
+
 ### 3.5 節點狀態（預留）
 - `state`：v1 只有 `HEALTHY`。v2 加入 `DOWN`、`DEGRADED`。
 
 ---
 
 ## 4. 穩態計算
+
+### 4.0 引擎入口
+
+`engine` 模組對外只公開一個入口：
+
+```java
+public interface Simulator {
+    SimulationResult simulate(Topology topology);
+}
+```
+
+- 輸入是整份拓撲，輸出是完整結果（驗證錯誤、`nodes`、`edges`、`summary`），對應第 5 節的 response。
+- v1 的實作是 `SteadyStateSimulator`。驗證、流量、延遲、成功率、瓶頸都是它的內部細節，可以拆成多個 class，但不給 API 層直接呼叫。
+- 每次呼叫都是獨立的計算，不保留狀態。前端每次 Run 都送出整份拓撲重算。
+- API 層只負責 JSON ↔ `Topology`／`SimulationResult` 的轉換，不做任何計算。
+- 4.6 的測試案例都透過 `simulate()` 撰寫，測試的是行為而不是內部結構。v2 的 DES 是另一個實作，介面需要擴充時再決定。
 
 ### 4.1 流程
 1. **驗證**拓撲（見 4.5），有錯誤就直接回傳錯誤，不計算。
@@ -113,7 +144,7 @@ system-design-simulator/
    1. 加總上游送來的 read / write 到達率 `λ`
    2. 計算 ρ、排隊延遲、實際處理量、丟棄量
    3. 依元件行為把**實際處理量**分給下游邊
-4. 由下游往上游計算平均端到端延遲。
+4. 由下游往上游計算平均端到端延遲（4.3）與成功率（4.3.1）。
 5. 彙總 summary、找出瓶頸。
 
 ### 4.2 單一節點（M/M/c）
@@ -151,11 +182,40 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 | Cache（read） | `W(n) + (1 − hitRatio) × (edge.latencyMs×2 + L(child))` |
 | Cache（write） | `W(n) + edge.latencyMs×2 + L(child)` |
 
-Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該 class 的端到端延遲記為 `null`。
+Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該 class 的端到端延遲記為 `null`，因為系統不在穩態。前端要在 `null` 旁邊顯示原因（例如「DB 過載，穩態延遲無定義」），並搭配 `successRps`（4.3.1）讓使用者看到還有多少請求成功。
+
+**多個 Client**：每個 Client 各自的端到端延遲 `L(client, class)` 放在回應 `nodes` 中該 Client 的 `endToEndMs`。`summary.avgEndToEndMs` 用各 Client 該 class 的請求數加權平均：
+
+```
+avgEndToEndMs[class] = Σ_client (client.rps × classRatio × L(client, class)) / Σ_client (client.rps × classRatio)
+```
+
+其中 `classRatio` 是 read 的 `readRatio` 或 write 的 `1 − readRatio`。任一 Client 的該 class 為 `null` 時，summary 的該 class 也是 `null`；分母為 0（沒有該 class 的流量）時也記為 `null`。只有一個 Client 時，結果就等於該 Client 的延遲。
 
 > v1 只算**平均值**。p99 不能沿路徑相加，需要分佈或模擬，留到 v2。
 >
 > ⚠️ **`PARALLEL` 是近似值**：「各下游平均值的最大值」會低估真實延遲（真實的是「每個請求各自取最大值」再平均）。前端要標示「近似」，v2 用 DES 算出正確值。
+
+### 4.3.1 成功率
+
+Service 有 fan-out 時，下游的 RPS 是「子呼叫」而不是「使用者請求」，所以不能直接用丟棄量加總算成功數。改用成功機率沿呼叫樹由下往上乘：
+
+- 每個節點的通過率 `pass(n) = 實際處理量 / 到達量`（未過載時為 1）
+- 設 `S(n, class)` 為一個 class 的請求從節點 n 開始、最後完整成功的機率
+
+| 元件 | `S(n)` |
+|---|---|
+| Database | `pass(n)` |
+| Load Balancer／Client | `pass(n) × Σ (weight_i / Σweight) × S(child_i)` |
+| Service（依序或平行都一樣） | `pass(n) × Π S(child_i)^callsPerRequest_i`（任何一個子呼叫失敗，整個請求就失敗） |
+| Cache（read） | `pass(n) × (hitRatio + (1 − hitRatio) × S(child))` |
+| Cache（write） | `pass(n) × S(child)` |
+
+Client 的 `pass` 記為 1。彙總：
+- `successRps = Σ_client Σ_class client 的該 class rps × S(client, class)`
+- `dropRate = 1 − successRps / offeredRps`
+
+> **簡化假設**：各節點的丟棄彼此獨立。
 
 ### 4.4 狀態分級
 
@@ -166,7 +226,7 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 | 0.9 – 1.0 | `CRITICAL` | 橘 |
 | ≥ 1.0 | `OVERLOADED` | 紅 |
 
-**瓶頸** = ρ 最高的節點。
+**瓶頸** = ρ 最高的節點。Client 不處理請求，ρ 為 `null`，不列入瓶頸候選。
 
 ### 4.5 驗證規則
 
@@ -179,6 +239,7 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 | Cache 必須剛好一個下游 | `CACHE_DOWNSTREAM_COUNT` |
 | Client／LB 至少一個下游（Service 可以是終點，代表不依賴其他元件的服務） | `NO_DOWNSTREAM` |
 | 邊的 source / target 必須存在 | `UNKNOWN_NODE` |
+| 同一對 source → target 只能有一條邊 | `DUPLICATE_EDGE` |
 | 參數範圍（rps ≥ 0、0 ≤ ratio ≤ 1、instances ≥ 1、serviceTimeMs > 0…） | `INVALID_PARAM` |
 
 每個錯誤要附上 `nodeId` 或 `edgeId`，前端用來把有問題的節點標出來。
@@ -194,6 +255,7 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 | 大 c 不溢位 | c=400, ρ=0.9 | 結果有限且合理 |
 | 依序呼叫 | Service W=50ms，兩個下游 L=10ms、30ms，邊 latency=1ms | L = 50 + 12 + 32 = 94ms |
 | 平行呼叫 | 同上，`callMode=PARALLEL` | L = 50 + max(12, 32) = 82ms |
+| Fan-out 成功率 | Client 1000 rps → Service（pass=1）→ DB-A（pass=0.9，callsPerRequest=2）、DB-B（pass=1） | S = 0.9² × 1 = 0.81，successRps=810，dropRate=0.19 |
 
 ---
 
@@ -232,6 +294,18 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
   "valid": true,
   "errors": [],
   "nodes": {
+    "client-1": {
+      "arrivalRps": { "read": 900, "write": 100 },
+      "throughputRps": 1000,
+      "droppedRps": 0,
+      "successRps": 1000,
+      "endToEndMs": { "read": 52.0, "write": 52.0 },
+      "capacityRps": null,
+      "utilization": null,
+      "avgQueueMs": null,
+      "avgLatencyMs": null,
+      "status": null
+    },
     "svc-1": {
       "arrivalRps": { "read": 900, "write": 100 },
       "throughputRps": 1000,
@@ -258,6 +332,15 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 
 驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
 
+**Client 節點**：`arrivalRps` 是它送出的流量；`successRps` 和 `endToEndMs` 只有 Client 才有，代表這個 Client 的請求有多少成功、平均要等多久。其餘描述伺服器的欄位（容量、使用率、排隊、延遲、狀態）都是 `null`。
+
+**`null` 和 `0` 的語意不同**：
+
+- `0` 表示「這個量存在，數值剛好是零」，例如沒有流量的 Service `utilization: 0`、Client `droppedRps: 0`。
+- `null` 有兩種意思：**不適用**（Client 的 `utilization`、`status` 等）和**無定義**（過載時的延遲，見 4.2、4.3）。
+- 前端把 `null` 顯示為「—」，不能當成 0。「無定義」的情況要附上原因；`status: null` 的節點不變色、不發光。
+- 流量類欄位（`arrivalRps`、`throughputRps`、`droppedRps`、`successRps`）永遠是數字，不會是 `null`。
+
 ---
 
 ## 6. 前端畫面
@@ -280,17 +363,20 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 └────────────────────────────────────────────────────────────────┘
 ```
 
-| 區塊 | Kumo 元件 |
+| 區塊 | 元件 |
 |---|---|
-| 左側元件面板 | Sidebar（拖到畫布） |
-| 右側屬性面板 | Input、Slider、Meter（ρ） |
-| 下方結果 | Tabs、Table、Sankey、Badge（狀態） |
-| 工具列 | Toolbar、Button、Switch、Dropdown |
-| 通知 | Toast（例如「發現瓶頸：DB」） |
+| 左側元件面板 | shadcn Sidebar（拖到畫布） |
+| 右側屬性面板 | shadcn Input、Slider、Progress（ρ） |
+| 下方結果 | shadcn Tabs、Table、Badge（狀態）；ECharts Sankey |
+| 工具列 | shadcn Button、Switch、DropdownMenu |
+| 通知 | shadcn Sonner（例如「發現瓶頸：DB」） |
 
 **互動規則**
 - 自訂 React Flow 節點：顯示名稱、類型圖示、ρ 和狀態色；Run 之後才會出現指標。
 - 邊上的 label 顯示 RPS，粗細依流量比例。
+- **流量粒子動畫**：Run 之後，邊上有小點沿方向流動，速度或密度依該邊 RPS 調整。
+- **節點發光**：節點外框依狀態（4.4）顯示綠、黃、橘、紅的光暈；`OVERLOADED` 時脈動。
+- **主題**：預設深色，工具列可切換淺色。
 - **Auto-run** 開啟時，參數改變後 debounce 300ms 自動重算。
 - 驗證錯誤：有問題的節點加紅框，錯誤 Tab 列出清單，點擊可跳到該節點。
 - 拓撲在 Run 之後若被修改，結果標示為「已過期」。
@@ -306,7 +392,9 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 - [ ] 違反驗證規則時有明確錯誤，並標出問題節點
 - [ ] 匯出 JSON 再匯入後，畫布與參數完全還原
 - [ ] 內建範例「基本 Web App」：Client → LB → Service → Cache → DB
+- [ ] Run 之後邊上有流量粒子動畫，節點依狀態發光，可切換深色／淺色主題
 - [ ] `engine` 模組通過第 4.6 節的所有測試案例
+- [ ] `api` 模組有一個 `/simulate` 整合測試（用內建範例拓撲，檢查回應的 JSON 欄位）
 
 ---
 
@@ -314,9 +402,9 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 
 | # | 內容 | 完成時可以展示 |
 |---|---|---|
-| M0 | 專案骨架：Gradle 多模組、Vite + Kumo + React Flow 能啟動 | 空畫布、`/actuator/health` |
-| M1 | `engine`：模型、驗證、Erlang C、穩態計算與測試 | JUnit 全部通過 |
-| M2 | API ＋ OpenAPI ＋ 前端型別產生 | 用 curl 打 `/simulate` 得到結果 |
+| M0 | 專案骨架：Gradle 多模組、Vite + Tailwind v4 + shadcn/ui + React Flow 能啟動，深色主題，Vite proxy `/api` → Spring | 空畫布、透過 proxy 打到 `/actuator/health` |
+| M1 | `engine`：`Simulator` 入口、模型、驗證、Erlang C、穩態計算、成功率與測試 | JUnit 全部通過 |
+| M2 | API ＋ commit `openapi.json`（含同步檢查測試）＋ 前端型別產生 ＋ `/simulate` 整合測試 | 用 curl 打 `/simulate` 得到結果 |
 | M3 | 畫布：拖拉、連線、屬性面板 | 能組出架構 |
 | M4 | 串接：Run、節點變色、指標表、Sankey、錯誤提示 | 完整 demo |
 | M5 | 匯入／匯出、內建範例、Auto-run | v1 完成 🎉 |
@@ -331,3 +419,14 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 | 2026-11-12 | v1 支援 Service **依序與平行呼叫** | 平行呼叫在穩態模型是近似值，前端標示；v2 由 DES 給出正確值 |
 | 2026-11-12 | 初始化 git repo（推到 GitHub 之後再決定） | — |
 | 2026-11-12 | **先做出 v1，再決定 v2 要加什麼** | 實際用過才知道需要什麼；ROADMAP 的 v2／v3 只是方向，不是承諾 |
+| 2026-11-12 | Service 呼叫下游時**不占用 worker** | 阻塞模型會讓 ρ 和延遲互相依賴、需要迭代求解，可解釋性變差；v2 DES 天生能模擬 |
+| 2026-11-12 | `successRps` 用**成功機率沿呼叫樹相乘**計算（4.3.1） | fan-out 讓下游 RPS 變成子呼叫，不能直接加總丟棄量；遞迴算法和延遲公式一致、可解釋 |
+| 2026-11-12 | 部分路徑過載時，端到端延遲**維持 `null`**，前端顯示原因 | 過載節點的延遲在穩態下沒有定義，不硬塞假設值；成功率另由 `successRps` 呈現 |
+| 2026-11-12 | 測試範圍：**engine 單元測試＋一個 `/simulate` API 整合測試** | 計算正確性集中在 engine；前端靠手動驗收，v2 再考慮 Playwright |
+| 2026-11-12 | UI 改用 **shadcn/ui + Tailwind v4 + ECharts + Motion**，不用 `@cloudflare/kumo` | 想要華麗又清晰的畫面，需要完全掌控外觀；Kumo 的外觀綁在 Cloudflare 的設計語言 |
+| 2026-11-12 | v1 畫布效果只做**流量粒子、節點發光、深色主題** | 成本低且直接幫助理解瓶頸；數字過場、丟棄動畫等 v2 有時間序列時一起做 |
+| 2026-11-12 | 多個 Client 時，summary 延遲用**請求數加權平均**，每個 Client 的延遲另外列在 `nodes` | 加權平均代表「隨機一個請求要等多久」；summary 為 `null` 時仍看得到各 Client 的情況 |
+| 2026-11-12 | Client 留在 `nodes` 裡，伺服器類欄位為 `null`，不列入瓶頸 | 前端用同一套方式查所有節點；`null` 明確表示「不適用」，不會被誤認為 0 |
+| 2026-11-12 | 用不到的邊欄位**忽略**；重複的邊報 `DUPLICATE_EDGE` | 匯出檔一律帶預設值，報錯會讓自己的檔案無法匯入；重複邊幾乎都是操作失誤 |
+| 2026-11-12 | `openapi.json` **commit 進 repo** 並有同步檢查；開發時用 **Vite proxy** | 前端不必啟動後端就能產生型別，API 變動看得到 diff；proxy 免去 CORS 設定 |
+| 2026-11-12 | 引擎只公開 **`Simulator.simulate(Topology)`** 一個入口 | 計算不會散落到 API 層；測試透過公開介面驗證行為；v2 DES 是另一個實作 |

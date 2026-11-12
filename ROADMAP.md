@@ -20,7 +20,7 @@
 - 畫布：拖拉 5 種元件（Client / Load Balancer / Service / Cache / Database）並連線
 - 屬性面板：調整 RPS、讀寫比、instances、concurrency、service time、cache hit ratio
 - 穩態計算：每個節點的使用率 ρ、平均延遲、丟棄量；標出瓶頸
-- 視覺化：節點依 ρ 變色、邊上顯示 RPS、指標表、Sankey 流量圖
+- 視覺化：節點依 ρ 變色與發光、邊上顯示 RPS 與流量粒子動畫、指標表、Sankey 流量圖、深色主題
 - JSON 匯入／匯出，附 1 個內建範例
 
 ### v2 — 動態模擬（DES）
@@ -28,6 +28,8 @@
 - 指標：p50 / p95 / p99、時間序列（Timeseries 圖），透過 WebSocket 推送
 - 故障注入：節點掛掉、降級、延遲變高
 - 新元件：Message Queue ＋ Worker（非同步、backlog）
+- 阻塞式呼叫模型：Service 等待下游時占用 worker，可重現「DB 變慢拖垮 Service」的連鎖過載
+- 動畫：數字過場、被丟棄的請求從節點掉出
 - 韌性行為：timeout、retry（可重現 retry storm）、rate limit
 
 ### v3 — 情境與練習
