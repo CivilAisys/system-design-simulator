@@ -17,12 +17,12 @@ const ICONS: Record<NodeType, LucideIcon> = {
   DATABASE: Database,
 }
 
-// 第 4.4 節的狀態色
+// 第 4.4 節的狀態色，用 ring 和光暈疊在 bg-card 上，不改底色
 const STATUS_CLASSES: Record<Status, string> = {
-  OK: 'border-emerald-500 bg-emerald-500/10',
-  WARN: 'border-yellow-500 bg-yellow-500/10',
-  CRITICAL: 'border-orange-500 bg-orange-500/10',
-  OVERLOADED: 'border-red-500 bg-red-500/10',
+  OK: 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/40',
+  WARN: 'ring-2 ring-yellow-500 shadow-lg shadow-yellow-500/40',
+  CRITICAL: 'ring-2 ring-orange-500 shadow-lg shadow-orange-500/40',
+  OVERLOADED: 'ring-2 ring-red-500 shadow-lg shadow-red-500/40',
 }
 
 const STATUS_TEXT: Record<Status, string> = {
@@ -41,8 +41,8 @@ export function SimNode({ data }: NodeProps<SimFlowNode>) {
   return (
     <div
       className={cn(
-        'min-w-36 rounded-lg border-2 bg-card px-3 py-2 text-card-foreground shadow-sm',
-        status ? STATUS_CLASSES[status] : 'border-border',
+        'min-w-36 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm',
+        status && STATUS_CLASSES[status],
       )}
     >
       {node.type !== 'CLIENT' && <Handle type="target" position={Position.Left} />}

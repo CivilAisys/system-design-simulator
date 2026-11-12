@@ -1,10 +1,20 @@
 <!doctype html>
-<html lang="zh-Hant" class="dark">
+<html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>System Design Simulator</title>
+    <script>
+      // 在 bundle 載入前套用主題，避免閃一下錯的主題；key 和預設值要跟 src/theme.ts 一致
+      ;(function () {
+        var light = false
+        try {
+          light = localStorage.getItem('theme') === 'light'
+        } catch (e) {}
+        document.documentElement.classList.toggle('dark', !light)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

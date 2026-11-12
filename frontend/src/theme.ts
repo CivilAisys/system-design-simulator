@@ -12,7 +12,9 @@ function readStoredTheme(): Theme {
   }
 }
 
-// 預設深色，使用者的選擇存在 localStorage
+// 預設深色，使用者的選擇存在 localStorage。
+// index.html 的 inline script 在 bundle 載入前用同一個 key 和預設值套用主題，改這裡要一起改
+
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(readStoredTheme)
 
