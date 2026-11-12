@@ -116,6 +116,34 @@ class SimulateEndpointTest {
     }
 
     @Test
+    void loadBalancerSplitsByWeight() throws Exception {
+        String topology = """
+                { "version": 1,
+                  "nodes": [
+                    { "id": "c", "type": "CLIENT", "name": "Users", "params": { "rps": 1000, "readRatio": 1 } },
+                    { "id": "lb", "type": "LOAD_BALANCER", "name": "LB",
+                      "params": { "instances": 1, "concurrency": 1000, "serviceTimeMs": 1 } },
+                    { "id": "a", "type": "DATABASE", "name": "A",
+                      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 } },
+                    { "id": "b", "type": "DATABASE", "name": "B",
+                      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 } } ],
+                  "edges": [
+                    { "id": "e1", "source": "c", "target": "lb" },
+                    { "id": "e2", "source": "lb", "target": "a", "weight": 1 },
+                    { "id": "e3", "source": "lb", "target": "b", "weight": 3 } ] }
+                """;
+
+        JsonNode body = mapper.readTree(mvc.perform(post("/api/v1/simulate")
+                        .contentType(MediaType.APPLICATION_JSON).content(topology))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/nodes/lb/capacityRps").asDouble()).isEqualTo(1_000_000);
+        assertThat(body.at("/nodes/a/arrivalRps/read").asDouble()).isCloseTo(250, within(1e-6));
+        assertThat(body.at("/nodes/b/arrivalRps/read").asDouble()).isCloseTo(750, within(1e-6));
+    }
+
+    @Test
     void edgeFromUnknownNodeIsBadRequest() throws Exception {
         ObjectNode topology = straightTopology();
         ((ObjectNode) topology.at("/edges/1")).put("source", "ghost");

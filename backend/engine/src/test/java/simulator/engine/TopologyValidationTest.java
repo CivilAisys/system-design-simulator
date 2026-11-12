@@ -75,6 +75,13 @@ class TopologyValidationTest {
     }
 
     @Test
+    void loadBalancerWhoseEdgeWeightsSumToZeroIsRejected() {
+        assertRejected(List.of(client("c"), new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, CAPACITY),
+                        database("db")),
+                List.of(edge("e1", "c", "lb"), new Edge("e2", "lb", "db", 0, 1, 1)), "lb");
+    }
+
+    @Test
     void cycleIsRejected() {
         assertRejected(List.of(client("c"), service("a"), service("b")),
                 List.of(edge("e1", "c", "a"), edge("e2", "a", "b"), edge("e3", "b", "a")), "cycle");

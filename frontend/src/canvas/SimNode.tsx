@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
-import { Database, Server, Users, type LucideIcon } from 'lucide-react'
+import { Database, Network, Server, Users, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult, NodeType, Status } from '@/api/client'
 import { formatUtilization } from './format'
@@ -13,6 +13,7 @@ export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 const ICONS: Record<NodeType, LucideIcon> = {
   CLIENT: Users,
+  LOAD_BALANCER: Network,
   SERVICE: Server,
   DATABASE: Database,
 }

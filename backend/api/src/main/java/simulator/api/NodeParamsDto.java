@@ -8,8 +8,8 @@ import simulator.engine.CallMode;
 public record NodeParamsDto(
         @Schema(description = "CLIENT") Double rps,
         @Schema(description = "CLIENT") Double readRatio,
-        @Schema(description = "SERVICE, DATABASE") Integer instances,
-        @Schema(description = "SERVICE, DATABASE") Integer concurrency,
-        @Schema(description = "SERVICE, DATABASE") Double serviceTimeMs,
+        @Schema(description = "LOAD_BALANCER, SERVICE, DATABASE") Integer instances,
+        @Schema(description = "LOAD_BALANCER, SERVICE, DATABASE") Integer concurrency,
+        @Schema(description = "LOAD_BALANCER, SERVICE, DATABASE") Double serviceTimeMs,
         @Schema(description = "SERVICE") CallMode callMode) {
 }

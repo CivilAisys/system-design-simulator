@@ -33,7 +33,7 @@ final class TopologyGraph {
             }
             graph.addEdge(edge);
         }
-        graph.checkClientWeights();
+        graph.checkSplitWeights();
         return graph;
     }
 
@@ -96,6 +96,7 @@ final class TopologyGraph {
                 requireAtLeast(client.rps(), 0, where, "rps");
                 requireBetween(client.readRatio(), 0, 1, where, "readRatio");
             }
+            case LoadBalancerNode lb -> checkCapacityParams(lb.capacityParams(), where);
             case ServiceNode service -> checkCapacityParams(service.capacityParams(), where);
             case DatabaseNode database -> checkCapacityParams(database.capacityParams(), where);
         }
@@ -115,6 +116,7 @@ final class TopologyGraph {
         requireAtLeast(edge.latencyMs(), 0, where, "latencyMs");
         switch (source) {
             case ClientNode client -> requireAtLeast(edge.weight(), 0, where, "weight");
+            case LoadBalancerNode lb -> requireAtLeast(edge.weight(), 0, where, "weight");
             case ServiceNode service -> requireAtLeast(edge.callsPerRequest(), 1, where, "callsPerRequest");
             case DatabaseNode database -> {
             }
@@ -137,13 +139,13 @@ final class TopologyGraph {
         return new IllegalArgumentException(where + " param " + param + " must be " + expected + " but was " + actual);
     }
 
-    /** Client 依 weight 比例分流，權重總和為 0 時無法分配。 */
-    private void checkClientWeights() {
+    /** Client／LB 依 weight 比例分流，權重總和為 0 時無法分配。 */
+    private void checkSplitWeights() {
         for (Node node : nodes.values()) {
             List<Edge> edges = outgoing.get(node.id());
-            if (node instanceof ClientNode && !edges.isEmpty()
+            if ((node instanceof ClientNode || node instanceof LoadBalancerNode) && !edges.isEmpty()
                     && edges.stream().mapToDouble(Edge::weight).sum() <= 0) {
-                throw new IllegalArgumentException("Client " + node.id() + " edge weights must sum to more than 0");
+                throw new IllegalArgumentException("Node " + node.id() + " edge weights must sum to more than 0");
             }
         }
     }

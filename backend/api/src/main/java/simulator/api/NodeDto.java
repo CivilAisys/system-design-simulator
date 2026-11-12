@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import simulator.engine.CapacityParams;
 import simulator.engine.ClientNode;
 import simulator.engine.DatabaseNode;
+import simulator.engine.LoadBalancerNode;
 import simulator.engine.Node;
 import simulator.engine.NodeHealth;
 import simulator.engine.ServiceNode;
@@ -29,6 +30,7 @@ public record NodeDto(
         return switch (Required.of(type, where + " type")) {
             case CLIENT -> new ClientNode(id, name, health,
                     require(params.rps(), "rps"), require(params.readRatio(), "readRatio"));
+            case LOAD_BALANCER -> new LoadBalancerNode(id, name, health, capacityParams());
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
             case DATABASE -> new DatabaseNode(id, name, health, capacityParams());

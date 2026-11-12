@@ -25,6 +25,7 @@ public final class SteadyStateSimulator implements Simulator {
                     nodeResults.put(node.id(), NodeResult.client(sent));
                     yield sent;
                 }
+                case LoadBalancerNode lb -> process(lb.capacityParams(), arrival, node.id(), nodeResults);
                 case ServiceNode service -> process(service.capacityParams(), arrival, node.id(), nodeResults);
                 case DatabaseNode database -> process(database.capacityParams(), arrival, node.id(), nodeResults);
             };
@@ -34,6 +35,7 @@ public final class SteadyStateSimulator implements Simulator {
             for (Edge edge : edges) {
                 ClassRates rps = switch (node) {
                     case ClientNode client -> processed.times(edge.weight() / totalWeight);
+                    case LoadBalancerNode lb -> processed.times(edge.weight() / totalWeight);
                     case ServiceNode service -> processed.times(edge.callsPerRequest());
                     case DatabaseNode database -> ClassRates.ZERO;
                 };

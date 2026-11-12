@@ -73,6 +73,28 @@ class ParamRangeTest {
     }
 
     @Test
+    void invalidLoadBalancerParamsAreRejected() {
+        assertThatThrownBy(() -> simulator.simulate(new Topology(
+                List.of(client(100, 0.9),
+                        new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, new CapacityParams(0, 100, 10)),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
+                List.of(new Edge("e1", "c", "lb", 1, 1, 1), new Edge("e2", "lb", "db", 1, 1, 1)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("lb");
+    }
+
+    @Test
+    void negativeLoadBalancerEdgeWeightIsRejected() {
+        assertThatThrownBy(() -> simulator.simulate(new Topology(
+                List.of(client(100, 0.9),
+                        new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, CAPACITY),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
+                List.of(new Edge("e1", "c", "lb", 1, 1, 1), new Edge("e2", "lb", "db", -1, 1, 1)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("e2");
+    }
+
+    @Test
     void serviceEdgeWithLessThanOneCallIsRejected() {
         assertThatThrownBy(() -> run(client(100, 0.9), CAPACITY, clientEdge(1, 1, 1), serviceEdge(1, 0, 1)))
                 .isInstanceOf(IllegalArgumentException.class)
