@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import simulator.engine.Simulator;
 
-/** 只做 JSON ↔ engine 模型的轉換，計算全部交給 {@link Simulator}。 */
+/** 只做 JSON ↔ {@code engine} 模組型別的轉換，計算全部交給 {@link Simulator}。 */
 @RestController
 @RequestMapping("/api/v1")
 class SimulateController {

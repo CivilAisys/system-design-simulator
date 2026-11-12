@@ -8,20 +8,20 @@ import org.junit.jupiter.api.Test;
 /** 拓撲不合法時，simulate() 丟 IllegalArgumentException（#8 會改成回傳驗證錯誤）。 */
 class TopologyValidationTest {
 
-    private static final Capacity CAPACITY = new Capacity(1, 100, 10);
+    private static final CapacityParams CAPACITY = new CapacityParams(1, 100, 10);
 
     private final Simulator simulator = new SteadyStateSimulator();
 
     private static ClientNode client(String id) {
-        return new ClientNode(id, id, NodeState.HEALTHY, 100, 0.9);
+        return new ClientNode(id, id, NodeHealth.HEALTHY, 100, 0.9);
     }
 
     private static ServiceNode service(String id) {
-        return new ServiceNode(id, id, NodeState.HEALTHY, CAPACITY, CallMode.SEQUENTIAL);
+        return new ServiceNode(id, id, NodeHealth.HEALTHY, CAPACITY, CallMode.SEQUENTIAL);
     }
 
     private static DatabaseNode database(String id) {
-        return new DatabaseNode(id, id, NodeState.HEALTHY, CAPACITY);
+        return new DatabaseNode(id, id, NodeHealth.HEALTHY, CAPACITY);
     }
 
     private static Edge edge(String id, String source, String target) {

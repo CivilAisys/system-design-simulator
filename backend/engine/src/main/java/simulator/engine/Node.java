@@ -6,5 +6,5 @@ public sealed interface Node permits ClientNode, ServiceNode, DatabaseNode {
 
     String name();
 
-    NodeState state();
+    NodeHealth health();
 }

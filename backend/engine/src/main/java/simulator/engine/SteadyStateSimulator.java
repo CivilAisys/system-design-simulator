@@ -25,8 +25,8 @@ public final class SteadyStateSimulator implements Simulator {
                     nodeResults.put(node.id(), NodeResult.client(sent));
                     yield sent;
                 }
-                case ServiceNode service -> process(service.capacity(), arrival, node.id(), nodeResults);
-                case DatabaseNode database -> process(database.capacity(), arrival, node.id(), nodeResults);
+                case ServiceNode service -> process(service.capacityParams(), arrival, node.id(), nodeResults);
+                case DatabaseNode database -> process(database.capacityParams(), arrival, node.id(), nodeResults);
             };
 
             List<Edge> edges = graph.outgoing(node.id());
@@ -46,9 +46,9 @@ public final class SteadyStateSimulator implements Simulator {
                 inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults));
     }
 
-    private static ClassRates process(Capacity capacity, ClassRates arrival, String nodeId,
+    private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
             Map<String, NodeResult> nodeResults) {
-        var outcome = MmcQueue.solve(capacity, arrival);
+        var outcome = MmcQueue.solve(params, arrival);
         nodeResults.put(nodeId, outcome.result());
         return outcome.processed();
     }

@@ -96,16 +96,16 @@ final class TopologyGraph {
                 requireAtLeast(client.rps(), 0, where, "rps");
                 requireBetween(client.readRatio(), 0, 1, where, "readRatio");
             }
-            case ServiceNode service -> checkCapacity(service.capacity(), where);
-            case DatabaseNode database -> checkCapacity(database.capacity(), where);
+            case ServiceNode service -> checkCapacityParams(service.capacityParams(), where);
+            case DatabaseNode database -> checkCapacityParams(database.capacityParams(), where);
         }
     }
 
-    private static void checkCapacity(Capacity capacity, String where) {
-        requireAtLeast(capacity.instances(), 1, where, "instances");
-        requireAtLeast(capacity.concurrency(), 1, where, "concurrency");
-        if (!(capacity.serviceTimeMs() > 0) || Double.isInfinite(capacity.serviceTimeMs())) {
-            throw invalid(where, "serviceTimeMs", "a finite number > 0", capacity.serviceTimeMs());
+    private static void checkCapacityParams(CapacityParams params, String where) {
+        requireAtLeast(params.instances(), 1, where, "instances");
+        requireAtLeast(params.concurrency(), 1, where, "concurrency");
+        if (!(params.serviceTimeMs() > 0) || Double.isInfinite(params.serviceTimeMs())) {
+            throw invalid(where, "serviceTimeMs", "a finite number > 0", params.serviceTimeMs());
         }
     }
 

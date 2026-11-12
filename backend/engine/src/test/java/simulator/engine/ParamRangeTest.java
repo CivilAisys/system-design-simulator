@@ -14,20 +14,20 @@ import org.junit.jupiter.params.provider.MethodSource;
 /** 參數範圍（spec 3.2、4.5）：不合法時 simulate() 丟 IllegalArgumentException。 */
 class ParamRangeTest {
 
-    private static final Capacity CAPACITY = new Capacity(1, 100, 10);
+    private static final CapacityParams CAPACITY = new CapacityParams(1, 100, 10);
 
     private final Simulator simulator = new SteadyStateSimulator();
 
-    private SimulationResult run(ClientNode client, Capacity serviceCapacity, Edge clientEdge, Edge serviceEdge) {
+    private SimulationResult run(ClientNode client, CapacityParams serviceCapacity, Edge clientEdge, Edge serviceEdge) {
         return simulator.simulate(new Topology(
                 List.of(client,
-                        new ServiceNode("s", "API", NodeState.HEALTHY, serviceCapacity, CallMode.SEQUENTIAL),
-                        new DatabaseNode("db", "DB", NodeState.HEALTHY, CAPACITY)),
+                        new ServiceNode("s", "API", NodeHealth.HEALTHY, serviceCapacity, CallMode.SEQUENTIAL),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
                 List.of(clientEdge, serviceEdge)));
     }
 
     private static ClientNode client(double rps, double readRatio) {
-        return new ClientNode("c", "Users", NodeState.HEALTHY, rps, readRatio);
+        return new ClientNode("c", "Users", NodeHealth.HEALTHY, rps, readRatio);
     }
 
     private static Edge clientEdge(double weight, int callsPerRequest, double latencyMs) {
@@ -43,10 +43,10 @@ class ParamRangeTest {
                 client(100, -0.1), client(100, 1.1), client(100, Double.NaN));
     }
 
-    static Stream<Capacity> invalidCapacities() {
-        return Stream.of(new Capacity(0, 100, 10), new Capacity(1, 0, 10), new Capacity(1, 100, 0),
-                new Capacity(1, 100, -5), new Capacity(1, 100, Double.NaN),
-                new Capacity(1, 100, Double.POSITIVE_INFINITY));
+    static Stream<CapacityParams> invalidCapacityParams() {
+        return Stream.of(new CapacityParams(0, 100, 10), new CapacityParams(1, 0, 10), new CapacityParams(1, 100, 0),
+                new CapacityParams(1, 100, -5), new CapacityParams(1, 100, Double.NaN),
+                new CapacityParams(1, 100, Double.POSITIVE_INFINITY));
     }
 
     @ParameterizedTest
@@ -58,9 +58,9 @@ class ParamRangeTest {
     }
 
     @ParameterizedTest
-    @MethodSource("invalidCapacities")
-    void invalidCapacityParamsAreRejected(Capacity capacity) {
-        assertThatThrownBy(() -> run(client(100, 0.9), capacity, clientEdge(1, 1, 1), serviceEdge(1, 1, 1)))
+    @MethodSource("invalidCapacityParams")
+    void invalidCapacityParamsAreRejected(CapacityParams params) {
+        assertThatThrownBy(() -> run(client(100, 0.9), params,clientEdge(1, 1, 1), serviceEdge(1, 1, 1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("s");
     }
@@ -96,7 +96,7 @@ class ParamRangeTest {
     @Test
     void largeInstanceTimesConcurrencyDoesNotOverflow() {
         // 100,000 × 100,000 = 1e10 個 worker，超過 int 範圍
-        SimulationResult result = run(client(1000, 0.9), new Capacity(100_000, 100_000, 10),
+        SimulationResult result = run(client(1000, 0.9), new CapacityParams(100_000, 100_000, 10),
                 clientEdge(1, 1, 1), serviceEdge(1, 1, 1));
         NodeResult service = result.nodes().get("s");
 

@@ -7,10 +7,10 @@ final class MmcQueue {
     }
 
     /** 計算節點結果，並回傳實際處理完、要往下游送的流量。 */
-    static Outcome solve(Capacity capacity, ClassRates arrival) {
-        long c = capacity.workers();
-        double mu = capacity.serviceRate();
-        double cap = capacity.rps();
+    static Outcome solve(CapacityParams params, ClassRates arrival) {
+        long c = params.workers();
+        double mu = params.serviceRate();
+        double cap = params.capacityRps();
         double lambda = arrival.total();
         double rho = lambda / cap;
 
@@ -22,7 +22,7 @@ final class MmcQueue {
 
         double waitSec = erlangC(c, lambda / mu) / (cap - lambda);
         double queueMs = waitSec * 1000.0;
-        var result = new NodeResult(arrival, lambda, 0, cap, rho, queueMs, queueMs + capacity.serviceTimeMs(),
+        var result = new NodeResult(arrival, lambda, 0, cap, rho, queueMs, queueMs + params.serviceTimeMs(),
                 Status.of(rho));
         return new Outcome(result, arrival);
     }

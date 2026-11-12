@@ -22,7 +22,7 @@ import simulator.engine.ValidationError;
 @Schema(name = "SimulationResult")
 public record SimulationResponse(
         @Schema(requiredMode = REQUIRED) boolean valid,
-        @Schema(requiredMode = REQUIRED) List<Error> errors,
+        @Schema(requiredMode = REQUIRED) List<ValidationErrorDto> errors,
         @Schema(requiredMode = REQUIRED) Map<String, NodeResultDto> nodes,
         @Schema(requiredMode = REQUIRED) Map<String, EdgeResultDto> edges,
         @Schema(requiredMode = REQUIRED) SummaryDto summary) {
@@ -30,7 +30,7 @@ public record SimulationResponse(
     static SimulationResponse from(SimulationResult result) {
         return new SimulationResponse(
                 result.valid(),
-                result.errors().stream().map(Error::from).toList(),
+                result.errors().stream().map(ValidationErrorDto::from).toList(),
                 mapValues(result.nodes(), NodeResultDto::from),
                 mapValues(result.edges(), EdgeResultDto::from),
                 SummaryDto.from(result.summary()));
@@ -43,14 +43,14 @@ public record SimulationResponse(
     }
 
     @Schema(name = "ValidationError")
-    public record Error(
+    public record ValidationErrorDto(
             @Schema(requiredMode = REQUIRED) String code,
             @Schema(requiredMode = REQUIRED) String message,
             @Schema(requiredMode = REQUIRED, nullable = true) String nodeId,
             @Schema(requiredMode = REQUIRED, nullable = true) String edgeId) {
 
-        static Error from(ValidationError error) {
-            return new Error(error.code(), error.message(), error.nodeId(), error.edgeId());
+        static ValidationErrorDto from(ValidationError error) {
+            return new ValidationErrorDto(error.code(), error.message(), error.nodeId(), error.edgeId());
         }
     }
 
