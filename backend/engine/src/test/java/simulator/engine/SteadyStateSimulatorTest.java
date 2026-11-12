@@ -132,6 +132,59 @@ class SteadyStateSimulatorTest {
     }
 
     @Test
+    void loadBalancerSplitsByEdgeWeight() {
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
+                        new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, HUGE),
+                        new ServiceNode("a", "A", NodeHealth.HEALTHY, HUGE, CallMode.SEQUENTIAL),
+                        new ServiceNode("b", "B", NodeHealth.HEALTHY, HUGE, CallMode.SEQUENTIAL)),
+                List.of(
+                        new Edge("e1", "client", "lb", 1, 1, 1),
+                        new Edge("e2", "lb", "a", 1, 1, 1),
+                        new Edge("e3", "lb", "b", 3, 1, 1))));
+
+        assertRates(result.nodes().get("lb").arrivalRps(), 900, 100);
+        assertRates(result.edges().get("e2").rps(), 225, 25);
+        assertRates(result.edges().get("e3").rps(), 675, 75);
+        assertRates(result.nodes().get("a").arrivalRps(), 225, 25);
+        assertRates(result.nodes().get("b").arrivalRps(), 675, 75);
+    }
+
+    @Test
+    void trafficFromSeveralClientsAddsUpDownstream() {
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("web", "Web", NodeHealth.HEALTHY, 1000, 0.9),
+                        new ClientNode("mobile", "Mobile", NodeHealth.HEALTHY, 500, 0.5),
+                        new ServiceNode("svc", "API", NodeHealth.HEALTHY, HUGE, CallMode.SEQUENTIAL)),
+                List.of(
+                        new Edge("e1", "web", "svc", 1, 1, 1),
+                        new Edge("e2", "mobile", "svc", 1, 1, 1))));
+
+        assertRates(result.nodes().get("svc").arrivalRps(), 1150, 350);
+        assertThat(result.summary().offeredRps()).isEqualTo(1500);
+    }
+
+    @Test
+    void weightOnServiceEdgesIsIgnored() {
+        // Service 對每個下游都呼叫 callsPerRequest 次，weight 不分流
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
+                        new ServiceNode("svc", "API", NodeHealth.HEALTHY, HUGE, CallMode.SEQUENTIAL),
+                        new DatabaseNode("a", "A", NodeHealth.HEALTHY, HUGE),
+                        new DatabaseNode("b", "B", NodeHealth.HEALTHY, HUGE)),
+                List.of(
+                        new Edge("e1", "client", "svc", 1, 1, 1),
+                        new Edge("e2", "svc", "a", 1, 1, 1),
+                        new Edge("e3", "svc", "b", 3, 1, 1))));
+
+        assertRates(result.nodes().get("a").arrivalRps(), 900, 100);
+        assertRates(result.nodes().get("b").arrivalRps(), 900, 100);
+    }
+
+    @Test
     void resultsKeepInputOrder() {
         SimulationResult result = simulator.simulate(new Topology(
                 List.of(
