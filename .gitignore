@@ -1,0 +1,22 @@
+# OS / editor
+.DS_Store
+.obsidian/
+.idea/
+*.iml
+.vscode/
+
+# Java / Gradle
+.gradle/
+build/
+out/
+*.class
+
+# Frontend
+node_modules/
+dist/
+*.local
+npm-debug.log*
+
+# Env
+.env
+.env.*
