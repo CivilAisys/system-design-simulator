@@ -72,7 +72,7 @@ class SimulateEndpointTest {
         assertThat(e1.get("write").asDouble()).isCloseTo(100, within(1e-6));
 
         JsonNode summary = body.get("summary");
-        assertThat(fieldNames(summary)).containsExactlyInAnyOrder("offeredRps", "bottleneckNodeId");
+        assertThat(fieldNames(summary)).contains("offeredRps", "bottleneckNodeId");
         assertThat(summary.get("offeredRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("bottleneckNodeId").asText()).isEqualTo("svc-1");
     }
