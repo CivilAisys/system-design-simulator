@@ -222,6 +222,55 @@ class SteadyStateSimulatorTest {
         assertRates(result.nodes().get("db").arrivalRps(), 90, 50);
     }
 
+    /** Client → Service，Service 對 a、b 兩個 Database 各呼叫 callsA、callsB 次。 */
+    private SimulationResult runFanOut(double rps, CapacityParams service, int callsA, int callsB) {
+        return simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, rps, 0.9),
+                        new ServiceNode("svc", "API", NodeHealth.HEALTHY, service, CallMode.SEQUENTIAL),
+                        new DatabaseNode("a", "A", NodeHealth.HEALTHY, HUGE),
+                        new DatabaseNode("b", "B", NodeHealth.HEALTHY, HUGE)),
+                List.of(
+                        new Edge("e1", "client", "svc", 1, 1, 1),
+                        new Edge("e2", "svc", "a", 1, callsA, 1),
+                        new Edge("e3", "svc", "b", 1, callsB, 1))));
+    }
+
+    @Test
+    void serviceCallsEachDownstreamCallsPerRequestTimes() {
+        SimulationResult result = runFanOut(1000, HUGE, 2, 1);
+
+        assertThat(result.nodes().get("svc").throughputRps()).isCloseTo(1000, within(EPS));
+        assertRates(result.edges().get("e2").rps(), 1800, 200);
+        assertRates(result.edges().get("e3").rps(), 900, 100);
+        assertThat(result.nodes().get("a").arrivalRps().total()).isCloseTo(2000, within(EPS));
+        assertThat(result.nodes().get("b").arrivalRps().total()).isCloseTo(1000, within(EPS));
+    }
+
+    @Test
+    void overloadedServiceFansOutOnlyProcessedTraffic() {
+        // Service 容量 100，λ = 150 → 處理 100，下游收到 2 × 100 和 1 × 100
+        SimulationResult result = runFanOut(150, new CapacityParams(1, 1, 10), 2, 1);
+
+        assertThat(result.nodes().get("svc").status()).isEqualTo(Status.OVERLOADED);
+        assertRates(result.nodes().get("a").arrivalRps(), 180, 20);
+        assertRates(result.nodes().get("b").arrivalRps(), 90, 10);
+    }
+
+    @Test
+    void serviceWithoutDownstreamIsAnEndpoint() {
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
+                        new ServiceNode("svc", "API", NodeHealth.HEALTHY, new CapacityParams(2, 200, 50),
+                                CallMode.SEQUENTIAL)),
+                List.of(new Edge("e1", "client", "svc", 1, 1, 1))));
+
+        assertThat(result.valid()).isTrue();
+        assertRates(result.nodes().get("svc").arrivalRps(), 900, 100);
+        assertThat(result.nodes().get("svc").utilization()).isCloseTo(0.125, within(EPS));
+    }
+
     @Test
     void resultsKeepInputOrder() {
         SimulationResult result = simulator.simulate(new Topology(
