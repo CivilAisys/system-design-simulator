@@ -47,7 +47,10 @@ export function Canvas({ topology, result, colorMode }: CanvasProps) {
       edgeTypes={edgeTypes}
       colorMode={colorMode}
       fitView
+      // 骨架階段畫布唯讀：nodes/edges 由拓撲推導、沒有 onNodesChange，開放拖曳或選取只會彈回原位
+      nodesDraggable={false}
       nodesConnectable={false}
+      elementsSelectable={false}
       proOptions={{ hideAttribution: true }}
     >
       <Background />
