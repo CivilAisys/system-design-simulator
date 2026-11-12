@@ -144,6 +144,31 @@ class SimulateEndpointTest {
     }
 
     @Test
+    void cacheSendsReadMissesAndWritesDownstream() throws Exception {
+        String topology = """
+                { "version": 1,
+                  "nodes": [
+                    { "id": "c", "type": "CLIENT", "name": "Users", "params": { "rps": 1000, "readRatio": 0.9 } },
+                    { "id": "cache", "type": "CACHE", "name": "Redis",
+                      "params": { "instances": 1, "concurrency": 1, "serviceTimeMs": 0.01, "hitRatio": 0.8 } },
+                    { "id": "db", "type": "DATABASE", "name": "DB",
+                      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 } } ],
+                  "edges": [
+                    { "id": "e1", "source": "c", "target": "cache" },
+                    { "id": "e2", "source": "cache", "target": "db" } ] }
+                """;
+
+        JsonNode body = mapper.readTree(mvc.perform(post("/api/v1/simulate")
+                        .contentType(MediaType.APPLICATION_JSON).content(topology))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/nodes/cache/capacityRps").asDouble()).isCloseTo(100_000, within(1e-6));
+        assertThat(body.at("/nodes/db/arrivalRps/read").asDouble()).isCloseTo(180, within(1e-6));
+        assertThat(body.at("/nodes/db/arrivalRps/write").asDouble()).isCloseTo(100, within(1e-6));
+    }
+
+    @Test
     void edgeFromUnknownNodeIsBadRequest() throws Exception {
         ObjectNode topology = straightTopology();
         ((ObjectNode) topology.at("/edges/1")).put("source", "ghost");

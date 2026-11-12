@@ -10,6 +10,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** 參數範圍（spec 3.2、4.5）：不合法時 simulate() 丟 IllegalArgumentException。 */
 class ParamRangeTest {
@@ -92,6 +93,18 @@ class ParamRangeTest {
                 List.of(new Edge("e1", "c", "lb", 1, 1, 1), new Edge("e2", "lb", "db", -1, 1, 1)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("e2");
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {-0.1, 1.1, Double.NaN})
+    void invalidCacheHitRatioIsRejected(double hitRatio) {
+        assertThatThrownBy(() -> simulator.simulate(new Topology(
+                List.of(client(100, 0.9),
+                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, CAPACITY, hitRatio),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
+                List.of(new Edge("e1", "c", "cache", 1, 1, 1), new Edge("e2", "cache", "db", 1, 1, 1)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("hitRatio");
     }
 
     @Test

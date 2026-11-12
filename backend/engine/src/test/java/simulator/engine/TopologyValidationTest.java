@@ -20,6 +20,10 @@ class TopologyValidationTest {
         return new ServiceNode(id, id, NodeHealth.HEALTHY, CAPACITY, CallMode.SEQUENTIAL);
     }
 
+    private static CacheNode cache(String id) {
+        return new CacheNode(id, id, NodeHealth.HEALTHY, CAPACITY, 0.8);
+    }
+
     private static DatabaseNode database(String id) {
         return new DatabaseNode(id, id, NodeHealth.HEALTHY, CAPACITY);
     }
@@ -79,6 +83,17 @@ class TopologyValidationTest {
         assertRejected(List.of(client("c"), new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, CAPACITY),
                         database("db")),
                 List.of(edge("e1", "c", "lb"), new Edge("e2", "lb", "db", 0, 1, 1)), "lb");
+    }
+
+    @Test
+    void cacheWithoutDownstreamIsRejected() {
+        assertRejected(List.of(client("c"), cache("cache")), List.of(edge("e1", "c", "cache")), "cache");
+    }
+
+    @Test
+    void cacheWithTwoDownstreamsIsRejected() {
+        assertRejected(List.of(client("c"), cache("cache"), database("a"), database("b")),
+                List.of(edge("e1", "c", "cache"), edge("e2", "cache", "a"), edge("e3", "cache", "b")), "cache");
     }
 
     @Test
