@@ -96,6 +96,10 @@ _Avoid_: response time、total latency
 **Status（狀態）**:
 依使用率分級：OK、WARN、CRITICAL、OVERLOADED。Client 沒有狀態。
 
+**Health（健康狀況）**:
+Node 是否正常運作，對應 JSON 的 `state` 欄位。v1 只有 HEALTHY，v2 加入 DOWN、DEGRADED。跟 Status 無關。
+_Avoid_: 狀態（留給 Status）
+
 **Bottleneck（瓶頸）**:
 使用率最高的 Node。
 

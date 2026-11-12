@@ -1,0 +1,293 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "System Design Simulator API",
+    "version" : "v1"
+  },
+  "servers" : [ {
+    "url" : "/"
+  } ],
+  "paths" : {
+    "/api/v1/simulate" : {
+      "post" : {
+        "tags" : [ "simulate-controller" ],
+        "operationId" : "simulate",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Topology"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SimulationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "Edge" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "target" : {
+            "type" : "string"
+          },
+          "weight" : {
+            "type" : "number",
+            "format" : "double",
+            "default" : 1
+          },
+          "callsPerRequest" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          },
+          "latencyMs" : {
+            "type" : "number",
+            "format" : "double",
+            "default" : 1
+          }
+        },
+        "required" : [ "id", "source", "target" ]
+      },
+      "Node" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "CLIENT", "SERVICE", "DATABASE" ]
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "params" : {
+            "$ref" : "#/components/schemas/NodeParams"
+          },
+          "state" : {
+            "type" : "string",
+            "enum" : [ "HEALTHY" ]
+          },
+          "ui" : {
+            "$ref" : "#/components/schemas/NodeUi"
+          }
+        },
+        "required" : [ "id", "name", "params", "type" ]
+      },
+      "NodeParams" : {
+        "type" : "object",
+        "properties" : {
+          "rps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CLIENT"
+          },
+          "readRatio" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CLIENT"
+          },
+          "instances" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "SERVICE, DATABASE"
+          },
+          "concurrency" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "SERVICE, DATABASE"
+          },
+          "serviceTimeMs" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "SERVICE, DATABASE"
+          },
+          "callMode" : {
+            "type" : "string",
+            "description" : "SERVICE",
+            "enum" : [ "SEQUENTIAL", "PARALLEL" ]
+          }
+        }
+      },
+      "NodeUi" : {
+        "type" : "object",
+        "properties" : {
+          "x" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "y" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        },
+        "required" : [ "x", "y" ]
+      },
+      "Topology" : {
+        "type" : "object",
+        "properties" : {
+          "version" : {
+            "type" : "integer",
+            "format" : "int32",
+            "example" : 1
+          },
+          "nodes" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Node"
+            }
+          },
+          "edges" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Edge"
+            }
+          }
+        },
+        "required" : [ "edges", "nodes", "version" ]
+      },
+      "ClassRates" : {
+        "type" : "object",
+        "properties" : {
+          "read" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "write" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        },
+        "required" : [ "read", "write" ]
+      },
+      "EdgeResult" : {
+        "type" : "object",
+        "properties" : {
+          "rps" : {
+            "$ref" : "#/components/schemas/ClassRates"
+          }
+        },
+        "required" : [ "rps" ]
+      },
+      "NodeResult" : {
+        "type" : "object",
+        "properties" : {
+          "arrivalRps" : {
+            "$ref" : "#/components/schemas/ClassRates"
+          },
+          "throughputRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "droppedRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "capacityRps" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "utilization" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "avgQueueMs" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "avgLatencyMs" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "status" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED" ]
+          }
+        },
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "status", "throughputRps", "utilization" ]
+      },
+      "SimulationResult" : {
+        "type" : "object",
+        "properties" : {
+          "valid" : {
+            "type" : "boolean"
+          },
+          "errors" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ValidationError"
+            }
+          },
+          "nodes" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/NodeResult"
+            }
+          },
+          "edges" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/EdgeResult"
+            }
+          },
+          "summary" : {
+            "$ref" : "#/components/schemas/Summary"
+          }
+        },
+        "required" : [ "edges", "errors", "nodes", "summary", "valid" ]
+      },
+      "Summary" : {
+        "type" : "object",
+        "properties" : {
+          "offeredRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "bottleneckNodeId" : {
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "bottleneckNodeId", "offeredRps" ]
+      },
+      "ValidationError" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "nodeId" : {
+            "type" : [ "string", "null" ]
+          },
+          "edgeId" : {
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "code", "edgeId", "message", "nodeId" ]
+      }
+    }
+  }
+}
