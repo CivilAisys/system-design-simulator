@@ -2,6 +2,11 @@ package simulator.api;
 
 import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
 import simulator.engine.NodeResult;
@@ -9,11 +14,6 @@ import simulator.engine.SimulationResult;
 import simulator.engine.Status;
 import simulator.engine.Summary;
 import simulator.engine.ValidationError;
-import io.swagger.v3.oas.annotations.media.Schema;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
 
 /**
  * Simulation result 的 JSON 格式。所有欄位都會出現；

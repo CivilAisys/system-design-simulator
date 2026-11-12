@@ -1,13 +1,13 @@
 package simulator.api;
 
-import simulator.engine.Simulator;
-import simulator.engine.SteadyStateSimulator;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import simulator.engine.Simulator;
+import simulator.engine.SteadyStateSimulator;
 
 @SpringBootApplication
 public class SimulatorApplication {

@@ -1,7 +1,7 @@
 package simulator.api;
 
-import simulator.engine.CallMode;
 import io.swagger.v3.oas.annotations.media.Schema;
+import simulator.engine.CallMode;
 
 /** 各類型節點的參數放在同一個物件，只填該類型用得到的欄位。 */
 @Schema(name = "NodeParams")

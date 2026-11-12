@@ -2,13 +2,13 @@ package simulator.api;
 
 import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import simulator.engine.Capacity;
 import simulator.engine.ClientNode;
 import simulator.engine.DatabaseNode;
 import simulator.engine.Node;
 import simulator.engine.NodeState;
 import simulator.engine.ServiceNode;
-import io.swagger.v3.oas.annotations.media.Schema;
 
 /** {@code state} 省略時為 HEALTHY；{@code ui} 只給前端用，後端忽略。 */
 @Schema(name = "Node")
@@ -21,8 +21,12 @@ public record NodeDto(
         UiDto ui) {
 
     Node toNode() {
+        Required.of(id, "node id");
+        String where = "node " + id;
+        Required.of(name, where + " name");
+        Required.of(params, where + " params");
         NodeState nodeState = state == null ? NodeState.HEALTHY : state;
-        return switch (type) {
+        return switch (Required.of(type, where + " type")) {
             case CLIENT -> new ClientNode(id, name, nodeState,
                     require(params.rps(), "rps"), require(params.readRatio(), "readRatio"));
             case SERVICE -> new ServiceNode(id, name, nodeState, capacity(),
@@ -39,9 +43,6 @@ public record NodeDto(
     }
 
     private <T> T require(T value, String param) {
-        if (value == null) {
-            throw new IllegalArgumentException("Node " + id + " (" + type + ") is missing param " + param);
-        }
-        return value;
+        return Required.of(value, "node " + id + " (" + type + ") param " + param);
     }
 }

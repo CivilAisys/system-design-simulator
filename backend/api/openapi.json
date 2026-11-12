@@ -54,20 +54,20 @@
           "weight" : {
             "type" : "number",
             "format" : "double",
-            "example" : 1
+            "default" : 1
           },
           "callsPerRequest" : {
             "type" : "integer",
             "format" : "int32",
-            "example" : 1
+            "default" : 1
           },
           "latencyMs" : {
             "type" : "number",
             "format" : "double",
-            "example" : 1
+            "default" : 1
           }
         },
-        "required" : [ "callsPerRequest", "id", "latencyMs", "source", "target", "weight" ]
+        "required" : [ "id", "source", "target" ]
       },
       "Node" : {
         "type" : "object",

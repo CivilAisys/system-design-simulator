@@ -1,6 +1,5 @@
 package simulator.api;
 
-import simulator.engine.Simulator;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -8,6 +7,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import simulator.engine.Simulator;
 
 /** 只做 JSON ↔ engine 模型的轉換，計算全部交給 {@link Simulator}。 */
 @RestController

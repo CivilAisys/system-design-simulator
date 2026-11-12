@@ -7,15 +7,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -82,6 +87,62 @@ class SimulateEndpointTest {
 
         mvc.perform(post("/api/v1/simulate").contentType(MediaType.APPLICATION_JSON).content(topology))
                 .andExpect(status().isBadRequest());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/version", "/nodes", "/edges", "/nodes/0/id", "/nodes/0/type", "/nodes/0/name",
+            "/nodes/0/params", "/edges/0/id", "/edges/0/source", "/edges/0/target"})
+    void missingRequiredFieldIsBadRequest(String pointer) throws Exception {
+        ObjectNode topology = straightTopology();
+        remove(topology, pointer);
+
+        postTopology(topology).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void missingEdgeFieldsDefaultToOne() throws Exception {
+        ObjectNode topology = straightTopology();
+        for (JsonNode edge : topology.get("edges")) {
+            ((ObjectNode) edge).remove(List.of("weight", "callsPerRequest", "latencyMs"));
+        }
+
+        JsonNode body = mapper.readTree(postTopology(topology)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/edges/e1/rps/read").asDouble()).isCloseTo(900, within(1e-6));
+        assertThat(body.at("/edges/e2/rps/read").asDouble()).isCloseTo(900, within(1e-6));
+        assertThat(body.at("/nodes/db-1/arrivalRps/read").asDouble()).isCloseTo(900, within(1e-6));
+    }
+
+    @Test
+    void edgeFromUnknownNodeIsBadRequest() throws Exception {
+        ObjectNode topology = straightTopology();
+        ((ObjectNode) topology.at("/edges/1")).put("source", "ghost");
+
+        postTopology(topology).andExpect(status().isBadRequest());
+    }
+
+    private ObjectNode straightTopology() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/straight-topology.json")) {
+            return (ObjectNode) mapper.readTree(in);
+        }
+    }
+
+    private static void remove(ObjectNode root, String pointer) {
+        int slash = pointer.lastIndexOf('/');
+        JsonNode parent = slash == 0 ? root : root.at(pointer.substring(0, slash));
+        String field = pointer.substring(slash + 1);
+        if (parent instanceof ArrayNode array) {
+            array.remove(Integer.parseInt(field));
+        } else {
+            ((ObjectNode) parent).remove(field);
+        }
+    }
+
+    private ResultActions postTopology(JsonNode topology) throws Exception {
+        return mvc.perform(post("/api/v1/simulate").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(topology)));
     }
 
     private JsonNode simulate(String resource) throws Exception {
