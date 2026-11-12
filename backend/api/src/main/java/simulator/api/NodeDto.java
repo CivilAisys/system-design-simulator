@@ -3,6 +3,7 @@ package simulator.api;
 import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import simulator.engine.CacheNode;
 import simulator.engine.CapacityParams;
 import simulator.engine.ClientNode;
 import simulator.engine.DatabaseNode;
@@ -33,6 +34,7 @@ public record NodeDto(
             case LOAD_BALANCER -> new LoadBalancerNode(id, name, health, capacityParams());
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
+            case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
             case DATABASE -> new DatabaseNode(id, name, health, capacityParams());
         };
     }

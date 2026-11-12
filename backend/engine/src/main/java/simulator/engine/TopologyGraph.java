@@ -34,6 +34,7 @@ final class TopologyGraph {
             graph.addEdge(edge);
         }
         graph.checkSplitWeights();
+        graph.checkCacheDownstream();
         return graph;
     }
 
@@ -98,6 +99,10 @@ final class TopologyGraph {
             }
             case LoadBalancerNode lb -> checkCapacityParams(lb.capacityParams(), where);
             case ServiceNode service -> checkCapacityParams(service.capacityParams(), where);
+            case CacheNode cache -> {
+                checkCapacityParams(cache.capacityParams(), where);
+                requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio");
+            }
             case DatabaseNode database -> checkCapacityParams(database.capacityParams(), where);
         }
     }
@@ -118,6 +123,8 @@ final class TopologyGraph {
             case ClientNode client -> requireAtLeast(edge.weight(), 0, where, "weight");
             case LoadBalancerNode lb -> requireAtLeast(edge.weight(), 0, where, "weight");
             case ServiceNode service -> requireAtLeast(edge.callsPerRequest(), 1, where, "callsPerRequest");
+            case CacheNode cache -> {
+            }
             case DatabaseNode database -> {
             }
         }
@@ -146,6 +153,15 @@ final class TopologyGraph {
             if ((node instanceof ClientNode || node instanceof LoadBalancerNode) && !edges.isEmpty()
                     && edges.stream().mapToDouble(Edge::weight).sum() <= 0) {
                 throw new IllegalArgumentException("Node " + node.id() + " edge weights must sum to more than 0");
+            }
+        }
+    }
+
+    /** Cache 的 miss 和 write 只會送往同一個下游。 */
+    private void checkCacheDownstream() {
+        for (Node node : nodes.values()) {
+            if (node instanceof CacheNode && outgoing.get(node.id()).size() != 1) {
+                throw new IllegalArgumentException("Cache " + node.id() + " must have exactly one downstream edge");
             }
         }
     }

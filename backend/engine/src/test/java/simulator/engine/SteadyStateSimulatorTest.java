@@ -185,6 +185,44 @@ class SteadyStateSimulatorTest {
     }
 
     @Test
+    void cacheSendsOnlyReadMissesAndAllWritesDownstream() {
+        // spec 4.6「Cache 分流」：λ_read=900、λ_write=100、hit=0.8；Cache 容量 2000 → ρ = 0.5
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
+                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, new CapacityParams(2, 10, 10), 0.8),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, HUGE)),
+                List.of(
+                        new Edge("e1", "client", "cache", 1, 1, 1),
+                        new Edge("e2", "cache", "db", 1, 1, 1))));
+
+        NodeResult cache = result.nodes().get("cache");
+        assertRates(cache.arrivalRps(), 900, 100);
+        assertThat(cache.capacityRps()).isCloseTo(2000, within(EPS));
+        assertThat(cache.utilization()).isCloseTo(0.5, within(EPS));
+        assertThat(cache.status()).isEqualTo(Status.OK);
+        assertRates(result.edges().get("e2").rps(), 180, 100);
+        assertRates(result.nodes().get("db").arrivalRps(), 180, 100);
+    }
+
+    @Test
+    void overloadedCacheSendsOnlyProcessedTrafficDownstream() {
+        // Cache 容量 500，λ = 1000 → 處理 450 read、50 write，再依 hitRatio 分流
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
+                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, new CapacityParams(1, 5, 10), 0.8),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, HUGE)),
+                List.of(
+                        new Edge("e1", "client", "cache", 1, 1, 1),
+                        new Edge("e2", "cache", "db", 1, 1, 1))));
+
+        assertThat(result.nodes().get("cache").status()).isEqualTo(Status.OVERLOADED);
+        assertThat(result.nodes().get("cache").droppedRps()).isCloseTo(500, within(EPS));
+        assertRates(result.nodes().get("db").arrivalRps(), 90, 50);
+    }
+
+    @Test
     void resultsKeepInputOrder() {
         SimulationResult result = simulator.simulate(new Topology(
                 List.of(
