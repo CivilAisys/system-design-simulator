@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "gen:api": "openapi-typescript ../backend/api/openapi.json -o src/api/schema.d.ts",
+    "postinstall": "npm run gen:api",
     "predev": "npm run gen:api",
     "dev": "vite",
     "prebuild": "npm run gen:api",
