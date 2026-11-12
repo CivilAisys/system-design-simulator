@@ -8,7 +8,7 @@ final class MmcQueue {
 
     /** 計算節點結果，並回傳實際處理完、要往下游送的流量。 */
     static Outcome solve(Capacity capacity, ClassRates arrival) {
-        int c = capacity.workers();
+        long c = capacity.workers();
         double mu = capacity.serviceRate();
         double cap = capacity.rps();
         double lambda = arrival.total();
@@ -31,9 +31,10 @@ final class MmcQueue {
      * 等待機率 P_wait。c 可能上百，直接算 a^c / c! 會溢位，
      * 所以用 Erlang B 遞迴再轉成 Erlang C。
      */
-    static double erlangC(int c, double offeredLoad) {
+    static double erlangC(long c, double offeredLoad) {
         double b = 1.0;
-        for (int k = 1; k <= c; k++) {
+        for (long k = 1; k <= c && b > 0; k++) {
+            // b 下溢成 0 之後永遠是 0，提早結束，避免 c 很大時空轉
             b = offeredLoad * b / (k + offeredLoad * b);
         }
         return c * b / (c - offeredLoad * (1 - b));

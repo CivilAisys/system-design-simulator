@@ -4,8 +4,8 @@ package simulator.engine;
 public record Capacity(int instances, int concurrency, double serviceTimeMs) {
 
     /** 總 worker 數 c = instances × concurrency。 */
-    public int workers() {
-        return instances * concurrency;
+    public long workers() {
+        return (long) instances * concurrency;
     }
 
     /** 每個 worker 的服務率 μ（req/s）。 */

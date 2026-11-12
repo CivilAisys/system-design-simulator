@@ -66,6 +66,7 @@ final class TopologyGraph {
         if (nodes.putIfAbsent(node.id(), node) != null) {
             throw new IllegalArgumentException("Duplicate node id " + node.id());
         }
+        checkParams(node);
         outgoing.put(node.id(), new ArrayList<>());
         inDegree.put(node.id(), 0);
     }
@@ -82,8 +83,58 @@ final class TopologyGraph {
         if (target instanceof ClientNode) {
             throw new IllegalArgumentException("Client " + target.id() + " cannot have upstream edges");
         }
+        checkParams(edge, source);
         outgoing.get(source.id()).add(edge);
         inDegree.merge(target.id(), 1, Integer::sum);
+    }
+
+    /** 參數範圍（spec 3.2、4.5）。 */
+    private static void checkParams(Node node) {
+        String where = "Node " + node.id();
+        switch (node) {
+            case ClientNode client -> {
+                requireAtLeast(client.rps(), 0, where, "rps");
+                requireBetween(client.readRatio(), 0, 1, where, "readRatio");
+            }
+            case ServiceNode service -> checkCapacity(service.capacity(), where);
+            case DatabaseNode database -> checkCapacity(database.capacity(), where);
+        }
+    }
+
+    private static void checkCapacity(Capacity capacity, String where) {
+        requireAtLeast(capacity.instances(), 1, where, "instances");
+        requireAtLeast(capacity.concurrency(), 1, where, "concurrency");
+        if (!(capacity.serviceTimeMs() > 0) || Double.isInfinite(capacity.serviceTimeMs())) {
+            throw invalid(where, "serviceTimeMs", "a finite number > 0", capacity.serviceTimeMs());
+        }
+    }
+
+    /** 只檢查對這個起點有意義的欄位，其他欄位計算時忽略（spec 3.4）。 */
+    private static void checkParams(Edge edge, Node source) {
+        String where = "Edge " + edge.id();
+        requireAtLeast(edge.latencyMs(), 0, where, "latencyMs");
+        switch (source) {
+            case ClientNode client -> requireAtLeast(edge.weight(), 0, where, "weight");
+            case ServiceNode service -> requireAtLeast(edge.callsPerRequest(), 1, where, "callsPerRequest");
+            case DatabaseNode database -> {
+            }
+        }
+    }
+
+    private static void requireAtLeast(double value, double min, String where, String param) {
+        if (!(value >= min) || Double.isInfinite(value)) {
+            throw invalid(where, param, "a finite number >= " + min, value);
+        }
+    }
+
+    private static void requireBetween(double value, double min, double max, String where, String param) {
+        if (!(value >= min && value <= max)) {
+            throw invalid(where, param, "between " + min + " and " + max, value);
+        }
+    }
+
+    private static IllegalArgumentException invalid(String where, String param, String expected, double actual) {
+        return new IllegalArgumentException(where + " param " + param + " must be " + expected + " but was " + actual);
     }
 
     /** Client 依 weight 比例分流，權重總和為 0 時無法分配。 */
