@@ -1,5 +1,5 @@
 subprojects {
-    group = "io.github.civilaisys.sds"
+    group = "simulator"
     version = "0.1.0-SNAPSHOT"
 
     plugins.withType<JavaPlugin> {
