@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import { ChevronDown, Download, Loader2, Moon, Play, Redo2, Sun, Undo2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
@@ -50,7 +50,7 @@ function Simulator() {
     onError: bottleneck.clear,
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
-  useUndoShortcuts(editor.undo, editor.redo)
+  useUndoShortcuts(undo, redo)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
   // 但必須在新節點進到 React Flow 之後才呼叫，所以放在 effect 裡
   const [fitRequest, setFitRequest] = useState(0)
@@ -58,12 +58,46 @@ function Simulator() {
     if (fitRequest > 0) void fitView({ duration: 300 })
   }, [fitRequest, fitView])
 
-  // 匯入和載入範例共用：換掉畫布，清掉舊拓撲的結果和通知；Auto-run 開啟時會自動 Run
-  function loadTopology(next: Topology) {
-    editor.load(next)
+  // 匯入和載入範例共用：換掉畫布，通知上可以復原
+  function loadTopology(next: Topology, message: string) {
+    const loadId = editor.load(next)
+    resetForNewTopology()
+    toast.success(message, {
+      id: LOAD_TOAST,
+      // 預設 4 秒太短，來不及看清楚新拓撲再決定要不要復原
+      duration: LOAD_TOAST_MS,
+      action: { label: '復原', onClick: () => undoLoad(loadId) },
+    })
+  }
+
+  // 整份拓撲換掉（匯入、載入範例，或復原／重做跨過它們）：清掉另一份拓撲的結果和通知，
+  // 把整張圖放進畫面；Auto-run 開啟時會自動 Run
+  function resetForNewTopology() {
     reset()
     bottleneck.clear()
     setFitRequest((n) => n + 1)
+  }
+
+  // 復原或重做跨過了匯入、載入範例，那則通知上的「復原」已經不適用
+  function travelledAcrossLoad() {
+    resetForNewTopology()
+    toast.dismiss(LOAD_TOAST)
+  }
+
+  function undo() {
+    if (editor.undo()) travelledAcrossLoad()
+  }
+
+  function redo() {
+    if (editor.redo()) travelledAcrossLoad()
+  }
+
+  function undoLoad(loadId: number) {
+    if (editor.undoLoad(loadId)) {
+      travelledAcrossLoad()
+    } else {
+      toast.info('換掉之後又改過畫布，請用工具列的「復原」一步步回去')
+    }
   }
 
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
@@ -89,8 +123,7 @@ function Simulator() {
       })
       return
     }
-    loadTopology(parsed.topology)
-    toast.success(`已匯入 ${file.name}`)
+    loadTopology(parsed.topology, `已匯入 ${file.name}`)
   }
 
   // 點擊元件面板時放在目前畫面的中央
@@ -152,7 +185,7 @@ function Simulator() {
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={editor.undo}
+            onClick={undo}
             disabled={!editor.canUndo}
             aria-label="復原"
             title="復原（Ctrl/⌘+Z）"
@@ -162,7 +195,7 @@ function Simulator() {
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={editor.redo}
+            onClick={redo}
             disabled={!editor.canRedo}
             aria-label="重做"
             title="重做（Ctrl/⌘+Shift+Z）"
@@ -193,7 +226,10 @@ function Simulator() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {EXAMPLES.map((example) => (
-                <DropdownMenuItem key={example.id} onSelect={() => loadTopology(example.topology)}>
+                <DropdownMenuItem
+                  key={example.id}
+                  onSelect={() => loadTopology(example.topology, `已載入範例「${example.label}」`)}
+                >
                   {example.label}
                 </DropdownMenuItem>
               ))}
@@ -251,26 +287,30 @@ function Simulator() {
 
 // Ctrl/Cmd+Z 復原、Ctrl/Cmd+Shift+Z 重做。焦點在輸入框時交給輸入框自己的復原
 function useUndoShortcuts(undo: () => void, redo: () => void) {
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'z') {
-        return
-      }
-      const target = event.target
-      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) {
-        return
-      }
-      event.preventDefault()
-      if (event.shiftKey) {
-        redo()
-      } else {
-        undo()
-      }
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'z') {
+      return
     }
+    const target = event.target
+    if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) {
+      return
+    }
+    event.preventDefault()
+    if (event.shiftKey) {
+      redo()
+    } else {
+      undo()
+    }
+  })
+  useEffect(() => {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [undo, redo])
+  }, [])
 }
+
+// 匯入、載入範例的通知，同一時間只留最新的一則
+const LOAD_TOAST = 'load'
+const LOAD_TOAST_MS = 10_000
 
 // 固定 toast id，連續 Run 時原地更新而不是堆疊
 const BOTTLENECK_TOAST = 'bottleneck'
