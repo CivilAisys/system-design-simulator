@@ -1,6 +1,6 @@
 # System Design Simulator
 
-在畫布上組出系統架構，模擬流量通過各元件的情況，找出瓶頸。v1 只做穩態分析。
+在畫布上組出系統架構，模擬流量通過各元件的情況，找出瓶頸。階段一只做穩態分析。
 
 ## Language
 
@@ -38,7 +38,7 @@ _Avoid_: server、app、backend
 ### 流量
 
 **Request class（請求類別）**:
-請求的種類，v1 只有 read 和 write。
+請求的種類，階段一只有 read 和 write。
 _Avoid_: request type、operation
 
 **Arrival rate（到達率，λ）**:
@@ -84,7 +84,7 @@ _Avoid_: load、usage、CPU
 到達率達到或超過容量的狀態，超出的部分被丟棄，延遲無定義。
 
 **Steady state（穩態）**:
-流量長時間固定、各 Node 的平均數字不再變化的狀態；v1 只計算這個狀態。
+流量長時間固定、各 Node 的平均數字不再變化的狀態；階段一只計算這個狀態。
 
 **Node latency（節點延遲，W）**:
 一個請求在單一 Node 的平均停留時間，包含排隊和處理。
@@ -96,6 +96,10 @@ _Avoid_: response time、total latency
 **Status（狀態）**:
 依使用率分級：OK、WARN、CRITICAL、OVERLOADED。Client 沒有狀態。
 
+**Health（健康狀況）**:
+Node 是否正常運作，對應 JSON 的 `state` 欄位。階段一只有 HEALTHY，階段二加入 DOWN、DEGRADED。跟 Status 無關。
+_Avoid_: 狀態（留給 Status）
+
 **Bottleneck（瓶頸）**:
 使用率最高的 Node。
 
@@ -106,7 +110,7 @@ _Avoid_: response time、total latency
 _Avoid_: execute、calculate
 
 **Simulator**:
-接收一份拓撲、回傳 Simulation result 的模擬引擎。v1 是穩態計算，v2 預計加入動態模擬。
+接收一份拓撲、回傳 Simulation result 的模擬引擎。階段一是穩態計算，階段二預計加入動態模擬。
 _Avoid_: engine、calculator
 
 **Simulation result**:

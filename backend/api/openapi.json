@@ -1,0 +1,368 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "System Design Simulator API",
+    "version" : "v1"
+  },
+  "servers" : [ {
+    "url" : "/"
+  } ],
+  "paths" : {
+    "/api/v1/simulate" : {
+      "post" : {
+        "tags" : [ "simulate-controller" ],
+        "operationId" : "simulate",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Topology"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SimulationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "Edge" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "target" : {
+            "type" : "string"
+          },
+          "weight" : {
+            "type" : "number",
+            "format" : "double",
+            "default" : 1
+          },
+          "callsPerRequest" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          },
+          "latencyMs" : {
+            "type" : "number",
+            "format" : "double",
+            "default" : 1
+          }
+        },
+        "required" : [ "id", "source", "target" ]
+      },
+      "Node" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "DATABASE" ]
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "params" : {
+            "$ref" : "#/components/schemas/NodeParams"
+          },
+          "state" : {
+            "type" : "string",
+            "enum" : [ "HEALTHY" ]
+          },
+          "ui" : {
+            "$ref" : "#/components/schemas/NodeUi"
+          }
+        },
+        "required" : [ "id", "name", "params", "type" ]
+      },
+      "NodeParams" : {
+        "type" : "object",
+        "properties" : {
+          "rps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CLIENT"
+          },
+          "readRatio" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CLIENT"
+          },
+          "instances" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, DATABASE"
+          },
+          "concurrency" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, DATABASE"
+          },
+          "serviceTimeMs" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, DATABASE"
+          },
+          "callMode" : {
+            "type" : "string",
+            "description" : "SERVICE",
+            "enum" : [ "SEQUENTIAL", "PARALLEL" ]
+          },
+          "hitRatio" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CACHE"
+          }
+        }
+      },
+      "NodeUi" : {
+        "type" : "object",
+        "properties" : {
+          "x" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "y" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        },
+        "required" : [ "x", "y" ]
+      },
+      "Topology" : {
+        "type" : "object",
+        "properties" : {
+          "version" : {
+            "type" : "integer",
+            "format" : "int32",
+            "example" : 1
+          },
+          "nodes" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Node"
+            }
+          },
+          "edges" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Edge"
+            }
+          }
+        },
+        "required" : [ "edges", "nodes", "version" ]
+      },
+      "ClassLatencies" : {
+        "type" : "object",
+        "properties" : {
+          "read" : {
+            "$ref" : "#/components/schemas/EndToEndLatency"
+          },
+          "write" : {
+            "$ref" : "#/components/schemas/EndToEndLatency"
+          }
+        },
+        "required" : [ "read", "write" ]
+      },
+      "ClassRates" : {
+        "type" : "object",
+        "properties" : {
+          "read" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "write" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        },
+        "required" : [ "read", "write" ]
+      },
+      "EdgeResult" : {
+        "type" : "object",
+        "properties" : {
+          "rps" : {
+            "$ref" : "#/components/schemas/ClassRates"
+          }
+        },
+        "required" : [ "rps" ]
+      },
+      "EndToEndLatency" : {
+        "type" : "object",
+        "description" : "一個 request class 的端到端延遲（spec 4.3）",
+        "properties" : {
+          "ms" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "無定義時為 null，原因見 undefinedReason"
+          },
+          "approximate" : {
+            "type" : "boolean",
+            "description" : "路徑上有平行呼叫多個下游，會低估真實延遲；ms 為 null 時一定是 false"
+          },
+          "overloadedNodeIds" : {
+            "type" : "array",
+            "description" : "這個 class 實際會走到、而且過載的節點",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "undefinedReason" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "OVERLOADED", "NO_TRAFFIC" ]
+          }
+        },
+        "required" : [ "approximate", "ms", "overloadedNodeIds", "undefinedReason" ]
+      },
+      "NodeResult" : {
+        "type" : "object",
+        "properties" : {
+          "arrivalRps" : {
+            "$ref" : "#/components/schemas/ClassRates"
+          },
+          "throughputRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "droppedRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "successRps" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "只有 Client 有：這個 Client 的請求每秒有幾個完整成功（spec 4.3.1）"
+          },
+          "endToEndMs" : {
+            "description" : "只有 Client 有",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/ClassLatencies"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "capacityRps" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "utilization" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "avgQueueMs" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "avgLatencyMs" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "status" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED" ]
+          }
+        },
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "status", "successRps", "throughputRps", "utilization" ]
+      },
+      "SimulationResult" : {
+        "type" : "object",
+        "properties" : {
+          "valid" : {
+            "type" : "boolean"
+          },
+          "errors" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ValidationError"
+            }
+          },
+          "nodes" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/NodeResult"
+            }
+          },
+          "edges" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/EdgeResult"
+            }
+          },
+          "summary" : {
+            "description" : "驗證失敗時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/Summary"
+            }, {
+              "type" : "null"
+            } ]
+          }
+        },
+        "required" : [ "edges", "errors", "nodes", "summary", "valid" ]
+      },
+      "Summary" : {
+        "type" : "object",
+        "properties" : {
+          "offeredRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "successRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "各 Client 完整成功的請求數總和"
+          },
+          "dropRate" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "1 − successRps / offeredRps，限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0"
+          },
+          "avgEndToEndMs" : {
+            "$ref" : "#/components/schemas/ClassLatencies"
+          },
+          "bottleneckNodeId" : {
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "dropRate", "offeredRps", "successRps" ]
+      },
+      "ValidationError" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "nodeId" : {
+            "type" : [ "string", "null" ]
+          },
+          "edgeId" : {
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "code", "edgeId", "message", "nodeId" ]
+      }
+    }
+  }
+}

@@ -14,16 +14,18 @@
 
 ---
 
-## 版本規劃
+## 階段規劃
 
-### v1 — 穩態分析 MVP（詳見 [docs/v1-spec.md](docs/v1-spec.md)）
+> 階段是開發方向，不是版號。版號規則見 [ADR 0001](docs/adr/0001-versioning.md)：目前是 0.x，一個階段可能跨好幾個版本。
+
+### 階段一 — 穩態分析 MVP（詳見 [docs/v1-spec.md](docs/v1-spec.md)）
 - 畫布：拖拉 5 種元件（Client / Load Balancer / Service / Cache / Database）並連線
 - 屬性面板：調整 RPS、讀寫比、instances、concurrency、service time、cache hit ratio
 - 穩態計算：每個節點的使用率 ρ、平均延遲、丟棄量；標出瓶頸
 - 視覺化：節點依 ρ 變色與發光、邊上顯示 RPS 與流量粒子動畫、指標表、Sankey 流量圖、深色主題
 - JSON 匯入／匯出，附 1 個內建範例
 
-### v2 — 動態模擬（DES）
+### 階段二 — 動態模擬（DES）
 - Discrete-Event Simulation 引擎：時間推進、隨機到達與處理時間
 - 指標：p50 / p95 / p99、時間序列（Timeseries 圖），透過 WebSocket 推送
 - 故障注入：節點掛掉、降級、延遲變高
@@ -32,7 +34,7 @@
 - 動畫：數字過場、被丟棄的請求從節點掉出
 - 韌性行為：timeout、retry（可重現 retry storm）、rate limit
 
-### v3 — 情境與練習
+### 階段三 — 情境與練習
 - 情境庫：把 `system-design-kb/04-problems` 的參考架構做成可載入的預設
 - 更多元件：CDN、DB read replica、sharding、Rate Limiter
 - 挑戰模式：給定流量與 SLO（例如 p99 < 200ms），讓使用者設計出能達標的架構
@@ -45,14 +47,14 @@
 
 ---
 
-## 影響 v1 架構的未來需求
+## 影響階段一架構的未來需求
 
-v1 不實作以下功能，但設計時不能擋住它們：
+階段一不實作以下功能，但設計時不能擋住它們：
 
-| 未來功能 | v1 必須做到的事 |
+| 未來功能 | 階段一必須做到的事 |
 |---|---|
-| DES 動態模擬（v2） | 節點的「參數」與「計算行為」分離；穩態計算只是其中一種 `Simulator` 實作 |
-| 故障注入（v2） | 節點 schema 預留 `state` 欄位（v1 只有 `HEALTHY`） |
-| 即時推送（v2） | 引擎不依賴 HTTP 請求的生命週期；API 層只是轉接 |
-| Queue／非同步（v2） | 流量模型要能區分 request class（v1 先做 read / write） |
-| 情境庫、分享（v3） | 拓撲用單一 JSON schema 完整表達，前後端共用（OpenAPI 產生 TS 型別） |
+| DES 動態模擬（階段二） | 節點的「參數」與「計算行為」分離；穩態計算只是其中一種 `Simulator` 實作 |
+| 故障注入（階段二） | 節點 schema 預留 `state` 欄位（階段一只有 `HEALTHY`） |
+| 即時推送（階段二） | 引擎不依賴 HTTP 請求的生命週期；API 層只是轉接 |
+| Queue／非同步（階段二） | 流量模型要能區分 request class（階段一先做 read / write） |
+| 情境庫、分享（階段三） | 拓撲用單一 JSON schema 完整表達，前後端共用（OpenAPI 產生 TS 型別） |

@@ -1,0 +1,35 @@
+import type { Topology } from '@/api/client'
+
+// 開啟時畫布上的起始拓撲，使用者可以直接修改或刪光重組
+export const initialTopology: Topology = {
+  version: 1,
+  nodes: [
+    {
+      id: 'client-1',
+      type: 'CLIENT',
+      name: 'Users',
+      params: { rps: 1000, readRatio: 0.9 },
+      ui: { x: 0, y: 0 },
+    },
+    {
+      id: 'svc-1',
+      type: 'SERVICE',
+      name: 'API',
+      params: { instances: 2, concurrency: 200, serviceTimeMs: 50, callMode: 'SEQUENTIAL' },
+      state: 'HEALTHY',
+      ui: { x: 300, y: 0 },
+    },
+    {
+      id: 'db-1',
+      type: 'DATABASE',
+      name: 'DB',
+      params: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+      state: 'HEALTHY',
+      ui: { x: 600, y: 0 },
+    },
+  ],
+  edges: [
+    { id: 'e1', source: 'client-1', target: 'svc-1', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+    { id: 'e2', source: 'svc-1', target: 'db-1', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+  ],
+}
