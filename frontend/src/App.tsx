@@ -54,7 +54,7 @@ function Simulator() {
     onError: bottleneck.clear,
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
-  useUndoShortcuts(undo, redo)
+  useEditShortcuts({ undo, redo, copy: editor.copy, paste: editor.paste })
   useAutosave(topology, restored)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
   // 但必須在新節點進到 React Flow 之後才呼叫，所以放在 effect 裡
@@ -294,21 +294,32 @@ function Simulator() {
   )
 }
 
-// Ctrl/Cmd+Z 復原、Ctrl/Cmd+Shift+Z 重做。焦點在輸入框時交給輸入框自己的復原
-function useUndoShortcuts(undo: () => void, redo: () => void) {
+type EditActions = { undo: () => void; redo: () => void; copy: () => void; paste: () => boolean }
+
+// Ctrl/Cmd+Z 復原、Ctrl/Cmd+Shift+Z 重做、Ctrl/Cmd+C 複製選取的節點、Ctrl/Cmd+V 貼上。
+// 焦點在輸入框時交給輸入框自己的復原和文字的複製貼上
+function useEditShortcuts({ undo, redo, copy, paste }: EditActions) {
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'z') {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) {
       return
     }
     const target = event.target
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) {
       return
     }
-    event.preventDefault()
-    if (event.shiftKey) {
-      redo()
-    } else {
-      undo()
+    const key = event.key.toLowerCase()
+    if (key === 'z') {
+      event.preventDefault()
+      if (event.shiftKey) {
+        redo()
+      } else {
+        undo()
+      }
+    } else if (key === 'c' && !event.shiftKey) {
+      // 不攔截，瀏覽器照樣複製選取的文字。頁面上有選取的文字（例如結果表格）時，使用者要的是文字，不動節點的剪貼簿
+      if (window.getSelection()?.isCollapsed ?? true) copy()
+    } else if (key === 'v' && !event.shiftKey && paste()) {
+      event.preventDefault()
     }
   })
   useEffect(() => {
