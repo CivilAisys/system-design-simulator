@@ -62,7 +62,8 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
                 {formatMs(metrics.avgLatencyMs)}
                 {latencyReason && <span className="ml-1 text-xs text-muted-foreground">（過載）</span>}
               </TableCell>
-              <TableCell>
+              {/* 過載時的原因很長，允許換行，表格才不會在預設寬度下需要橫向捲動 */}
+              <TableCell className="whitespace-normal">
                 {metrics.endToEndMs ? <EndToEndLatencyText latencies={metrics.endToEndMs} topology={topology} /> : DASH}
               </TableCell>
               <TableCell className={cn('text-right tabular-nums', metrics.droppedRps > 0 && 'text-destructive')}>

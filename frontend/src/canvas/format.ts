@@ -13,7 +13,7 @@ export function formatRps(rps: number): string {
 
 // read、write 各自的到達率，接在總和下面，所以不重複單位
 export function formatClassRates({ read, write }: ClassRates): string {
-  return `read ${formatRpsNumber(read)} · write ${formatRpsNumber(write)}`
+  return `read ${formatRpsNumber(read)}・write ${formatRpsNumber(write)}`
 }
 
 function formatRpsNumber(rps: number): string {

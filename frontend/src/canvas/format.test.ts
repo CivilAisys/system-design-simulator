@@ -35,11 +35,11 @@ describe('formatRps', () => {
 
 describe('formatClassRates', () => {
   it('read、write 分開，取整數、不帶單位', () => {
-    expect(formatClassRates({ read: 180.4, write: 100 })).toBe('read 180 · write 100')
+    expect(formatClassRates({ read: 180.4, write: 100 })).toBe('read 180・write 100')
   })
 
   it('不到 0.5 的正數和 formatRps 一樣不顯示成 0', () => {
-    expect(formatClassRates({ read: 0.2, write: 0 })).toBe('read < 1 · write 0')
+    expect(formatClassRates({ read: 0.2, write: 0 })).toBe('read < 1・write 0')
   })
 })
 
