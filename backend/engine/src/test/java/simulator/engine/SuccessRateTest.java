@@ -146,25 +146,6 @@ class SuccessRateTest {
         assertThat(result.summary().dropRate()).isZero();
     }
 
-    @Test
-    void zeroWeightEdgeToOverloadedNodeDoesNotAffectSuccess() {
-        // A 被 other 打到過載（收到 1000、容量 500），但 lb 給 A 的權重是 0，client 的請求不會到 A
-        SimulationResult result = simulator.simulate(new Topology(
-                List.of(
-                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
-                        new ClientNode("other", "Other", NodeHealth.HEALTHY, 1000, 0.9),
-                        new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, roomy()),
-                        new DatabaseNode("a", "A", NodeHealth.HEALTHY, workers(5)),
-                        new DatabaseNode("b", "B", NodeHealth.HEALTHY, roomy())),
-                List.of(
-                        new Edge("e1", "client", "lb", 1, 1, 1),
-                        new Edge("e2", "lb", "a", 0, 1, 1),
-                        new Edge("e3", "lb", "b", 1, 1, 1),
-                        new Edge("e4", "other", "a", 1, 1, 1))));
-
-        assertThat(result.nodes().get("client").successRps()).isCloseTo(1000, within(EPS));
-        assertThat(result.nodes().get("other").successRps()).isCloseTo(500, within(EPS));
-    }
 
 
 

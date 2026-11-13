@@ -184,7 +184,7 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 
 Client 本身沒有 W（記為 0）。
 
-**「路徑」只算這個 class 實際會走到的下游**：一個請求平均往某條邊送的次數（Client／LB 的 `weight_i / Σweight`、Service 的 `callsPerRequest`、Cache read 的 `1 − hitRatio`）為 0 時，那個下游不在這個 class 的路徑上，公式裡也略過它（避免 `0 × null`）。例如 `hitRatio = 1` 時 read 不會到 DB，DB 被 write 壓到過載只讓 write 變成 `null`。
+**「路徑」只算這個 class 實際會走到的下游**：一個請求平均往某條邊送的次數為 0 時（目前只有 Cache read 的 `1 − hitRatio`，weight 和 `callsPerRequest` 都不能為 0），那個下游不在這個 class 的路徑上，公式裡也略過它（避免 `0 × null`）。例如 `hitRatio = 1` 時 read 不會到 DB，DB 被 write 壓到過載只讓 write 變成 `null`。
 
 端到端延遲在下列情況記為 `null`，回應的 `undefinedReason` 說明原因：
 
@@ -259,7 +259,7 @@ Client 的 `pass` 記為 1。彙總：
 - `CYCLE_DETECTED` 在環上的每個節點各一個錯誤；環下游的節點不算。
 - `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`NO_DOWNSTREAM` 附 `nodeId`。
 - `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則。
-- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 都合法（≥ 0）但總和為 0 時無法分流，附該節點的 `nodeId`。
+- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。
 
 錯誤依 `NO_CLIENT`、各節點、各邊排列，節點和邊依輸入順序。`message` 是給使用者看的中文說明，用節點名稱指稱節點。
 

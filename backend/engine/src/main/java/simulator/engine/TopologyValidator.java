@@ -91,16 +91,10 @@ final class TopologyValidator {
         }
     }
 
-    /**
-     * Client／LB 依 weight 比例分流：至少一個下游，權重總和要 > 0。
-     * 有不合法的 weight 時那條邊已經報錯，不再報總和。
-     */
+    /** Client／LB 依 weight 比例分流，至少要有一個下游。 */
     private void checkSplit(Node node, List<Edge> outgoing) {
         if (outgoing.isEmpty()) {
             nodeError(node, "NO_DOWNSTREAM", name(node.id()) + " 沒有下游，請求沒有地方送");
-        } else if (outgoing.stream().allMatch(edge -> isAtLeast(edge.weight(), 0))
-                && outgoing.stream().mapToDouble(Edge::weight).sum() <= 0) {
-            nodeError(node, "INVALID_PARAM", name(node.id()) + " 的下游連線 weight 總和必須 > 0");
         }
     }
 
@@ -138,9 +132,7 @@ final class TopologyValidator {
         String where = name(node.id());
         requireAtLeast(params.instances(), 1, where, "instances", message -> nodeError(node, message));
         requireAtLeast(params.concurrency(), 1, where, "concurrency", message -> nodeError(node, message));
-        if (!(params.serviceTimeMs() > 0) || Double.isInfinite(params.serviceTimeMs())) {
-            nodeError(node, invalid(where, "serviceTimeMs", "> 0", params.serviceTimeMs()));
-        }
+        requirePositive(params.serviceTimeMs(), where, "serviceTimeMs", message -> nodeError(node, message));
     }
 
     /** 只檢查對這個起點有意義的欄位，其他欄位計算時忽略（spec 3.4）。 */
@@ -148,9 +140,9 @@ final class TopologyValidator {
         String where = "連線 " + describe(edge);
         requireAtLeast(edge.latencyMs(), 0, where, "latencyMs", message -> edgeError(edge, message));
         switch (source) {
-            case ClientNode client -> requireAtLeast(edge.weight(), 0, where, "weight",
+            case ClientNode client -> requirePositive(edge.weight(), where, "weight",
                     message -> edgeError(edge, message));
-            case LoadBalancerNode lb -> requireAtLeast(edge.weight(), 0, where, "weight",
+            case LoadBalancerNode lb -> requirePositive(edge.weight(), where, "weight",
                     message -> edgeError(edge, message));
             case ServiceNode service -> requireAtLeast(edge.callsPerRequest(), 1, where, "callsPerRequest",
                     message -> edgeError(edge, message));
@@ -171,6 +163,13 @@ final class TopologyValidator {
     /** NaN 和無限大都不合法。 */
     private static boolean isAtLeast(double value, double min) {
         return value >= min && !Double.isInfinite(value);
+    }
+
+    /** weight 為 0 的下游收不到流量，等於沒有接；全部為 0 時無法分流。 */
+    private static void requirePositive(double value, String where, String param, Consumer<String> report) {
+        if (!(value > 0) || Double.isInfinite(value)) {
+            report.accept(invalid(where, param, "> 0", value));
+        }
     }
 
     private static void requireBetween(double value, String where, String param,

@@ -184,17 +184,12 @@ class TopologyValidationTest {
     }
 
     @Test
-    void clientWhoseEdgeWeightsSumToZeroIsRejected() {
-        assertErrors(run(List.of(client("c"), database("db")), List.of(new Edge("e1", "c", "db", 0, 1, 1))),
-                tuple("INVALID_PARAM", "c", null));
-    }
+    void zeroWeightIsRejectedOnTheEdge() {
+        SimulationResult result = run(List.of(client("c"), loadBalancer("lb"), database("a"), database("b")),
+                List.of(edge("e1", "c", "lb"), edge("e2", "lb", "a"), new Edge("e3", "lb", "b", 0, 1, 1)));
 
-    @Test
-    void loadBalancerWhoseEdgeWeightsSumToZeroIsRejected() {
-        SimulationResult result = run(List.of(client("c"), loadBalancer("lb"), database("db")),
-                List.of(edge("e1", "c", "lb"), new Edge("e2", "lb", "db", 0, 1, 1)));
-
-        assertErrors(result, tuple("INVALID_PARAM", "lb", null));
+        assertErrors(result, tuple("INVALID_PARAM", null, "e3"));
+        assertThat(result.errors().getFirst().message()).contains("weight");
     }
 
     @Test

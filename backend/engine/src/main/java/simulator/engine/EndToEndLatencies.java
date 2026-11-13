@@ -8,7 +8,7 @@ import java.util.Set;
 
 /**
  * spec 4.3 的端到端延遲：由下游往上游算每個節點的 L(n, class)，再依請求數加權成 summary。
- * 一個 class 不會走到的下游（weight 0、read 全部命中）不算在路徑上，它過載也不影響這個 class。
+ * 一個 class 不會走到的下游（例如 hitRatio = 1 時 read 不會往下送）不算在路徑上，它過載也不影響這個 class。
  */
 final class EndToEndLatencies {
 
