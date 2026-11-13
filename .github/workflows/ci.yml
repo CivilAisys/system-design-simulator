@@ -44,5 +44,7 @@ jobs:
       # postinstall 會從 backend/api/openapi.json 產生 API 型別
       - run: npm ci
       - run: npm run lint
+      # Vitest 單元測試（匯入檢查、參數換算、顯示格式）
+      - run: npm test
       # tsc -b（型別檢查）再 vite build
       - run: npm run build
