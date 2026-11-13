@@ -7,6 +7,7 @@ export type NodeType = Node['type']
 export type Edge = components['schemas']['Edge']
 export type NodeResult = components['schemas']['NodeResult']
 export type EdgeResult = components['schemas']['EdgeResult']
+export type ClassRates = components['schemas']['ClassRates']
 export type Status = NonNullable<NodeResult['status']>
 export type SimulationResult = components['schemas']['SimulationResult']
 export type Summary = NonNullable<SimulationResult['summary']>
@@ -16,6 +17,11 @@ export type ComputedResult = SimulationResult & { valid: true; summary: Summary 
 
 export function isComputed(result: SimulationResult | null): result is ComputedResult {
   return result != null && result.valid && result.summary != null
+}
+
+// read + write，畫面上顯示的 RPS 都是這個總和
+export function totalRps(rates: ClassRates): number {
+  return rates.read + rates.write
 }
 
 // 同一個 origin：開發時由 Vite proxy 把 /api 轉給 Spring

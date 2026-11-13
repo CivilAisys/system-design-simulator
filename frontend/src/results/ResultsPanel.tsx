@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { isComputed, type SimulationResult, type Topology, type ValidationError } from '@/api/client'
+import { isComputed, totalRps, type SimulationResult, type Topology, type ValidationError } from '@/api/client'
 import type { Theme } from '@/theme'
 import { cn } from '@/lib/utils'
 import { formatPercent, formatRps } from '@/canvas/format'
@@ -26,7 +26,7 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
   const errorCount = result?.errors.length ?? 0
   const empty = <EmptyState result={result} running={running} />
   // 所有邊都是 0 流量（例如 Client rps = 0）時 Sankey 沒有東西可畫
-  const hasFlow = computed != null && Object.values(computed.edges).some(({ rps }) => rps.read + rps.write > 0)
+  const hasFlow = computed != null && Object.values(computed.edges).some(({ rps }) => totalRps(rps) > 0)
 
   return (
     <Tabs defaultValue="metrics" className="h-full gap-0 p-2">

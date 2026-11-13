@@ -10,11 +10,13 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { NodeType, SimulationResult } from '@/api/client'
+import { totalRps, type NodeType, type SimulationResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
 import { SimNode, type SimFlowNode } from './SimNode'
+import { arrowMarker, edgeColor } from './edgeStyle'
 import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
-import { groupErrors, type ElementErrors } from './validation'
+import { flowRatio } from './flow'
+import { groupErrors } from './validation'
 
 const nodeTypes = { sim: SimNode }
 const edgeTypes = { rps: RpsEdge }
@@ -52,21 +54,37 @@ export function Canvas({
 
   // 結果和驗證錯誤只在畫的時候疊上去，不寫進編輯狀態
   const errors = useMemo(() => groupErrors(result?.errors ?? []), [result])
+  // 邊的粗細和粒子以畫布上最大的邊 RPS 為基準。只看目前還在的邊：結果過期時可能有已經刪掉的邊
+  const maxRps = useMemo(
+    () => Math.max(0, ...edges.map((e) => result?.edges[e.id]).map((r) => (r ? totalRps(r.rps) : 0))),
+    [edges, result],
+  )
   const shownNodes = useMemo<SimFlowNode[]>(
     () =>
       nodes.map((n) => ({
         ...n,
-        data: { ...n.data, result: result?.nodes[n.id], errors: withStale(errors.nodes.get(n.id), stale) },
+        data: { ...n.data, result: result?.nodes[n.id], errors: errors.nodes.get(n.id), stale },
       })),
     [nodes, result, errors, stale],
   )
   const shownEdges = useMemo<RpsFlowEdge[]>(
     () =>
-      edges.map((e) => ({
-        ...e,
-        data: { ...e.data, result: result?.edges[e.id], errors: withStale(errors.edges.get(e.id), stale) },
-      })),
-    [edges, result, errors, stale],
+      edges.map((e) => {
+        const edgeResult = result?.edges[e.id]
+        const edgeErrors = errors.edges.get(e.id)
+        return {
+          ...e,
+          markerEnd: arrowMarker(edgeColor(e.selected, edgeErrors != null)),
+          data: {
+            ...e.data,
+            result: edgeResult,
+            flow: edgeResult && flowRatio(totalRps(edgeResult.rps), maxRps),
+            errors: edgeErrors,
+            stale,
+          },
+        }
+      }),
+    [edges, result, maxRps, errors, stale],
   )
 
   function onDragOver(event: DragEvent) {
@@ -106,8 +124,4 @@ export function Canvas({
       <Controls />
     </ReactFlow>
   )
-}
-
-function withStale(messages: string[] | undefined, stale: boolean): ElementErrors | undefined {
-  return messages && { messages, stale }
 }
