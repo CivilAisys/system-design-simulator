@@ -1,8 +1,9 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
 import { cn } from '@/lib/utils'
-import type { Node, NodeResult, Status } from '@/api/client'
+import type { Node, NodeResult } from '@/api/client'
 import { hasInput, hasOutput, NODE_KINDS } from './catalog'
 import { formatUtilization } from './format'
+import { STATUS_RING, STATUS_TEXT } from './status'
 
 export type SimNodeData = {
   node: Node
@@ -10,21 +11,6 @@ export type SimNodeData = {
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
-
-// 第 4.4 節的狀態色，用 ring 和光暈疊在 bg-card 上，不改底色
-const STATUS_CLASSES: Record<Status, string> = {
-  OK: 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/40',
-  WARN: 'ring-2 ring-yellow-500 shadow-lg shadow-yellow-500/40',
-  CRITICAL: 'ring-2 ring-orange-500 shadow-lg shadow-orange-500/40',
-  OVERLOADED: 'ring-2 ring-red-500 shadow-lg shadow-red-500/40',
-}
-
-const STATUS_TEXT: Record<Status, string> = {
-  OK: 'text-emerald-500',
-  WARN: 'text-yellow-500',
-  CRITICAL: 'text-orange-500',
-  OVERLOADED: 'text-red-500',
-}
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { node, result } = data
@@ -36,7 +22,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
     <div
       className={cn(
         'min-w-36 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm',
-        status && STATUS_CLASSES[status],
+        status && STATUS_RING[status],
         selected && 'border-primary',
       )}
     >
