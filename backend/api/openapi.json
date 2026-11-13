@@ -172,6 +172,21 @@
         },
         "required" : [ "edges", "nodes", "version" ]
       },
+      "ClassLatencies" : {
+        "type" : "object",
+        "description" : "null 代表無定義，例如路徑上有節點過載",
+        "properties" : {
+          "read" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "write" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          }
+        },
+        "required" : [ "read", "write" ]
+      },
       "ClassRates" : {
         "type" : "object",
         "properties" : {
@@ -209,6 +224,14 @@
             "type" : "number",
             "format" : "double"
           },
+          "endToEndMs" : {
+            "description" : "只有 Client 有",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/ClassLatencies"
+            }, {
+              "type" : "null"
+            } ]
+          },
           "capacityRps" : {
             "type" : [ "number", "null" ],
             "format" : "double"
@@ -230,7 +253,7 @@
             "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED" ]
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "status", "throughputRps", "utilization" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "status", "throughputRps", "utilization" ]
       },
       "SimulationResult" : {
         "type" : "object",
@@ -269,11 +292,14 @@
             "type" : "number",
             "format" : "double"
           },
+          "avgEndToEndMs" : {
+            "$ref" : "#/components/schemas/ClassLatencies"
+          },
           "bottleneckNodeId" : {
             "type" : [ "string", "null" ]
           }
         },
-        "required" : [ "bottleneckNodeId", "offeredRps" ]
+        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "offeredRps" ]
       },
       "ValidationError" : {
         "type" : "object",

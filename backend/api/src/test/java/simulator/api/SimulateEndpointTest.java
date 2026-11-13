@@ -27,7 +27,7 @@ import org.springframework.test.web.servlet.ResultActions;
 class SimulateEndpointTest {
 
     private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps",
-            "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status");
+            "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status");
     private static final List<String> SERVER_FIELDS = List.of("capacityRps", "utilization", "avgQueueMs",
             "avgLatencyMs", "status");
 
@@ -60,20 +60,27 @@ class SimulateEndpointTest {
         for (String field : SERVER_FIELDS) {
             assertThat(client.get(field).isNull()).as("client %s", field).isTrue();
         }
+        // 數值由 engine 的 EndToEndLatencyTest 驗算，這裡只確認 JSON 形狀
+        assertThat(fieldNames(client.get("endToEndMs"))).containsExactlyInAnyOrder("read", "write");
+        assertThat(client.at("/endToEndMs/read").isNumber()).isTrue();
+        assertThat(client.at("/endToEndMs/write").isNumber()).isTrue();
 
         JsonNode svc = nodes.get("svc-1");
         assertThat(svc.get("capacityRps").asDouble()).isEqualTo(8000);
         assertThat(svc.get("utilization").asDouble()).isCloseTo(0.125, within(1e-9));
         assertThat(svc.get("avgLatencyMs").asDouble()).isCloseTo(50, within(1e-6));
         assertThat(svc.get("status").asText()).isEqualTo("OK");
+        assertThat(svc.get("endToEndMs").isNull()).isTrue();
 
         JsonNode e1 = body.at("/edges/e1/rps");
         assertThat(e1.get("read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(e1.get("write").asDouble()).isCloseTo(100, within(1e-6));
 
         JsonNode summary = body.get("summary");
-        assertThat(fieldNames(summary)).contains("offeredRps", "bottleneckNodeId");
+        assertThat(fieldNames(summary)).contains("offeredRps", "avgEndToEndMs", "bottleneckNodeId");
         assertThat(summary.get("offeredRps").asDouble()).isEqualTo(1000);
+        // 只有一個 Client 時等於該 Client 的延遲
+        assertThat(summary.get("avgEndToEndMs")).isEqualTo(client.get("endToEndMs"));
         assertThat(summary.get("bottleneckNodeId").asText()).isEqualTo("svc-1");
     }
 

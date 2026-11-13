@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import simulator.engine.ClassLatencies;
 import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
 import simulator.engine.NodeResult;
@@ -64,11 +65,23 @@ public record SimulationResponse(
         }
     }
 
+    @Schema(name = "ClassLatencies", description = "null 代表無定義，例如路徑上有節點過載")
+    public record ClassLatenciesDto(
+            @Schema(requiredMode = REQUIRED, nullable = true) Double read,
+            @Schema(requiredMode = REQUIRED, nullable = true) Double write) {
+
+        static ClassLatenciesDto from(ClassLatencies latencies) {
+            return latencies == null ? null : new ClassLatenciesDto(latencies.read(), latencies.write());
+        }
+    }
+
     @Schema(name = "NodeResult")
     public record NodeResultDto(
             @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
             @Schema(requiredMode = REQUIRED) double throughputRps,
             @Schema(requiredMode = REQUIRED) double droppedRps,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有")
+            ClassLatenciesDto endToEndMs,
             @Schema(requiredMode = REQUIRED, nullable = true) Double capacityRps,
             @Schema(requiredMode = REQUIRED, nullable = true) Double utilization,
             @Schema(requiredMode = REQUIRED, nullable = true) Double avgQueueMs,
@@ -77,7 +90,7 @@ public record SimulationResponse(
 
         static NodeResultDto from(NodeResult node) {
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
-                    node.droppedRps(), node.capacityRps(), node.utilization(), node.avgQueueMs(),
+                    node.droppedRps(), ClassLatenciesDto.from(node.endToEndMs()), node.capacityRps(), node.utilization(), node.avgQueueMs(),
                     node.avgLatencyMs(), node.status());
         }
     }
@@ -93,10 +106,12 @@ public record SimulationResponse(
     @Schema(name = "Summary")
     public record SummaryDto(
             @Schema(requiredMode = REQUIRED) double offeredRps,
+            @Schema(requiredMode = REQUIRED) ClassLatenciesDto avgEndToEndMs,
             @Schema(requiredMode = REQUIRED, nullable = true) String bottleneckNodeId) {
 
         static SummaryDto from(Summary summary) {
-            return new SummaryDto(summary.offeredRps(), summary.bottleneckNodeId());
+            return new SummaryDto(summary.offeredRps(), ClassLatenciesDto.from(summary.avgEndToEndMs()),
+                    summary.bottleneckNodeId());
         }
     }
 }

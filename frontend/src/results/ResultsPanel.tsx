@@ -2,6 +2,8 @@ import { lazy, Suspense } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { SimulationResult, Topology } from '@/api/client'
 import type { Theme } from '@/theme'
+import { EndToEndLatencyText } from './EndToEndLatencyText'
+import { summaryLatency } from './latency'
 import { MetricsTable } from './MetricsTable'
 
 // ECharts 很大，切到 Sankey Tab 才載入
@@ -24,11 +26,19 @@ export function ResultsPanel({ topology, result, running, theme }: ResultsPanelP
 
   return (
     <Tabs defaultValue="metrics" className="h-full gap-0 p-2">
-      <TabsList>
-        <TabsTrigger value="metrics">指標表</TabsTrigger>
-        <TabsTrigger value="sankey">流量 Sankey</TabsTrigger>
-        <TabsTrigger value="errors">錯誤 ({errorCount})</TabsTrigger>
-      </TabsList>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <TabsList>
+          <TabsTrigger value="metrics">指標表</TabsTrigger>
+          <TabsTrigger value="sankey">流量 Sankey</TabsTrigger>
+          <TabsTrigger value="errors">錯誤 ({errorCount})</TabsTrigger>
+        </TabsList>
+        {computed && (
+          <p className="text-sm">
+            <span className="mr-2 text-muted-foreground">平均端到端延遲</span>
+            <EndToEndLatencyText latency={summaryLatency(topology, computed)} />
+          </p>
+        )}
+      </div>
       <TabsContent value="metrics" className="min-h-0 overflow-auto">
         {computed ? <MetricsTable topology={topology} result={computed} /> : empty}
       </TabsContent>
