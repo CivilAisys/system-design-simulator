@@ -17,8 +17,8 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   const [result, setResult] = useState<SimulationResult | null>(null)
   // 最新一次送出的 Run 是哪個拓撲（含計算中），用來判斷過期和要不要再送；失敗時清掉，之後可以重試
   const [runKey, setRunKey] = useState<string | null>(null)
-  // 最新一次送出的 Run 當時的節點名稱。驗證錯誤的訊息由後端用當時的名稱組成，有錯誤時改名也要重新檢查
-  const [runNames, setRunNames] = useState<string | null>(null)
+  // result 是用哪些節點名稱算出來的。驗證錯誤的訊息由後端用當時的名稱組成，有錯誤時改名也要重新檢查
+  const [resultNames, setResultNames] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 每次 reset 加一，同一份拓撲重新載入時 Auto-run 也要再跑一次
@@ -27,17 +27,19 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   const pendingAutoRun = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const key = useMemo(() => simulationKey(topology), [topology])
-  const names = useMemo(() => nameKey(topology), [topology])
-  // 名稱不影響計算，只有結果裡有驗證錯誤（訊息帶著名稱）時改名才需要重新 Run
-  const outdated = runKey !== key || (result?.valid === false && runNames !== names)
+  const names = useMemo(() => nodeNamesKey(topology), [topology])
+  // 名稱不影響計算，只有畫面上的結果有驗證錯誤（訊息帶著名稱）時改名才需要重新 Run。
+  // 計算中先不判斷：等那次 Run 回來，有錯誤而且名稱又改過才再送
+  const namesOutdated = !running && result?.valid === false && resultNames !== names
+  const needsRun = runKey !== key || namesOutdated
 
   async function run() {
     // 手動 Run 取代還在倒數的 Auto-run，同一份拓撲不送兩次
     cancelPendingAutoRun()
     const id = ++latestRun.current
     const target = topology
+    const targetNames = names
     setRunKey(key)
-    setRunNames(names)
     setRunning(true)
     setError(null)
     // 計算中保留舊結果，Auto-run 時畫布才不會每次修改都閃一下
@@ -57,6 +59,7 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     // 較早送出但較晚回來的回應直接丟棄，也不能把較新那次的 running 關掉
     if (id !== latestRun.current) return
     setResult(next)
+    setResultNames(targetNames)
     setRunning(false)
     // 放在 try 外面：通知出錯不能被當成 Run 失敗而清掉結果
     onResult?.(target, next)
@@ -81,30 +84,32 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     setGeneration((g) => g + 1)
   }
 
-  // 已經送出過同一份拓撲（例如重新打開 Auto-run、或改名稱後又改回來）就不再送
-  const autoRunIfChanged = useEffectEvent(() => {
+  // 已經送出過同一份拓撲（例如重新打開 Auto-run、或沒有驗證錯誤時改名稱）就不再送
+  const autoRunIfNeeded = useEffectEvent(() => {
     pendingAutoRun.current = null
-    if (outdated) run()
+    if (needsRun) run()
   })
 
-  // 依賴 outdated：計算中改了名稱，回來的結果才發現有驗證錯誤時，也要再跑一次
+  // names：有驗證錯誤時連續改名，停下來才送一次。
+  // namesOutdated：計算中改了名稱，回來的結果才發現有驗證錯誤時，要再跑一次。
+  // 不能依賴 needsRun：Run 失敗會清掉 runKey，依賴它會不停自動重試
   useEffect(() => {
     if (!autoRun) return
-    pendingAutoRun.current = setTimeout(autoRunIfChanged, AUTO_RUN_DEBOUNCE_MS)
+    pendingAutoRun.current = setTimeout(autoRunIfNeeded, AUTO_RUN_DEBOUNCE_MS)
     return cancelPendingAutoRun
-  }, [key, names, outdated, autoRun, generation])
+  }, [key, names, namesOutdated, autoRun, generation])
 
   // Auto-run 開啟時，修改後的結果很快會被取代，不標示過期；手動 Run 計算中也不標示
-  const stale = !autoRun && result != null && outdated
+  const stale = !autoRun && result != null && needsRun
 
   return { result, running, error, stale, autoRun, setAutoRun, run, reset }
 }
 
-// 名稱和 ui 欄位不影響計算（spec 第 6 節），改了不重算、也不算過期（有驗證錯誤時的名稱見 nameKey）
+// 名稱和 ui 欄位不影響計算，改了不重算、也不算過期（spec 第 6 節；有驗證錯誤時的名稱見 nodeNamesKey）
 function simulationKey(topology: Topology): string {
   return JSON.stringify({ ...topology, nodes: topology.nodes.map(({ ui: _ui, name: _name, ...node }) => node) })
 }
 
-function nameKey(topology: Topology): string {
+function nodeNamesKey(topology: Topology): string {
   return JSON.stringify(topology.nodes.map(({ id, name }) => [id, name]))
 }
