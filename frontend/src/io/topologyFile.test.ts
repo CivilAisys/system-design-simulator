@@ -186,6 +186,12 @@ describe('格式錯誤', () => {
       ])
     })
 
+    it('整數參數超出 32 位元整數', () => {
+      expect(errorsOf((f) => void (f.nodes[2].params.instances = 1e10))).toEqual([
+        'nodes[2]（id "svc"）：params.instances 數值太大（整數最多 2,147,483,647）',
+      ])
+    })
+
     it('Service 的 callMode 不合法', () => {
       expect(errorsOf((f) => void (f.nodes[2].params.callMode = 'ASYNC'))).toEqual([
         'nodes[2]（id "svc"）：params.callMode 必須是 SEQUENTIAL 或 PARALLEL',
@@ -230,6 +236,12 @@ describe('格式錯誤', () => {
         ok: false,
         errors: ['edges[1]（id "e2"）：latencyMs 必須是數字（或數值太大）'],
       })
+    })
+
+    it('callsPerRequest 超出 32 位元整數', () => {
+      expect(errorsOf((f) => void (f.edges[2].callsPerRequest = 2 ** 31))).toEqual([
+        'edges[2]（id "e3"）：callsPerRequest 數值太大（整數最多 2,147,483,647）',
+      ])
     })
 
     it('source 是空字串', () => {

@@ -273,7 +273,9 @@ Client 的 `pass` 記為 1。彙總：
 | `callsPerRequest` | 1 ～ 10,000 的整數 |
 | `weight` | > 0 且 ≤ 1,000,000（1e6） |
 
-Worker 上限 1e6 時單一節點的 Erlang C 約 6 ms；1e7 時約 60 ms，十幾個節點就超過 1 秒。
+Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms，十幾個節點就超過 1 秒。這組上限保證的是一般大小的拓撲：上百個接近滿載的節點仍可能超過 1 秒，幾十層、每層都把 `callsPerRequest` 開到上限的依序呼叫鏈，端到端延遲仍可能溢位。
+
+匯入檔案裡的整數參數（`instances`、`concurrency`、`callsPerRequest`）超出 32 位元整數時，API 沒辦法解析，所以匯入時就當成格式錯誤擋下；32 位元範圍內但超過上限的值照樣讀入。
 
 錯誤依 `NO_CLIENT`、各節點、各邊排列，節點和邊依輸入順序。`message` 是給使用者看的中文說明，用節點名稱指稱節點。
 

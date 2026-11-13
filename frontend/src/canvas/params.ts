@@ -64,7 +64,13 @@ export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {
     max: 10_000,
     slider: { min: 1, max: 10, scale: 'linear', step: 1 },
   },
-  latencyMs: { label: 'latencyMs', unit: 'ms', min: 0, max: 1e7, slider: { min: 0, max: 200, scale: 'linear', step: 1 } },
+  latencyMs: {
+    label: 'latencyMs',
+    unit: 'ms',
+    min: 0,
+    max: 1e7,
+    slider: { min: 0, max: 200, scale: 'linear', step: 1 },
+  },
 }
 
 const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
@@ -111,13 +117,19 @@ export function checkNumber(spec: NumberSpec, value: number): string | null {
   return null
 }
 
+const WORKER_PARTNER: Partial<Record<NodeNumberParam, NodeNumberParam>> = {
+  instances: 'concurrency',
+  concurrency: 'instances',
+}
+
 // 節點參數的檢查：單一參數的範圍之外，instances、concurrency 還要看和另一個的乘積（另一個取目前的值）
 export function checkNodeParam(params: NodeParams, param: NodeNumberParam, value: number): string | null {
   const error = checkNumber(NODE_PARAM_SPECS[param], value)
-  if (error !== null || (param !== 'instances' && param !== 'concurrency')) {
+  const partner = WORKER_PARTNER[param]
+  if (error !== null || partner === undefined) {
     return error
   }
-  const workers = value * nodeParam(params, param === 'instances' ? 'concurrency' : 'instances')
+  const workers = value * nodeParam(params, partner)
   return workers > MAX_WORKERS
     ? `instances × concurrency 不能超過 ${formatBound(MAX_WORKERS)}（目前是 ${formatBound(workers)}）`
     : null

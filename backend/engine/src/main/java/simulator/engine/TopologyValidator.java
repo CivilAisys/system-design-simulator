@@ -122,8 +122,7 @@ final class TopologyValidator {
         requireAtLeast(params.concurrency(), 1, where, "concurrency", report);
         // 上限看乘積：worker 數決定 Erlang C 的計算量，各自檢查擋不住 40000 × 50000
         if (params.instances() >= 1 && params.concurrency() >= 1 && params.workers() > MAX_WORKERS) {
-            report.accept(where + " 的 instances × concurrency 必須 ≤ " + bound(MAX_WORKERS) + "，目前是 "
-                    + params.workers());
+            report.accept(invalid(where, "instances × concurrency", "≤ " + bound(MAX_WORKERS), params.workers()));
         }
         requireBetween(params.serviceTimeMs(), MIN_SERVICE_TIME_MS, MAX_SERVICE_TIME_MS, where, "serviceTimeMs",
                 report);
