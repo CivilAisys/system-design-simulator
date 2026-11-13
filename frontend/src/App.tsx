@@ -1,18 +1,23 @@
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import { Loader2, Moon, Play, Sun } from 'lucide-react'
 import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
-import { simulate, type NodeType, type SimulationResult, type Topology } from '@/api/client'
+import { Switch } from '@/components/ui/switch'
+import { type NodeType, type SimulationResult, type Topology } from '@/api/client'
 import { Canvas } from '@/canvas/Canvas'
 import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
+import { cn } from '@/lib/utils'
 import { ResultsPanel } from '@/results/ResultsPanel'
+import { useSimulation } from '@/simulation/useSimulation'
 import { useTheme } from '@/theme'
 
 export default function App() {
@@ -30,27 +35,12 @@ function Simulator() {
   const { topology } = editor
   const { screenToFlowPosition } = useReactFlow()
   const canvasRef = useRef<HTMLElement>(null)
-  const [result, setResult] = useState<SimulationResult | null>(null)
-  const [running, setRunning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function run() {
-    // 先清掉上一次的結果，Run 失敗時畫布不能留著舊的狀態色和 RPS
-    setRunning(true)
-    setResult(null)
-    setError(null)
-    // 上一次的瓶頸通知會和這次的結果（驗證錯誤、HTTP 錯誤）互相矛盾
-    toast.dismiss(BOTTLENECK_TOAST)
-    try {
-      const next = await simulate(topology)
-      setResult(next)
-      notifyBottleneck(topology, next)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setRunning(false)
-    }
-  }
+  const bottleneck = useBottleneckToast()
+  const { result, running, error, stale, autoRun, setAutoRun, run } = useSimulation(editor.model, {
+    onResult: bottleneck.notify,
+    // 上一次的瓶頸通知會和 Run 失敗互相矛盾
+    onError: bottleneck.clear,
+  })
 
   // 點擊元件面板時放在目前畫面的中央
   function addAtCenter(type: NodeType) {
@@ -73,6 +63,15 @@ function Simulator() {
           {running ? <Loader2 className="animate-spin" /> : <Play />}
           Run
         </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Switch id="auto-run" checked={autoRun} onCheckedChange={setAutoRun} size="sm" />
+          <Label htmlFor="auto-run">Auto-run</Label>
+        </div>
+        {stale && (
+          <Badge variant="outline" className="shrink-0" title="拓撲在上次 Run 之後改過，按 Run 重新計算">
+            已過期
+          </Badge>
+        )}
         {/* 長訊息截成一行，完整內容放在 title */}
         {message && (
           <span role="alert" title={message} className="min-w-0 truncate text-sm text-destructive">
@@ -112,7 +111,7 @@ function Simulator() {
           onUpdateEdge={editor.updateEdge}
         />
       </SidebarProvider>
-      <section aria-label="結果" className="h-72 shrink-0 border-t">
+      <section aria-label="結果" className={cn('h-72 shrink-0 border-t', stale && 'opacity-60')}>
         <ResultsPanel topology={topology} result={result} running={running} theme={theme} />
       </section>
       <Toaster theme={theme} position="top-right" />
@@ -120,19 +119,43 @@ function Simulator() {
   )
 }
 
-// 固定 toast id，連續 Run 時替換而不是堆疊
+// 固定 toast id，連續 Run 時原地更新而不是堆疊
 const BOTTLENECK_TOAST = 'bottleneck'
 
 // 只要有伺服器類節點，後端一定會挑 ρ 最高的當瓶頸（第 4.4 節），
-// 所以只在它至少 WARN（ρ ≥ 0.7）時才通知，全部 OK 時不打擾
-function notifyBottleneck(topology: Topology, result: SimulationResult) {
-  const id = result.summary.bottleneckNodeId
-  if (!result.valid || id == null) return
-  const metrics = result.nodes[id]
-  if (!metrics?.status || metrics.status === 'OK') return
-  const name = topology.nodes.find((node) => node.id === id)?.name ?? id
-  toast.warning(`發現瓶頸：${name}`, {
-    id: BOTTLENECK_TOAST,
-    description: `ρ ${formatUtilization(metrics.utilization)}・${metrics.status}`,
-  })
+// 所以只在它至少 WARN（ρ ≥ 0.7）時才通知，全部 OK 時不打擾。
+// Auto-run 每次修改都會重算：同一個瓶頸（節點和狀態都沒變）只原地更新 ρ，
+// 使用者關掉或自動消失後就不再跳出，直到瓶頸換了節點或狀態
+function useBottleneckToast() {
+  const shown = useRef<{ key: string; open: boolean } | null>(null)
+
+  function clear() {
+    shown.current = null
+    toast.dismiss(BOTTLENECK_TOAST)
+  }
+
+  function notify(topology: Topology, result: SimulationResult) {
+    const id = result.summary.bottleneckNodeId
+    const metrics = id == null ? undefined : result.nodes[id]
+    // 驗證錯誤或沒有瓶頸時，上一次的通知會和這次的結果互相矛盾
+    if (!result.valid || id == null || !metrics?.status || metrics.status === 'OK') {
+      clear()
+      return
+    }
+    const key = `${id}:${metrics.status}`
+    if (shown.current?.key === key && !shown.current.open) return
+    shown.current = { key, open: true }
+    const closed = () => {
+      if (shown.current?.key === key) shown.current.open = false
+    }
+    const name = topology.nodes.find((node) => node.id === id)?.name ?? id
+    toast.warning(`發現瓶頸：${name}`, {
+      id: BOTTLENECK_TOAST,
+      description: `ρ ${formatUtilization(metrics.utilization)}・${metrics.status}`,
+      onDismiss: closed,
+      onAutoClose: closed,
+    })
+  }
+
+  return { notify, clear }
 }
