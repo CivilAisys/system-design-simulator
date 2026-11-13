@@ -33,10 +33,10 @@
 | ----- | ---------------------------------------------------------------- |
 | 後端    | Java 21、Spring Boot 3、JUnit 5、springdoc-openapi                  |
 | 建置    | Gradle（Kotlin DSL）多模組、Gradle Wrapper                             |
-| 前端    | React + Vite + TypeScript、Tailwind CSS v4                        |
+| 前端    | React + Vite + TypeScript、Tailwind CSS v4、Vitest（純邏輯的單元測試）     |
 | UI 元件 | shadcn/ui（元件原始碼複製進專案，可完全客製）                                  |
 | 圖表    | ECharts（Sankey）                                                  |
-| 動畫    | Motion                                                           |
+| 動畫    | SVG 和 CSS（流量粒子、節點發光），不另外用動畫函式庫                                |
 | 畫布    | `@xyflow/react`（React Flow），可搭配官方 React Flow UI（shadcn 版）元件          |
 | 型別同步  | springdoc 產出 OpenAPI → `openapi-typescript` 產生前端型別               |
 
@@ -48,17 +48,23 @@
 
 ```
 system-design-simulator/
+├─ README.md
 ├─ ROADMAP.md
+├─ GLOSSARY.md
 ├─ docs/
+│  └─ adr/      架構決策紀錄
 ├─ backend/
 │  ├─ engine/   純 Java，不依賴 Spring（模型、驗證、穩態計算）
-│  └─ api/      Spring Boot（REST controller、DTO ↔ engine model）
+│  └─ api/      Spring Boot（REST controller、DTO ↔ engine model、openapi.json）
 └─ frontend/
    └─ src/
-      ├─ canvas/     React Flow 畫布、自訂節點
-      ├─ panels/     屬性面板、結果面板
-      ├─ api/        產生的型別與 API client
-      └─ examples/   內建範例 JSON
+      ├─ canvas/      React Flow 畫布、自訂節點、元件面板、屬性面板、編輯器狀態（復原、複製貼上）
+      ├─ results/     結果面板：指標表、Sankey、錯誤清單
+      ├─ simulation/  Run、Auto-run、過期判斷
+      ├─ io/          匯入／匯出、自動存檔
+      ├─ api/         產生的型別與 API client
+      ├─ examples/    內建範例 JSON（也是後端整合測試的輸入）
+      └─ components/  shadcn/ui 元件
 ```
 
 用多模組把 `engine` 獨立出來，由編譯期保證引擎不會意外依賴 Spring。
