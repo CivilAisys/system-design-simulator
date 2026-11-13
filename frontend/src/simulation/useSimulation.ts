@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import { isAbortError, simulate, type SimulationResult, type Topology } from '@/api/client'
+import { simulate, type SimulationResult, type Topology } from '@/api/client'
 
 const AUTO_RUN_DEBOUNCE_MS = 300
 
@@ -23,8 +23,8 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   const [error, setError] = useState<string | null>(null)
   // 每次 reset 加一，同一份拓撲重新載入時 Auto-run 也要再跑一次
   const [generation, setGeneration] = useState(0)
-  const latestRun = useRef(0)
-  // 還在進行中的請求；新的 Run 或 reset 時取消，後端不必再算沒人要的結果
+  // 最新一次 Run 的請求；新的 Run 或 reset 時取消，後端不必再算沒人要的結果。
+  // 回應回來時 controller 已經不是這一個，就表示有更新的 Run 或 reset 接手
   const inFlight = useRef<AbortController | null>(null)
   const pendingAutoRun = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -41,7 +41,6 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     abortInFlight()
     const controller = new AbortController()
     inFlight.current = controller
-    const id = ++latestRun.current
     const target = topology
     const targetNames = names
     setRunKey(key)
@@ -52,8 +51,8 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     try {
       next = await simulate(target, controller.signal)
     } catch (e) {
-      // 被取消的請求已經有較新的 Run 或 reset 接手，不算失敗
-      if (id !== latestRun.current || isAbortError(e)) return
+      // 被取消的請求（AbortError）已經有較新的 Run 或 reset 接手，不算失敗
+      if (controller !== inFlight.current) return
       inFlight.current = null
       // Run 失敗時畫布不能留著舊的狀態色和 RPS
       setResult(null)
@@ -64,7 +63,7 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
       return
     }
     // 較早送出但較晚回來的回應直接丟棄，也不能把較新那次的 running 關掉
-    if (id !== latestRun.current) return
+    if (controller !== inFlight.current) return
     inFlight.current = null
     setResult(next)
     setResultNames(targetNames)
@@ -90,7 +89,6 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   function reset() {
     cancelPendingAutoRun()
     abortInFlight()
-    latestRun.current++
     setResult(null)
     setRunKey(null)
     setRunning(false)

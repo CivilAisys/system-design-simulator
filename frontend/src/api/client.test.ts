@@ -42,13 +42,13 @@ describe('simulate', () => {
     await expect(simulate(initialTopology)).rejects.toThrow('連不到後端，請確認後端是否已啟動')
   })
 
-  it.each([502, 503, 504])('proxy 回 %i 時也當成連不到後端', async (status) => {
+  it.each([502, 503])('proxy 回 %i 而且沒有說明時也當成連不到後端', async (status) => {
     fetchMock.mockResolvedValue(new Response('', { status, headers: { 'Content-Type': 'text/plain' } }))
 
     await expect(simulate(initialTopology)).rejects.toThrow('連不到後端，請確認後端是否已啟動')
   })
 
-  it('後端回 400 時顯示 ProblemDetail 的 detail', async () => {
+  it('格式錯誤（400）時顯示 ProblemDetail 的 detail', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(400, { title: 'Bad Request', detail: 'Invalid value for nodes[0].params.rps' }, 'application/problem+json'),
     )
@@ -56,10 +56,16 @@ describe('simulate', () => {
     await expect(simulate(initialTopology)).rejects.toThrow('Invalid value for nodes[0].params.rps')
   })
 
-  it('其他錯誤狀態碼沒有說明時顯示狀態碼', async () => {
-    fetchMock.mockResolvedValue(new Response('', { status: 500 }))
+  it('後端自己回 503 時顯示後端的說明', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(503, { title: 'Service Unavailable', detail: '維護中' }, 'application/problem+json'))
 
-    await expect(simulate(initialTopology)).rejects.toThrow('Run 失敗（HTTP 500）')
+    await expect(simulate(initialTopology)).rejects.toThrow('維護中')
+  })
+
+  it.each([500, 504])('其他錯誤狀態碼（%i）沒有說明時顯示狀態碼', async (status) => {
+    fetchMock.mockResolvedValue(new Response('', { status }))
+
+    await expect(simulate(initialTopology)).rejects.toThrow(`Run 失敗（HTTP ${status}）`)
   })
 
   it('取消時丟出 AbortError，不包成連不到後端', async () => {
