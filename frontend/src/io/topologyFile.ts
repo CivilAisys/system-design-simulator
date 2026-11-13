@@ -171,7 +171,7 @@ function toEdge(
     return null
   }
   // 和編輯器的連線規則一致（useTopologyEditor 的 isValidConnection、SimNode 的 handle）。
-  // 只有環例外：可以匯入，Run 之後顯示 CYCLE_DETECTED，刪掉邊就能修好
+  // 只有經過其他節點的環例外：可以匯入，Run 之後顯示 CYCLE_DETECTED，刪掉邊就能修好
   if (source === target) {
     fail('不能連回自己')
     return null

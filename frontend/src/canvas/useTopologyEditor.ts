@@ -10,7 +10,7 @@ import type { Edge, Node, NodeType, Topology } from '@/api/client'
 import { newNode, type NodeParams } from './catalog'
 import type { SimFlowNode } from './SimNode'
 import { arrowMarker } from './edgeStyle'
-import { createsCycle } from './graph'
+import { canConnect } from './graph'
 import type { RpsFlowEdge } from './RpsEdge'
 
 const TOPOLOGY_VERSION = 1
@@ -38,11 +38,8 @@ export function useTopologyEditor(initial: Topology) {
     [],
   )
 
-  // 同一對 source → target 只能有一條邊（spec 3.4），也不能成環（spec 1.2，含自己連自己）
   const isValidConnection = useCallback(
-    (c: Connection | RpsFlowEdge) =>
-      !edges.some((e) => e.source === c.source && e.target === c.target) &&
-      !createsCycle(edges, c.source, c.target),
+    (c: Connection | RpsFlowEdge) => canConnect(edges, c.source, c.target),
     [edges],
   )
 
@@ -52,7 +49,7 @@ export function useTopologyEditor(initial: Topology) {
       const id = unusedId(`e-${c.source}-${c.target}`, usedIds)
       usedIds.add(id)
       setEdges((es) => {
-        if (es.some((e) => e.source === c.source && e.target === c.target)) {
+        if (!canConnect(es, c.source, c.target)) {
           return es
         }
         return [...es, toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS })]
