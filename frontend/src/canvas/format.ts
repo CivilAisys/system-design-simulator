@@ -1,3 +1,5 @@
+import type { ClassRates } from '@/api/client'
+
 // null 代表「不適用」或「無定義」，不能當成 0 顯示
 export const DASH = '—'
 
@@ -6,9 +8,18 @@ export function formatUtilization(rho: number | null | undefined): string {
 }
 
 export function formatRps(rps: number): string {
+  return `${formatRpsNumber(rps)} rps`
+}
+
+// read、write 各自的到達率，接在總和下面，所以不重複單位
+export function formatClassRates({ read, write }: ClassRates): string {
+  return `read ${formatRpsNumber(read)} · write ${formatRpsNumber(write)}`
+}
+
+function formatRpsNumber(rps: number): string {
   // 不到 0.5 的正數四捨五入會變成 0，看起來像沒有流量
-  if (rps > 0 && rps < 0.5) return '< 1 rps'
-  return `${Math.round(rps).toLocaleString()} rps`
+  if (rps > 0 && rps < 0.5) return '< 1'
+  return Math.round(rps).toLocaleString()
 }
 
 export function formatOptionalRps(rps: number | null | undefined): string {
