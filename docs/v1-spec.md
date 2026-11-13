@@ -256,10 +256,10 @@ Client 的 `pass` 記為 1。彙總：
 每個錯誤要附上 `nodeId` 或 `edgeId`，前端用來把有問題的節點標出來：
 
 - `NO_CLIENT` 兩個都是 `null`（沒有可以指的節點）。
-- `CYCLE_DETECTED` 在環上的每個節點各一個錯誤；環下游的節點不算。
+- `CYCLE_DETECTED` 在環上的每個節點各一個錯誤；環下游、夾在兩個環中間的節點不算。
 - `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`NO_DOWNSTREAM` 附 `nodeId`。
-- `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則。
-- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。
+- `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則，但仍算在另一端的上下游數量裡（畫布上看得到這條邊，不重複報錯）。
+- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。每條都合法但總和溢位成無限大時無法計算比例，附該節點的 `nodeId`。
 
 錯誤依 `NO_CLIENT`、各節點、各邊排列，節點和邊依輸入順序。`message` 是給使用者看的中文說明，用節點名稱指稱節點。
 

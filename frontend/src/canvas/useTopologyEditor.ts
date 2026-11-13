@@ -25,6 +25,8 @@ export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'laten
 export function useTopologyEditor(initial: Topology) {
   const [nodes, setNodes] = useState<SimFlowNode[]>(() => initial.nodes.map(toFlowNode))
   const [edges, setEdges] = useState<RpsFlowEdge[]>(() => initial.edges.map(toFlowEdge))
+  // 用過的節點和邊 id（含已刪除的），新建時不沿用，見 newNode。只在事件中修改，不影響畫面
+  const [usedIds] = useState(() => new Set([...initial.nodes, ...initial.edges].map((item) => item.id)))
 
   const onNodesChange = useCallback(
     (changes: NodeChange<SimFlowNode>[]) => setNodes((ns) => applyNodeChanges(changes, ns)),
@@ -43,29 +45,31 @@ export function useTopologyEditor(initial: Topology) {
   )
 
   const onConnect = useCallback(
-    (c: Connection) =>
+    (c: Connection) => {
+      // 刪掉再重連同一對節點時不能沿用舊的 id，理由同 newNode
+      const id = unusedId(`e-${c.source}-${c.target}`, usedIds)
+      usedIds.add(id)
       setEdges((es) => {
         if (es.some((e) => e.source === c.source && e.target === c.target)) {
           return es
         }
-        const edge: Edge = { id: `e-${c.source}-${c.target}`, source: c.source, target: c.target, ...EDGE_DEFAULTS }
-        return [...es, toFlowEdge(edge)]
-      }),
-    [],
+        return [...es, toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS })]
+      })
+    },
+    [usedIds],
   )
 
   // 新節點取代原本的選取，屬性面板直接切到它
   const addNode = useCallback(
-    (type: NodeType, position: { x: number; y: number }) =>
-      setNodes((ns) => {
-        const node = newNode(
-          type,
-          ns.map((n) => n.data.node),
-          position,
-        )
-        return [...ns.map((n) => (n.selected ? { ...n, selected: false } : n)), { ...toFlowNode(node), selected: true }]
-      }),
-    [],
+    (type: NodeType, position: { x: number; y: number }) => {
+      const node = newNode(type, usedIds, position)
+      usedIds.add(node.id)
+      setNodes((ns) => [
+        ...ns.map((n) => (n.selected ? { ...n, selected: false } : n)),
+        { ...toFlowNode(node), selected: true },
+      ])
+    },
+    [usedIds],
   )
 
   // 只選取這個節點或邊（另一個傳 null），屬性面板會切到它
@@ -142,6 +146,15 @@ function useShallowStable<T>(items: T[]): T[] {
   }
   setStable(items)
   return items
+}
+
+// base 沒用過就用 base，否則加上 -2、-3…
+function unusedId(base: string, usedIds: ReadonlySet<string>): string {
+  let id = base
+  for (let n = 2; usedIds.has(id); n++) {
+    id = `${base}-${n}`
+  }
+  return id
 }
 
 // 選取狀態沒變時沿用原物件，React Flow 不用重畫它

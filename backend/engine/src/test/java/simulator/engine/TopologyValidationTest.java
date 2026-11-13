@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.Test;
@@ -104,6 +105,37 @@ class TopologyValidationTest {
     }
 
     @Test
+    void nodeBetweenTwoCyclesIsNotOnACycle() {
+        // a ↔ b、b → x → y、y ↔ z：x 夾在兩個環中間，但自己不在環上
+        SimulationResult result = run(
+                List.of(client("c"), database("db"), service("a"), service("b"), service("x"), service("y"),
+                        service("z")),
+                List.of(edge("e1", "c", "db"), edge("e2", "a", "b"), edge("e3", "b", "a"), edge("e4", "b", "x"),
+                        edge("e5", "x", "y"), edge("e6", "y", "z"), edge("e7", "z", "y")));
+
+        assertErrors(result, tuple("CYCLE_DETECTED", "a", null), tuple("CYCLE_DETECTED", "b", null),
+                tuple("CYCLE_DETECTED", "y", null), tuple("CYCLE_DETECTED", "z", null));
+    }
+
+    @Test
+    void longChainDoesNotOverflowTheStack() {
+        // 找環不用遞迴：10 萬個節點的鏈，最後接回前一個節點形成環
+        List<Node> nodes = new ArrayList<>(List.of(client("c")));
+        List<Edge> edges = new ArrayList<>(List.of(edge("e0", "c", "s0")));
+        int length = 100_000;
+        for (int i = 0; i < length; i++) {
+            nodes.add(service("s" + i));
+            if (i > 0) {
+                edges.add(edge("e" + i, "s" + (i - 1), "s" + i));
+            }
+        }
+        edges.add(edge("back", "s" + (length - 1), "s" + (length - 2)));
+
+        assertErrors(run(nodes, edges), tuple("CYCLE_DETECTED", "s" + (length - 2), null),
+                tuple("CYCLE_DETECTED", "s" + (length - 1), null));
+    }
+
+    @Test
     void selfLoopIsACycle() {
         SimulationResult result = run(List.of(client("c"), service("s")),
                 List.of(edge("e1", "c", "s"), edge("e2", "s", "s")));
@@ -165,6 +197,41 @@ class TopologyValidationTest {
 
         assertErrors(result, tuple("UNKNOWN_NODE", null, "e2"), tuple("UNKNOWN_NODE", null, "e3"));
         assertThat(result.errors().getLast().message()).contains("ghost", "phantom");
+    }
+
+    @Test
+    void edgeToUnknownNodeStillCountsAsTheSourcesDownstream() {
+        // 畫布上 cache 有一條出邊，不能再多報「目前有 0 個下游」
+        SimulationResult result = run(List.of(client("c"), cache("cache")),
+                List.of(edge("e1", "c", "cache"), edge("e2", "cache", "ghost")));
+
+        assertErrors(result, tuple("UNKNOWN_NODE", null, "e2"));
+    }
+
+    @Test
+    void edgeFromUnknownNodeStillCountsAsTheTargetsUpstream() {
+        SimulationResult result = run(List.of(client("c"), database("db")),
+                List.of(edge("e1", "c", "db"), edge("e2", "ghost", "c")));
+
+        assertErrors(result, tuple("CLIENT_HAS_INPUT", "c", null), tuple("UNKNOWN_NODE", null, "e2"));
+    }
+
+    @Test
+    void weightsWhoseSumOverflowAreRejected() {
+        // 1e308 + 1e308 = Infinity，各邊比例會變成 0，下游收不到流量
+        SimulationResult result = run(List.of(client("c"), loadBalancer("lb"), database("a"), database("b")),
+                List.of(edge("e1", "c", "lb"), new Edge("e2", "lb", "a", 1e308, 1, 1),
+                        new Edge("e3", "lb", "b", 1e308, 1, 1)));
+
+        assertErrors(result, tuple("INVALID_PARAM", "lb", null));
+    }
+
+    @Test
+    void largeNumbersAreShownAsIs() {
+        SimulationResult result = run(List.of(new ClientNode("c", "c", NodeHealth.HEALTHY, -1e20, 0.9),
+                database("db")), List.of(edge("e1", "c", "db")));
+
+        assertThat(result.errors().getFirst().message()).contains("-1.0E20").doesNotContain("9223372036854775808");
     }
 
     @Test

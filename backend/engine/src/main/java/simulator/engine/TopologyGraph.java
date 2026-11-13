@@ -2,16 +2,19 @@ package simulator.engine;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * 拓撲的圖結構：只建一次，提供出邊與拓撲排序。
- * 假設 id 不重複、邊的兩端都存在（{@link TopologyValidator} 先檢查過）。
+ * 拓撲的圖結構：只建一次，驗證和計算共用，提供出邊、拓撲排序和環。
+ * 兩端有一端不存在的邊不放進圖裡，由 {@link TopologyValidator} 報 UNKNOWN_NODE。
+ * id 重複是格式錯誤（錯誤沒辦法指到哪一個），丟 IllegalArgumentException。
  */
 final class TopologyGraph {
 
@@ -25,19 +28,41 @@ final class TopologyGraph {
     static TopologyGraph of(Topology topology) {
         var graph = new TopologyGraph();
         for (Node node : topology.nodes()) {
-            graph.nodes.put(node.id(), node);
+            if (graph.nodes.putIfAbsent(node.id(), node) != null) {
+                throw new IllegalArgumentException("Duplicate node id " + node.id());
+            }
             graph.outgoing.put(node.id(), new ArrayList<>());
             graph.inDegree.put(node.id(), 0);
         }
+        var edgeIds = new HashSet<String>();
         for (Edge edge : topology.edges()) {
-            graph.outgoing.get(edge.source()).add(edge);
-            graph.inDegree.merge(edge.target(), 1, Integer::sum);
+            if (!edgeIds.add(edge.id())) {
+                throw new IllegalArgumentException("Duplicate edge id " + edge.id());
+            }
+            if (graph.contains(edge.source()) && graph.contains(edge.target())) {
+                graph.outgoing.get(edge.source()).add(edge);
+                graph.inDegree.merge(edge.target(), 1, Integer::sum);
+            }
         }
         return graph;
     }
 
+    boolean contains(String nodeId) {
+        return nodes.containsKey(nodeId);
+    }
+
+    /** 不存在時為 null。 */
+    Node node(String nodeId) {
+        return nodes.get(nodeId);
+    }
+
     List<Edge> outgoing(String nodeId) {
         return outgoing.get(nodeId);
+    }
+
+    /** Client／LB 依 weight 比例分流（spec 3.3）。 */
+    static boolean splitsByWeight(Node node) {
+        return node instanceof ClientNode || node instanceof LoadBalancerNode;
     }
 
     /**
@@ -59,35 +84,74 @@ final class TopologyGraph {
         return outgoing.get(nodeId).stream().mapToDouble(Edge::weight).sum();
     }
 
-    boolean hasIncoming(String nodeId) {
-        return inDegree.get(nodeId) > 0;
-    }
-
-    /** 驗證過的拓撲沒有環。 */
-    List<Node> topologicalOrder() {
-        List<Node> order = kahn();
-        if (order.size() != nodes.size()) {
-            throw new IllegalStateException("Topology contains a cycle; validate it first");
-        }
-        return order;
-    }
-
     /**
-     * 在環上（或夾在兩個環之間）的節點。Kahn's algorithm 排不完的節點包含環和環的下游，
-     * 再反過來一層層拿掉沒有出邊留在剩餘集合裡的節點，剩下的就是環。
+     * 在環上的節點：所在的強連通分量（Tarjan）大於一個節點，或有連到自己的邊。
+     * 環的下游、夾在兩個環中間的節點都不算。用明確的堆疊代替遞迴，節點很多時也不會 StackOverflowError。
      */
     Set<String> nodesOnCycles() {
-        Set<String> remaining = new LinkedHashSet<>(nodes.keySet());
-        kahn().forEach(node -> remaining.remove(node.id()));
-        boolean removed = true;
-        while (removed) {
-            removed = remaining.removeIf(id -> outgoing.get(id).stream().noneMatch(e -> remaining.contains(e.target())));
+        Map<String, Integer> index = new HashMap<>();
+        Map<String, Integer> low = new HashMap<>();
+        Deque<String> component = new ArrayDeque<>();
+        Set<String> onComponent = new HashSet<>();
+        Set<String> onCycles = new HashSet<>();
+        Deque<Visit> calls = new ArrayDeque<>();
+        for (String root : nodes.keySet()) {
+            if (index.containsKey(root)) {
+                continue;
+            }
+            calls.push(visit(root, index, low, component, onComponent));
+            while (!calls.isEmpty()) {
+                String id = calls.peek().id();
+                Iterator<Edge> edges = calls.peek().edges();
+                if (edges.hasNext()) {
+                    Edge edge = edges.next();
+                    String target = edge.target();
+                    if (target.equals(id)) {
+                        onCycles.add(id);
+                    }
+                    if (!index.containsKey(target)) {
+                        calls.push(visit(target, index, low, component, onComponent));
+                    } else if (onComponent.contains(target)) {
+                        low.merge(id, index.get(target), Math::min);
+                    }
+                    continue;
+                }
+                calls.pop();
+                if (!calls.isEmpty()) {
+                    low.merge(calls.peek().id(), low.get(id), Math::min);
+                }
+                if (low.get(id).equals(index.get(id))) {
+                    List<String> members = new ArrayList<>();
+                    String member;
+                    do {
+                        member = component.pop();
+                        onComponent.remove(member);
+                        members.add(member);
+                    } while (!member.equals(id));
+                    if (members.size() > 1) {
+                        onCycles.addAll(members);
+                    }
+                }
+            }
         }
-        return remaining;
+        return onCycles;
     }
 
-    /** Kahn's algorithm，同層依輸入順序，讓結果可重現。有環時環上和環下游的節點不會出現。 */
-    private List<Node> kahn() {
+    /** Tarjan 遞迴中的一層：正在看哪個節點，以及它還沒看過的出邊。 */
+    private record Visit(String id, Iterator<Edge> edges) {
+    }
+
+    private Visit visit(String id, Map<String, Integer> index, Map<String, Integer> low,
+            Deque<String> component, Set<String> onComponent) {
+        index.put(id, index.size());
+        low.put(id, index.get(id));
+        component.push(id);
+        onComponent.add(id);
+        return new Visit(id, outgoing.get(id).iterator());
+    }
+
+    /** Kahn's algorithm，同層依輸入順序，讓結果可重現。 */
+    List<Node> topologicalOrder() {
         Map<String, Integer> remaining = new HashMap<>(inDegree);
         var ready = new ArrayDeque<String>();
         nodes.keySet().stream().filter(id -> remaining.get(id) == 0).forEach(ready::add);
@@ -100,6 +164,10 @@ final class TopologyGraph {
                     ready.add(edge.target());
                 }
             }
+        }
+        // 驗證過的拓撲沒有環
+        if (order.size() != nodes.size()) {
+            throw new IllegalStateException("Topology contains a cycle; validate it first");
         }
         return order;
     }

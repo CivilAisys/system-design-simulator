@@ -16,11 +16,11 @@ public final class SteadyStateSimulator implements Simulator {
 
     @Override
     public SimulationResult simulate(Topology topology) {
-        List<ValidationError> errors = TopologyValidator.validate(topology);
+        var graph = TopologyGraph.of(topology);
+        List<ValidationError> errors = TopologyValidator.validate(topology, graph);
         if (!errors.isEmpty()) {
             return SimulationResult.invalid(errors);
         }
-        var graph = TopologyGraph.of(topology);
         Map<String, ClassRates> arrivals = new HashMap<>();
         topology.nodes().forEach(node -> arrivals.put(node.id(), ClassRates.ZERO));
 

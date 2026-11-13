@@ -114,6 +114,7 @@ function Simulator() {
             nodes={editor.nodes}
             edges={editor.edges}
             result={result}
+            stale={stale}
             colorMode={theme}
             onNodesChange={editor.onNodesChange}
             onEdgesChange={editor.onEdgesChange}

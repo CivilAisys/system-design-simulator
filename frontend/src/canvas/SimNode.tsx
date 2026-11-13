@@ -4,12 +4,13 @@ import type { Node, NodeResult } from '@/api/client'
 import { hasInput, hasOutput, NODE_KINDS } from './catalog'
 import { formatUtilization } from './format'
 import { STATUS_RING, STATUS_TEXT } from './status'
+import { errorsTitle, type ElementErrors } from './validation'
 
 export type SimNodeData = {
   node: Node
   result?: NodeResult
-  // 這個節點的驗證錯誤訊息
-  errors?: string[]
+  // 這個節點的驗證錯誤
+  errors?: ElementErrors
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
@@ -22,11 +23,15 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
 
   return (
     <div
-      title={errors?.join('\n')}
+      title={errors && errorsTitle(errors)}
       className={cn(
         'min-w-36 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm',
         // 驗證失敗時沒有計算結果，不會同時有狀態色
-        errors ? 'ring-2 ring-destructive shadow-lg shadow-destructive/40' : status && STATUS_RING[status],
+        errors
+          ? errors.stale
+            ? 'ring-2 ring-destructive/30'
+            : 'ring-2 ring-destructive shadow-lg shadow-destructive/40'
+          : status && STATUS_RING[status],
         selected && 'border-primary',
       )}
     >

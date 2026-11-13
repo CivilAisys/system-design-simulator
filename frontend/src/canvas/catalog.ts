@@ -58,11 +58,12 @@ export function hasOutput(type: NodeType): boolean {
 }
 
 // 拖到畫布或點擊元件面板時建立的節點：id 和名稱都取同類型中第一個沒被用掉的編號
-export function newNode(type: NodeType, existing: Node[], position: { x: number; y: number }): Node {
+// usedIds 是這次編輯用過的所有 id（含已刪除的），新節點不能沿用：
+// 過期的結果（Auto-run 關閉或還在 debounce）會用 id 把狀態和驗證錯誤畫到同 id 的新節點上
+export function newNode(type: NodeType, usedIds: ReadonlySet<string>, position: { x: number; y: number }): Node {
   const { label, idPrefix, defaults } = NODE_KINDS[type]
-  const ids = new Set(existing.map((node) => node.id))
   let n = 1
-  while (ids.has(`${idPrefix}-${n}`)) {
+  while (usedIds.has(`${idPrefix}-${n}`)) {
     n++
   }
   return {
