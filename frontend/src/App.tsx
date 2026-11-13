@@ -282,9 +282,10 @@ function Simulator() {
           onUpdateEdge={editor.updateEdge}
         />
       </SidebarProvider>
-      <ResultsResizer height={resultsHeight} onResize={setResultsHeight} />
+      <ResultsResizer panelId="results" height={resultsHeight} onResize={setResultsHeight} />
       {/* max-height 用比例：視窗縮小時畫布也不會被擠到看不見 */}
       <section
+        id="results"
         aria-label="結果"
         className={cn('shrink-0', stale && 'opacity-60')}
         style={{ height: resultsHeight, maxHeight: `${MAX_RESULTS_RATIO * 100}vh` }}

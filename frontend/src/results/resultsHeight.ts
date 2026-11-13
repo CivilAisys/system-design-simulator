@@ -46,3 +46,16 @@ export function useResultsHeight() {
 
   return [height, setHeight] as const
 }
+
+// 視窗高度，跟著視窗縮放更新：最大高度和分隔線的 aria-valuemax 都跟著它
+export function useViewportHeight() {
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight)
+
+  useEffect(() => {
+    const update = () => setViewportHeight(window.innerHeight)
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+
+  return viewportHeight
+}
