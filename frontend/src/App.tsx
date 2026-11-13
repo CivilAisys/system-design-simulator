@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { Loader2, Moon, Play, Sun } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { simulate, type SimulationResult } from '@/api/client'
+import { Toaster } from '@/components/ui/sonner'
+import { simulate, type SimulationResult, type Topology } from '@/api/client'
 import { Canvas } from '@/canvas/Canvas'
+import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
+import { ResultsPanel } from '@/results/ResultsPanel'
 import { useTheme } from '@/theme'
 
 export default function App() {
@@ -18,8 +22,12 @@ export default function App() {
     setRunning(true)
     setResult(null)
     setError(null)
+    // 上一次的瓶頸通知會和這次的結果（驗證錯誤、HTTP 錯誤）互相矛盾
+    toast.dismiss(BOTTLENECK_TOAST)
     try {
-      setResult(await simulate(topology))
+      const next = await simulate(topology)
+      setResult(next)
+      notifyBottleneck(topology, next)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -55,9 +63,30 @@ export default function App() {
           {theme === 'dark' ? <Sun /> : <Moon />}
         </Button>
       </header>
-      <main className="flex-1">
+      <main className="min-h-0 flex-1">
         <Canvas topology={topology} result={result} colorMode={theme} />
       </main>
+      <section aria-label="結果" className="h-72 shrink-0 border-t">
+        <ResultsPanel topology={topology} result={result} running={running} theme={theme} />
+      </section>
+      <Toaster theme={theme} position="top-right" />
     </div>
   )
+}
+
+// 固定 toast id，連續 Run 時替換而不是堆疊
+const BOTTLENECK_TOAST = 'bottleneck'
+
+// 只要有伺服器類節點，後端一定會挑 ρ 最高的當瓶頸（第 4.4 節），
+// 所以只在它至少 WARN（ρ ≥ 0.7）時才通知，全部 OK 時不打擾
+function notifyBottleneck(topology: Topology, result: SimulationResult) {
+  const id = result.summary.bottleneckNodeId
+  if (!result.valid || id == null) return
+  const metrics = result.nodes[id]
+  if (!metrics?.status || metrics.status === 'OK') return
+  const name = topology.nodes.find((node) => node.id === id)?.name ?? id
+  toast.warning(`發現瓶頸：${name}`, {
+    id: BOTTLENECK_TOAST,
+    description: `ρ ${formatUtilization(metrics.utilization)}・${metrics.status}`,
+  })
 }
