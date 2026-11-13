@@ -2,12 +2,12 @@ import type { Status } from '@/api/client'
 
 // 第 4.4 節的狀態色，畫布節點、指標表和 Sankey 共用
 
-// 用 ring 和光暈疊在 bg-card 上，不改底色
-export const STATUS_RING: Record<Status, string> = {
+// 畫布節點的外框和光暈（spec 第 6 節），畫在節點後面的一層，不改底色。過載時的脈動在 SimNode 加
+export const STATUS_GLOW: Record<Status, string> = {
   OK: 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/40',
-  WARN: 'ring-2 ring-yellow-500 shadow-lg shadow-yellow-500/40',
-  CRITICAL: 'ring-2 ring-orange-500 shadow-lg shadow-orange-500/40',
-  OVERLOADED: 'ring-2 ring-red-500 shadow-lg shadow-red-500/40',
+  WARN: 'ring-2 ring-yellow-500 shadow-lg shadow-yellow-500/50',
+  CRITICAL: 'ring-2 ring-orange-500 shadow-xl shadow-orange-500/50',
+  OVERLOADED: 'ring-2 ring-red-500 shadow-xl shadow-red-500/60',
 }
 
 export const STATUS_TEXT: Record<Status, string> = {

@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import type { ComputedResult, Topology } from '@/api/client'
+import { totalRps, type ComputedResult, type Topology } from '@/api/client'
 import { DASH, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
 import { STATUS_BADGE } from '@/canvas/status'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
@@ -51,7 +51,7 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
                   </Badge>
                 )}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatRps(arrivalRps.read + arrivalRps.write)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatRps(totalRps(arrivalRps))}</TableCell>
               <TableCell className="text-right tabular-nums">{formatOptionalRps(metrics.capacityRps)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatUtilization(metrics.utilization)}</TableCell>
               <TableCell className="text-right tabular-nums" title={latencyReason}>

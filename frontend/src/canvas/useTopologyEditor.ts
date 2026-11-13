@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   applyEdgeChanges,
   applyNodeChanges,
-  MarkerType,
   type Connection,
   type EdgeChange,
   type NodeChange,
@@ -10,6 +9,7 @@ import {
 import type { Edge, Node, NodeType, Topology } from '@/api/client'
 import { newNode, type NodeParams } from './catalog'
 import type { SimFlowNode } from './SimNode'
+import { arrowMarker } from './edgeStyle'
 import type { RpsFlowEdge } from './RpsEdge'
 
 const TOPOLOGY_VERSION = 1
@@ -172,7 +172,7 @@ function toFlowEdge(edge: Edge): RpsFlowEdge {
     type: 'rps',
     source: edge.source,
     target: edge.target,
-    markerEnd: { type: MarkerType.ArrowClosed },
+    markerEnd: arrowMarker(),
     data: { edge },
   }
 }

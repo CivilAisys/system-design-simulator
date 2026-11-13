@@ -3,7 +3,7 @@ import { SankeyChart, type SankeySeriesOption } from 'echarts/charts'
 import { TooltipComponent, type TooltipComponentOption } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import type { SimulationResult, Topology } from '@/api/client'
+import { totalRps, type SimulationResult, type Topology } from '@/api/client'
 import type { Theme } from '@/theme'
 import { formatRps } from '@/canvas/format'
 import { STATUS_HEX } from '@/canvas/status'
@@ -55,8 +55,8 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
   const links = topology.edges.flatMap((edge) => {
     const rps = result.edges[edge.id]?.rps
     // 0 流量的邊在 Sankey 上沒有寬度，只會留下孤立的節點
-    if (!rps || rps.read + rps.write <= 0) return []
-    return [{ source: edge.source, target: edge.target, value: rps.read + rps.write, read: rps.read, write: rps.write }]
+    if (!rps || totalRps(rps) <= 0) return []
+    return [{ source: edge.source, target: edge.target, value: totalRps(rps), read: rps.read, write: rps.write }]
   })
   const linked = new Set(links.flatMap((link) => [link.source, link.target]))
   const nodes = topology.nodes

@@ -5,6 +5,21 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* 過載節點的光暈脈動（spec 第 6 節） */
+@theme {
+    --animate-glow-pulse: glow-pulse 1.2s ease-in-out infinite;
+
+    @keyframes glow-pulse {
+        0%,
+        100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.35;
+        }
+    }
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
@@ -49,6 +64,8 @@
 }
 
 :root {
+    /* 畫布邊上的流量粒子（sky-600），淺色背景上要夠深 */
+    --flow-particle: oklch(0.588 0.158 241.966);
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -84,6 +101,8 @@
 }
 
 .dark {
+    /* sky-400，深色背景上要夠亮 */
+    --flow-particle: oklch(0.746 0.16 232.661);
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
