@@ -195,6 +195,8 @@ class SimulateEndpointTest {
                 Arguments.of("/edges/0/weight", "\"1\"", "edges[0].weight, expected a number"),
                 Arguments.of("/edges/0/latencyMs", "true", "edges[0].latencyMs, expected a number"),
                 Arguments.of("/edges/1/callsPerRequest", "2.5", "edges[1].callsPerRequest, expected an integer"),
+                // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
+                Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
                         "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, DATABASE]"),
                 Arguments.of("/nodes/0/name", "123", "nodes[0].name, expected a string"),

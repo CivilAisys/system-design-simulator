@@ -36,9 +36,10 @@ public class SimulatorApplication {
     /**
      * 格式錯誤一律回 400（spec 4.5）：Jackson 預設會把字串、布林轉成數字，把小數截成整數，
      * 把數字當成 enum 的序號或轉成字串。這些都關掉，讓解析失敗。
+     * 整個 app 共用這個 ObjectMapper，之後新增的端點也一樣嚴格。
      */
     @Bean
-    Jackson2ObjectMapperBuilderCustomizer strictTopologyFormat() {
+    Jackson2ObjectMapperBuilderCustomizer strictJsonCoercion() {
         return builder -> builder
                 .featuresToDisable(MapperFeature.ALLOW_COERCION_OF_SCALARS, DeserializationFeature.ACCEPT_FLOAT_AS_INT)
                 .featuresToEnable(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS)

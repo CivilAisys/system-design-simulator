@@ -268,7 +268,7 @@ Client 的 `pass` 記為 1。彙總：
 - 不是合法的 JSON。
 - `version` 不是 1。
 - 缺少必填欄位，或節點、邊的 `id` 重複。
-- 欄位型別不符：數字欄位給字串或布林、整數欄位（`instances`、`concurrency`、`callsPerRequest`、`version`）給小數（`2.0` 也算）、字串欄位給數字、`type` 等 enum 給數字或不在清單內的值。API 不做自動轉換。
+- 欄位型別不符：數字欄位給字串或布林、整數欄位（`instances`、`concurrency`、`callsPerRequest`、`version`）給小數（`2.0` 也算；前端匯入分不出 `2.0` 和 `2`，會當成 `2` 送出）、字串欄位給數字、`type` 等 enum 給數字或不在清單內的值。API 不做自動轉換。
 
 其他例外是後端的程式錯誤，回 HTTP 500。
 

@@ -40,7 +40,7 @@ class SimulateController {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
-    /** JSON 解析失敗或欄位型別不符（{@link SimulatorApplication#strictTopologyFormat} 關掉了型別轉換）。 */
+    /** JSON 解析失敗或欄位型別不符（{@link SimulatorApplication#strictJsonCoercion} 關掉了型別轉換）。 */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ProblemDetail unreadable(HttpMessageNotReadableException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, unreadableMessage(e.getCause()));
