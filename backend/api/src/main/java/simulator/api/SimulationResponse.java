@@ -10,10 +10,12 @@ import java.util.function.Function;
 import simulator.engine.ClassLatencies;
 import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
+import simulator.engine.EndToEndLatency;
 import simulator.engine.NodeResult;
 import simulator.engine.SimulationResult;
 import simulator.engine.Status;
 import simulator.engine.Summary;
+import simulator.engine.UndefinedReason;
 import simulator.engine.ValidationError;
 
 /**
@@ -65,13 +67,32 @@ public record SimulationResponse(
         }
     }
 
-    @Schema(name = "ClassLatencies", description = "null 代表無定義，例如路徑上有節點過載")
+    @Schema(name = "ClassLatencies")
     public record ClassLatenciesDto(
-            @Schema(requiredMode = REQUIRED, nullable = true) Double read,
-            @Schema(requiredMode = REQUIRED, nullable = true) Double write) {
+            @Schema(requiredMode = REQUIRED) EndToEndLatencyDto read,
+            @Schema(requiredMode = REQUIRED) EndToEndLatencyDto write) {
 
         static ClassLatenciesDto from(ClassLatencies latencies) {
-            return latencies == null ? null : new ClassLatenciesDto(latencies.read(), latencies.write());
+            return latencies == null
+                    ? null
+                    : new ClassLatenciesDto(EndToEndLatencyDto.from(latencies.read()),
+                            EndToEndLatencyDto.from(latencies.write()));
+        }
+    }
+
+    @Schema(name = "EndToEndLatency", description = "一個 request class 的端到端延遲（spec 4.3）")
+    public record EndToEndLatencyDto(
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "無定義時為 null，原因見 undefinedReason")
+            Double ms,
+            @Schema(requiredMode = REQUIRED, description = "路徑上有平行呼叫多個下游，會低估真實延遲；ms 為 null 時一定是 false")
+            boolean approximate,
+            @Schema(requiredMode = REQUIRED, description = "這個 class 實際會走到、而且過載的節點")
+            List<String> overloadedNodeIds,
+            @Schema(requiredMode = REQUIRED, nullable = true) UndefinedReason undefinedReason) {
+
+        static EndToEndLatencyDto from(EndToEndLatency latency) {
+            return new EndToEndLatencyDto(latency.ms(), latency.approximate(), latency.overloadedNodeIds(),
+                    latency.undefinedReason());
         }
     }
 

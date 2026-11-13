@@ -62,8 +62,11 @@ class SimulateEndpointTest {
         }
         // 數值由 engine 的 EndToEndLatencyTest 驗算，這裡只確認 JSON 形狀
         assertThat(fieldNames(client.get("endToEndMs"))).containsExactlyInAnyOrder("read", "write");
-        assertThat(client.at("/endToEndMs/read").isNumber()).isTrue();
-        assertThat(client.at("/endToEndMs/write").isNumber()).isTrue();
+        assertThat(fieldNames(client.at("/endToEndMs/read")))
+                .containsExactlyInAnyOrder("ms", "approximate", "overloadedNodeIds", "undefinedReason");
+        assertThat(client.at("/endToEndMs/read/ms").isNumber()).isTrue();
+        assertThat(client.at("/endToEndMs/write/ms").isNumber()).isTrue();
+        assertThat(client.at("/endToEndMs/read/undefinedReason").isNull()).isTrue();
 
         JsonNode svc = nodes.get("svc-1");
         assertThat(svc.get("capacityRps").asDouble()).isEqualTo(8000);

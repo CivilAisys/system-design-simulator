@@ -36,28 +36,41 @@ public class SimulatorApplication {
 
     /**
      * springdoc 把 nullable 的物件欄位寫成 {@code $ref} 加上 {@code type: null}，在 OpenAPI 3.1 代表「只能是 null」。
-     * 改成 {@code oneOf: [$ref, null]}，前端型別才會是 {@code X | null}。
+     * 改成 {@code oneOf: [$ref, null]}，前端型別才會是 {@code X | null}。欄位上的其他屬性（description 等）保留。
      */
     @Bean
-    @SuppressWarnings("rawtypes") // swagger-core 的 properties 是 Map<String, Schema>
     OpenApiCustomizer nullableObjectProperties() {
         return openApi -> {
-            for (Schema<?> schema : openApi.getComponents().getSchemas().values()) {
-                Map<String, Schema> properties = schema.getProperties();
-                if (properties != null) {
-                    properties.replaceAll((name, property) -> isNullableRef(property) ? nullableRef(property) : property);
-                }
+            if (openApi.getComponents() == null || openApi.getComponents().getSchemas() == null) {
+                return;
             }
+            openApi.getComponents().getSchemas().values().forEach(SimulatorApplication::fixNullableRefs);
         };
     }
 
-    private static boolean isNullableRef(Schema<?> property) {
-        return property.get$ref() != null && property.getTypes() != null && property.getTypes().contains("null");
+    /** 往下走 properties、陣列的 items 和 Map 的值，每一層的 nullable $ref 都改寫。 */
+    @SuppressWarnings({"rawtypes", "unchecked"}) // swagger-core 的 properties 是 Map<String, Schema>
+    private static void fixNullableRefs(Schema<?> schema) {
+        if (schema == null) {
+            return;
+        }
+        if (isNullableRef(schema)) {
+            String ref = schema.get$ref();
+            schema.set$ref(null);
+            schema.setTypes(null);
+            schema.setOneOf(List.of(new JsonSchema().$ref(ref), new JsonSchema().types(Set.of("null"))));
+        }
+        Map<String, Schema> properties = schema.getProperties();
+        if (properties != null) {
+            properties.values().forEach(SimulatorApplication::fixNullableRefs);
+        }
+        fixNullableRefs(schema.getItems());
+        if (schema.getAdditionalProperties() instanceof Schema<?> values) {
+            fixNullableRefs(values);
+        }
     }
 
-    private static Schema<?> nullableRef(Schema<?> property) {
-        return new JsonSchema()
-                .oneOf(List.of(new JsonSchema().$ref(property.get$ref()), new JsonSchema().types(Set.of("null"))))
-                .description(property.getDescription());
+    private static boolean isNullableRef(Schema<?> schema) {
+        return schema.get$ref() != null && schema.getTypes() != null && schema.getTypes().contains("null");
     }
 }

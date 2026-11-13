@@ -38,26 +38,19 @@ public final class SteadyStateSimulator implements Simulator {
                 case DatabaseNode database -> process(database.capacityParams(), arrival, node.id(), nodeResults);
             };
 
-            List<Edge> edges = graph.outgoing(node.id());
-            double totalWeight = edges.stream().mapToDouble(Edge::weight).sum();
-            for (Edge edge : edges) {
-                ClassRates rps = switch (node) {
-                    case ClientNode client -> processed.times(edge.weight() / totalWeight);
-                    case LoadBalancerNode lb -> processed.times(edge.weight() / totalWeight);
-                    case ServiceNode service -> processed.times(edge.callsPerRequest());
-                    case CacheNode cache -> new ClassRates(processed.read() * (1 - cache.hitRatio()), processed.write());
-                    case DatabaseNode database -> ClassRates.ZERO;
-                };
+            for (Edge edge : graph.outgoing(node.id())) {
+                var rps = new ClassRates(processed.read() * graph.visits(edge, true),
+                        processed.write() * graph.visits(edge, false));
                 edgeResults.put(edge.id(), new EdgeResult(rps));
                 arrivals.merge(edge.target(), rps, ClassRates::plus);
             }
         }
 
-        Map<String, ClassLatencies> endToEnd = endToEndLatencies(order, graph, nodeResults);
-        sentByClient.forEach((id, sent) -> nodeResults.put(id, NodeResult.client(sent, endToEnd.get(id))));
+        var endToEnd = new EndToEndLatencies(topology, graph, order, nodeResults);
+        sentByClient.forEach((id, sent) -> nodeResults.put(id, NodeResult.client(sent, endToEnd.client(id, sent))));
 
         return new SimulationResult(true, List.of(), inNodeOrder(topology, nodeResults),
-                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults));
+                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd));
     }
 
     private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
@@ -67,53 +60,8 @@ public final class SteadyStateSimulator implements Simulator {
         return outcome.processed();
     }
 
-    /** spec 4.3 的 L(n, class)，由下游往上游算，所以每個節點的下游都已經算好。 */
-    private static Map<String, ClassLatencies> endToEndLatencies(List<Node> order, TopologyGraph graph,
-            Map<String, NodeResult> nodeResults) {
-        Map<String, ClassLatencies> latencies = new HashMap<>();
-        for (Node node : order.reversed()) {
-            latencies.put(node.id(), new ClassLatencies(
-                    latency(node, true, graph, nodeResults, latencies),
-                    latency(node, false, graph, nodeResults, latencies)));
-        }
-        return latencies;
-    }
-
-    private static Double latency(Node node, boolean read, TopologyGraph graph, Map<String, NodeResult> nodeResults,
-            Map<String, ClassLatencies> latencies) {
-        // Client 本身沒有 W；其他節點過載時 W 為 null，整條路徑都沒有穩態延遲
-        Double own = node instanceof ClientNode ? Double.valueOf(0) : nodeResults.get(node.id()).avgLatencyMs();
-        if (own == null) {
-            return null;
-        }
-        List<Edge> edges = graph.outgoing(node.id());
-        double totalWeight = edges.stream().mapToDouble(Edge::weight).sum();
-        boolean parallel = node instanceof ServiceNode service && service.callMode() == CallMode.PARALLEL;
-        double downstream = 0;
-        for (Edge edge : edges) {
-            // 一個請求平均走這條邊幾次
-            double visits = switch (node) {
-                case ClientNode client -> edge.weight() / totalWeight;
-                case LoadBalancerNode lb -> edge.weight() / totalWeight;
-                case ServiceNode service -> edge.callsPerRequest();
-                case CacheNode cache -> read ? 1 - cache.hitRatio() : 1;
-                case DatabaseNode database -> 0;
-            };
-            // 不會走到的下游（weight 0、read 全部命中）過載也不影響這個 class
-            if (visits == 0) {
-                continue;
-            }
-            Double child = latencies.get(edge.target()).of(read);
-            if (child == null) {
-                return null;
-            }
-            double cost = visits * (edge.latencyMs() * 2 + child);
-            downstream = parallel ? Math.max(downstream, cost) : downstream + cost;
-        }
-        return own + downstream;
-    }
-
-    private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults) {
+    private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults,
+            EndToEndLatencies endToEnd) {
         double offered = 0;
         List<NodeResult> clients = new ArrayList<>();
         String bottleneck = null;
@@ -129,28 +77,7 @@ public final class SteadyStateSimulator implements Simulator {
                 bottleneck = node.id();
             }
         }
-        var avgEndToEnd = new ClassLatencies(averageEndToEnd(clients, true), averageEndToEnd(clients, false));
-        return new Summary(offered, avgEndToEnd, bottleneck);
-    }
-
-    /** 各 Client 依該 class 的請求數加權；任一 Client 為 null 或沒有該 class 的流量時為 null（spec 4.3）。 */
-    private static Double averageEndToEnd(List<NodeResult> clients, boolean read) {
-        double weighted = 0;
-        double requests = 0;
-        for (NodeResult client : clients) {
-            double rps = read ? client.arrivalRps().read() : client.arrivalRps().write();
-            // 權重為 0 的 Client 不影響平均，和 latency() 略過不會走到的下游一致
-            if (rps == 0) {
-                continue;
-            }
-            Double latency = client.endToEndMs().of(read);
-            if (latency == null) {
-                return null;
-            }
-            weighted += rps * latency;
-            requests += rps;
-        }
-        return requests > 0 ? weighted / requests : null;
+        return new Summary(offered, endToEnd.average(clients), bottleneck);
     }
 
     private static Map<String, NodeResult> inNodeOrder(Topology topology, Map<String, NodeResult> results) {

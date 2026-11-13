@@ -5,7 +5,6 @@ import type { SimulationResult, Topology } from '@/api/client'
 import { DASH, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
 import { STATUS_BADGE } from '@/canvas/status'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
-import { clientLatency } from './latency'
 
 type MetricsTableProps = {
   topology: Topology
@@ -57,11 +56,7 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
                 {latencyReason && <span className="ml-1 text-xs text-muted-foreground">（過載）</span>}
               </TableCell>
               <TableCell>
-                {node.type === 'CLIENT' ? (
-                  <EndToEndLatencyText latency={clientLatency(topology, result, node.id)} />
-                ) : (
-                  DASH
-                )}
+                {metrics.endToEndMs ? <EndToEndLatencyText latencies={metrics.endToEndMs} topology={topology} /> : DASH}
               </TableCell>
               <TableCell className={cn('text-right tabular-nums', metrics.droppedRps > 0 && 'text-destructive')}>
                 {formatRps(metrics.droppedRps)}

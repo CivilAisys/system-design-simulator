@@ -3,7 +3,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { SimulationResult, Topology } from '@/api/client'
 import type { Theme } from '@/theme'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
-import { summaryLatency } from './latency'
 import { MetricsTable } from './MetricsTable'
 
 // ECharts 很大，切到 Sankey Tab 才載入
@@ -35,7 +34,7 @@ export function ResultsPanel({ topology, result, running, theme }: ResultsPanelP
         {computed && (
           <p className="text-sm">
             <span className="mr-2 text-muted-foreground">平均端到端延遲</span>
-            <EndToEndLatencyText latency={summaryLatency(topology, computed)} />
+            <EndToEndLatencyText latencies={computed.summary.avgEndToEndMs} topology={topology} />
           </p>
         )}
       </div>

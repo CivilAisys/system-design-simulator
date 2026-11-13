@@ -174,15 +174,12 @@
       },
       "ClassLatencies" : {
         "type" : "object",
-        "description" : "null 代表無定義，例如路徑上有節點過載",
         "properties" : {
           "read" : {
-            "type" : [ "number", "null" ],
-            "format" : "double"
+            "$ref" : "#/components/schemas/EndToEndLatency"
           },
           "write" : {
-            "type" : [ "number", "null" ],
-            "format" : "double"
+            "$ref" : "#/components/schemas/EndToEndLatency"
           }
         },
         "required" : [ "read", "write" ]
@@ -209,6 +206,33 @@
           }
         },
         "required" : [ "rps" ]
+      },
+      "EndToEndLatency" : {
+        "type" : "object",
+        "description" : "一個 request class 的端到端延遲（spec 4.3）",
+        "properties" : {
+          "ms" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "無定義時為 null，原因見 undefinedReason"
+          },
+          "approximate" : {
+            "type" : "boolean",
+            "description" : "路徑上有平行呼叫多個下游，會低估真實延遲；ms 為 null 時一定是 false"
+          },
+          "overloadedNodeIds" : {
+            "type" : "array",
+            "description" : "這個 class 實際會走到、而且過載的節點",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "undefinedReason" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "OVERLOADED", "NO_DOWNSTREAM", "NO_TRAFFIC" ]
+          }
+        },
+        "required" : [ "approximate", "ms", "overloadedNodeIds", "undefinedReason" ]
       },
       "NodeResult" : {
         "type" : "object",
