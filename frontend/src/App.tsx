@@ -1,18 +1,23 @@
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import { Loader2, Moon, Play, Sun } from 'lucide-react'
 import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
-import { simulate, type NodeType, type SimulationResult, type Topology } from '@/api/client'
+import { Switch } from '@/components/ui/switch'
+import { type NodeType, type SimulationResult, type Topology } from '@/api/client'
 import { Canvas } from '@/canvas/Canvas'
 import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
+import { cn } from '@/lib/utils'
 import { ResultsPanel } from '@/results/ResultsPanel'
+import { useSimulation } from '@/simulation/useSimulation'
 import { useTheme } from '@/theme'
 
 export default function App() {
@@ -30,27 +35,11 @@ function Simulator() {
   const { topology } = editor
   const { screenToFlowPosition } = useReactFlow()
   const canvasRef = useRef<HTMLElement>(null)
-  const [result, setResult] = useState<SimulationResult | null>(null)
-  const [running, setRunning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function run() {
-    // 先清掉上一次的結果，Run 失敗時畫布不能留著舊的狀態色和 RPS
-    setRunning(true)
-    setResult(null)
-    setError(null)
+  const { result, running, error, stale, autoRun, setAutoRun, run } = useSimulation(topology, {
     // 上一次的瓶頸通知會和這次的結果（驗證錯誤、HTTP 錯誤）互相矛盾
-    toast.dismiss(BOTTLENECK_TOAST)
-    try {
-      const next = await simulate(topology)
-      setResult(next)
-      notifyBottleneck(topology, next)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setRunning(false)
-    }
-  }
+    onRun: () => toast.dismiss(BOTTLENECK_TOAST),
+    onResult: notifyBottleneck,
+  })
 
   // 點擊元件面板時放在目前畫面的中央
   function addAtCenter(type: NodeType) {
@@ -73,6 +62,15 @@ function Simulator() {
           {running ? <Loader2 className="animate-spin" /> : <Play />}
           Run
         </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Switch id="auto-run" checked={autoRun} onCheckedChange={setAutoRun} size="sm" />
+          <Label htmlFor="auto-run">Auto-run</Label>
+        </div>
+        {stale && (
+          <Badge variant="outline" className="shrink-0" title="拓撲在上次 Run 之後改過，按 Run 重新計算">
+            已過期
+          </Badge>
+        )}
         {/* 長訊息截成一行，完整內容放在 title */}
         {message && (
           <span role="alert" title={message} className="min-w-0 truncate text-sm text-destructive">
@@ -112,7 +110,7 @@ function Simulator() {
           onUpdateEdge={editor.updateEdge}
         />
       </SidebarProvider>
-      <section aria-label="結果" className="h-72 shrink-0 border-t">
+      <section aria-label="結果" className={cn('h-72 shrink-0 border-t', stale && 'opacity-60')}>
         <ResultsPanel topology={topology} result={result} running={running} theme={theme} />
       </section>
       <Toaster theme={theme} position="top-right" />
