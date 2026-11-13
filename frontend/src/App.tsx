@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import { ChevronDown, Download, Loader2, Moon, Play, Sun, Upload } from 'lucide-react'
+import { ChevronDown, Download, Loader2, Moon, Play, Redo2, Sun, Undo2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,7 @@ function Simulator() {
     onError: bottleneck.clear,
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
+  useUndoShortcuts(editor.undo, editor.redo)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
   // 但必須在新節點進到 React Flow 之後才呼叫，所以放在 effect 裡
   const [fitRequest, setFitRequest] = useState(0)
@@ -148,6 +149,26 @@ function Simulator() {
           </span>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={editor.undo}
+            disabled={!editor.canUndo}
+            aria-label="復原"
+            title="復原（Ctrl/⌘+Z）"
+          >
+            <Undo2 />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={editor.redo}
+            disabled={!editor.canRedo}
+            aria-label="重做"
+            title="重做（Ctrl/⌘+Shift+Z）"
+          >
+            <Redo2 />
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -226,6 +247,29 @@ function Simulator() {
       <Toaster theme={theme} position="top-right" />
     </div>
   )
+}
+
+// Ctrl/Cmd+Z 復原、Ctrl/Cmd+Shift+Z 重做。焦點在輸入框時交給輸入框自己的復原
+function useUndoShortcuts(undo: () => void, redo: () => void) {
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'z') {
+        return
+      }
+      const target = event.target
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) {
+        return
+      }
+      event.preventDefault()
+      if (event.shiftKey) {
+        redo()
+      } else {
+        undo()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [undo, redo])
 }
 
 // 固定 toast id，連續 Run 時原地更新而不是堆疊
