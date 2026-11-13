@@ -8,21 +8,25 @@ import { STATUS_RING, STATUS_TEXT } from './status'
 export type SimNodeData = {
   node: Node
   result?: NodeResult
+  // 這個節點的驗證錯誤訊息
+  errors?: string[]
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
-  const { node, result } = data
+  const { node, result, errors } = data
   const Icon = NODE_KINDS[node.type].icon
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
 
   return (
     <div
+      title={errors?.join('\n')}
       className={cn(
         'min-w-36 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm',
-        status && STATUS_RING[status],
+        // 驗證失敗時沒有計算結果，不會同時有狀態色
+        errors ? 'ring-2 ring-destructive shadow-lg shadow-destructive/40' : status && STATUS_RING[status],
         selected && 'border-primary',
       )}
     >

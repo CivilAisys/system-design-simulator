@@ -15,8 +15,6 @@ export function undefinedReasonText(latency: EndToEndLatency, requestClass: Requ
       const names = latency.overloadedNodeIds.map((id) => topology.nodes.find((node) => node.id === id)?.name ?? id)
       return `${names.join('、')} 過載，穩態延遲無定義`
     }
-    case 'NO_DOWNSTREAM':
-      return '路徑上有元件沒有接到下游'
     case 'NO_TRAFFIC':
       return `沒有 ${requestClass} 請求`
     default:

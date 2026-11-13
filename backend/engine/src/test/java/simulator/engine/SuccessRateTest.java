@@ -166,31 +166,7 @@ class SuccessRateTest {
         assertThat(result.nodes().get("other").successRps()).isCloseTo(500, within(EPS));
     }
 
-    @Test
-    void clientWithoutDownstreamSucceedsNothing() {
-        // 和端到端延遲的 NO_DOWNSTREAM 一致：請求沒有地方送，不算成功
-        SimulationResult result = simulator.simulate(new Topology(
-                List.of(
-                        new ClientNode("web", "Web", NodeHealth.HEALTHY, 1000, 0.9),
-                        new ClientNode("draft", "Draft", NodeHealth.HEALTHY, 1000, 0.9),
-                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, roomy())),
-                List.of(new Edge("e1", "web", "db", 1, 1, 1))));
 
-        assertThat(result.nodes().get("draft").successRps()).isZero();
-        assertThat(result.summary().dropRate()).isCloseTo(0.5, within(EPS));
-    }
-
-    @Test
-    void loadBalancerWithoutDownstreamSucceedsNothing() {
-        SimulationResult result = simulator.simulate(new Topology(
-                List.of(
-                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
-                        new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, roomy())),
-                List.of(new Edge("e1", "client", "lb", 1, 1, 1))));
-
-        assertThat(result.nodes().get("client").successRps()).isZero();
-        assertThat(result.summary().dropRate()).isEqualTo(1);
-    }
 
     @Test
     void noTrafficDropsNothing() {

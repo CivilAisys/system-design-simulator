@@ -68,6 +68,12 @@ export function useTopologyEditor(initial: Topology) {
     [],
   )
 
+  // 只選取這個節點或邊（另一個傳 null），屬性面板會切到它
+  const select = useCallback((target: { nodeId: string | null; edgeId: string | null }) => {
+    setNodes((ns) => ns.map((n) => withSelected(n, n.id === target.nodeId)))
+    setEdges((es) => es.map((e) => withSelected(e, e.id === target.edgeId)))
+  }, [])
+
   const updateNode = useCallback(
     (id: string, patch: NodePatch) =>
       setNodes((ns) =>
@@ -122,6 +128,7 @@ export function useTopologyEditor(initial: Topology) {
     onConnect,
     isValidConnection,
     addNode,
+    select,
     updateNode,
     updateEdge,
   }
@@ -135,6 +142,11 @@ function useShallowStable<T>(items: T[]): T[] {
   }
   setStable(items)
   return items
+}
+
+// 選取狀態沒變時沿用原物件，React Flow 不用重畫它
+function withSelected<T extends { selected?: boolean }>(item: T, selected: boolean): T {
+  return (item.selected ?? false) === selected ? item : { ...item, selected }
 }
 
 function toFlowNode(node: Node): SimFlowNode {

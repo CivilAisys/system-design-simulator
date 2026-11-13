@@ -14,6 +14,7 @@ import type { NodeType, SimulationResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
+import { groupErrors } from './validation'
 
 const nodeTypes = { sim: SimNode }
 const edgeTypes = { rps: RpsEdge }
@@ -46,14 +47,17 @@ export function Canvas({
 }: CanvasProps) {
   const { screenToFlowPosition } = useReactFlow()
 
-  // 結果只在畫的時候疊上去，不寫進編輯狀態
+  // 結果和驗證錯誤只在畫的時候疊上去，不寫進編輯狀態
+  const errors = useMemo(() => groupErrors(result?.errors ?? []), [result])
   const shownNodes = useMemo<SimFlowNode[]>(
-    () => nodes.map((n) => ({ ...n, data: { ...n.data, result: result?.nodes[n.id] } })),
-    [nodes, result],
+    () =>
+      nodes.map((n) => ({ ...n, data: { ...n.data, result: result?.nodes[n.id], errors: errors.nodes.get(n.id) } })),
+    [nodes, result, errors],
   )
   const shownEdges = useMemo<RpsFlowEdge[]>(
-    () => edges.map((e) => ({ ...e, data: { ...e.data, result: result?.edges[e.id] } })),
-    [edges, result],
+    () =>
+      edges.map((e) => ({ ...e, data: { ...e.data, result: result?.edges[e.id], errors: errors.edges.get(e.id) } })),
+    [edges, result, errors],
   )
 
   function onDragOver(event: DragEvent) {

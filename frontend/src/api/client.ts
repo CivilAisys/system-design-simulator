@@ -9,6 +9,14 @@ export type NodeResult = components['schemas']['NodeResult']
 export type EdgeResult = components['schemas']['EdgeResult']
 export type Status = NonNullable<NodeResult['status']>
 export type SimulationResult = components['schemas']['SimulationResult']
+export type Summary = NonNullable<SimulationResult['summary']>
+export type ValidationError = SimulationResult['errors'][number]
+// 驗證通過、有計算結果（驗證失敗時 summary 為 null，nodes／edges 是空的）
+export type ComputedResult = SimulationResult & { valid: true; summary: Summary }
+
+export function isComputed(result: SimulationResult | null): result is ComputedResult {
+  return result != null && result.valid && result.summary != null
+}
 
 // 同一個 origin：開發時由 Vite proxy 把 /api 轉給 Spring
 const client = createClient<paths>({ baseUrl: '' })

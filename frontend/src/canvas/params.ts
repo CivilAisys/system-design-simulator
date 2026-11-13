@@ -34,8 +34,8 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
 }
 
 export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {
-  // 權重總和為 0 時無法分流，所以要 > 0
-  weight: { label: 'weight', min: 0, minExclusive: true, slider: { min: 0.1, max: 10, scale: 'linear', step: 0.1 } },
+  // 0 代表暫時不分流到這個下游；總和為 0 時無法分流，由後端回 INVALID_PARAM 指到起點節點
+  weight: { label: 'weight', min: 0, slider: { min: 0, max: 10, scale: 'linear', step: 0.1 } },
   callsPerRequest: {
     label: 'callsPerRequest',
     integer: true,

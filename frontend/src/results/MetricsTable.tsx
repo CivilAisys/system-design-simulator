@@ -1,14 +1,14 @@
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import type { SimulationResult, Topology } from '@/api/client'
+import type { ComputedResult, Topology } from '@/api/client'
 import { DASH, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
 import { STATUS_BADGE } from '@/canvas/status'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 
 type MetricsTableProps = {
   topology: Topology
-  result: SimulationResult
+  result: ComputedResult
 }
 
 export function MetricsTable({ topology, result }: MetricsTableProps) {
