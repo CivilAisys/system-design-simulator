@@ -97,6 +97,15 @@ describe('合法的檔案', () => {
     })
     expect(topology.edges).toEqual([{ id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 }])
   })
+
+  it('超出參數範圍的值照樣讀入，留給 Run 在錯誤分頁回報', () => {
+    const file = validFile()
+    Object.assign(file.nodes[2].params, { instances: 40_000, concurrency: 50_000 })
+    file.nodes[0].params.rps = 1e13
+    file.edges[2].callsPerRequest = 100_000
+
+    expect(topologyOf(file)).toEqual(file)
+  })
 })
 
 describe('格式錯誤', () => {

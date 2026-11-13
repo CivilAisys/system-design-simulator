@@ -10,7 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { NODE_KINDS, type NodeParams } from './catalog'
 import { formatUtilization } from './format'
 import { NumberField } from './NumberField'
-import { EDGE_PARAM_SPECS, edgeNumberParams, NODE_NUMBER_PARAMS, NODE_PARAM_SPECS, nodeParam } from './params'
+import {
+  checkNodeParam,
+  EDGE_PARAM_SPECS,
+  edgeNumberParams,
+  NODE_NUMBER_PARAMS,
+  NODE_PARAM_SPECS,
+  nodeParam,
+} from './params'
 import type { SimFlowNode } from './SimNode'
 import type { RpsFlowEdge } from './RpsEdge'
 import type { EdgePatch, NodePatch } from './useTopologyEditor'
@@ -73,6 +80,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           key={param}
           spec={NODE_PARAM_SPECS[param]}
           value={nodeParam(node.params, param)}
+          check={(value) => checkNodeParam(node.params, param, value)}
           onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
         />
       ))}

@@ -8,12 +8,14 @@ type NumberFieldProps = {
   spec: NumberSpec
   value: number
   onChange: (value: number) => void
+  // 預設只檢查 spec 的範圍；instances、concurrency 另外要看乘積
+  check?: (value: number) => string | null
 }
 
 // Input 和 Slider 改的是同一個值。Input 打到一半（空白、超出範圍）時只顯示錯誤，
 // 不把不合法的值寫進拓撲，所以送去 Run 的參數一定通過 spec 4.5 的範圍檢查。
 // 不合法的草稿在失焦時還原成目前的值，輸入框不會長期和實際的值不一致
-export function NumberField({ spec, value, onChange }: NumberFieldProps) {
+export function NumberField({ spec, value, onChange, check = (next) => checkNumber(spec, next) }: NumberFieldProps) {
   const id = useId()
   const [draft, setDraft] = useState(String(value))
   const [shown, setShown] = useState(value)
@@ -24,12 +26,20 @@ export function NumberField({ spec, value, onChange }: NumberFieldProps) {
     setDraft(syncDraft(draft, value))
   }
 
-  const error = checkNumber(spec, parseDraft(draft))
+  const error = check(parseDraft(draft))
 
   function onInput(text: string) {
     setDraft(text)
     const next = parseDraft(text)
-    if (checkNumber(spec, next) === null) {
+    if (check(next) === null) {
+      onChange(next)
+    }
+  }
+
+  // slider 的範圍都在上限內，但乘積仍可能超過（instances 打 1000 後把 concurrency 拖到 10000），這時不動
+  function onSlide(position: number) {
+    const next = fromSlider(spec, position)
+    if (check(next) === null) {
       onChange(next)
     }
   }
@@ -52,7 +62,7 @@ export function NumberField({ spec, value, onChange }: NumberFieldProps) {
       <Slider
         {...sliderRange(spec)}
         value={[toSlider(spec, value)]}
-        onValueChange={([position]) => onChange(fromSlider(spec, position))}
+        onValueChange={([position]) => onSlide(position)}
         aria-label={spec.label}
       />
       {error && (
