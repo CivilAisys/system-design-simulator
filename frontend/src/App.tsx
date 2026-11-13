@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { Loader2, Moon, Play, Sun } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { simulate, type SimulationResult } from '@/api/client'
+import { Toaster } from '@/components/ui/sonner'
+import { simulate, type SimulationResult, type Topology } from '@/api/client'
 import { Canvas } from '@/canvas/Canvas'
+import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
+import { ResultsPanel } from '@/results/ResultsPanel'
 import { useTheme } from '@/theme'
 
 export default function App() {
@@ -19,7 +23,9 @@ export default function App() {
     setResult(null)
     setError(null)
     try {
-      setResult(await simulate(topology))
+      const next = await simulate(topology)
+      setResult(next)
+      notifyBottleneck(topology, next)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -55,9 +61,25 @@ export default function App() {
           {theme === 'dark' ? <Sun /> : <Moon />}
         </Button>
       </header>
-      <main className="flex-1">
+      <main className="min-h-0 flex-1">
         <Canvas topology={topology} result={result} colorMode={theme} />
       </main>
+      <section aria-label="結果" className="h-72 shrink-0 border-t">
+        <ResultsPanel topology={topology} result={result} theme={theme} />
+      </section>
+      <Toaster theme={theme} position="top-right" />
     </div>
   )
+}
+
+// 瓶頸 = ρ 最高的節點（第 4.4 節）。固定 toast id，連續 Run 時替換而不是堆疊
+function notifyBottleneck(topology: Topology, result: SimulationResult) {
+  const id = result.summary.bottleneckNodeId
+  if (!result.valid || id == null) return
+  const name = topology.nodes.find((node) => node.id === id)?.name ?? id
+  const metrics = result.nodes[id]
+  toast.warning(`發現瓶頸：${name}`, {
+    id: 'bottleneck',
+    description: metrics && `ρ ${formatUtilization(metrics.utilization)}・${metrics.status ?? ''}`,
+  })
 }
