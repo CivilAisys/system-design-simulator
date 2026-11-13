@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { totalRps, type ComputedResult, type Topology } from '@/api/client'
-import { DASH, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
+import { DASH, formatClassRates, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
 import { STATUS_BADGE } from '@/canvas/status'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 
@@ -51,14 +51,19 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
                   </Badge>
                 )}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatRps(totalRps(arrivalRps))}</TableCell>
+              {/* 總和下面一行小字分開列 read、write，不多佔一欄：Cache 擋下的只有 read */}
+              <TableCell className="text-right tabular-nums">
+                {formatRps(totalRps(arrivalRps))}
+                <div className="text-xs text-muted-foreground">{formatClassRates(arrivalRps)}</div>
+              </TableCell>
               <TableCell className="text-right tabular-nums">{formatOptionalRps(metrics.capacityRps)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatUtilization(metrics.utilization)}</TableCell>
               <TableCell className="text-right tabular-nums" title={latencyReason}>
                 {formatMs(metrics.avgLatencyMs)}
                 {latencyReason && <span className="ml-1 text-xs text-muted-foreground">（過載）</span>}
               </TableCell>
-              <TableCell>
+              {/* 過載時的原因很長，允許換行，表格才不會在預設寬度下需要橫向捲動 */}
+              <TableCell className="whitespace-normal">
                 {metrics.endToEndMs ? <EndToEndLatencyText latencies={metrics.endToEndMs} topology={topology} /> : DASH}
               </TableCell>
               <TableCell className={cn('text-right tabular-nums', metrics.droppedRps > 0 && 'text-destructive')}>

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { DASH, formatMs, formatOptionalRps, formatPercent, formatRps, formatUtilization } from './format'
+import {
+  DASH,
+  formatClassRates,
+  formatMs,
+  formatOptionalRps,
+  formatPercent,
+  formatRps,
+  formatUtilization,
+} from './format'
 
 describe('formatRps', () => {
   it('四捨五入成整數', () => {
@@ -22,6 +30,16 @@ describe('formatRps', () => {
     expect(formatOptionalRps(null)).toBe(DASH)
     expect(formatOptionalRps(undefined)).toBe(DASH)
     expect(formatOptionalRps(0.2)).toBe('< 1 rps')
+  })
+})
+
+describe('formatClassRates', () => {
+  it('read、write 分開，取整數、不帶單位', () => {
+    expect(formatClassRates({ read: 180.4, write: 100 })).toBe('read 180・write 100')
+  })
+
+  it('不到 0.5 的正數和 formatRps 一樣不顯示成 0', () => {
+    expect(formatClassRates({ read: 0.2, write: 0 })).toBe('read < 1・write 0')
   })
 })
 
