@@ -29,15 +29,11 @@ npm install
 npm run dev
 ```
 
-瀏覽器開 http://localhost:5173。
-
-前端的 `/api` 由 Vite proxy 到 `localhost:8080`，後端不開 CORS。`npm run dev` 和 `npm run preview` 都有這個 proxy。
-
-`npm install` 時，前端會從 `backend/api/openapi.json` 產生 API 型別，不需要先啟動後端。
+瀏覽器開 http://localhost:5173。前端怎麼連到後端、API 型別怎麼產生，見 [`frontend/README.md`](frontend/README.md)。
 
 ## 測試
 
-CI（`.github/workflows/ci.yml`）在每個 PR 執行的就是下面這些指令：
+CI（`.github/workflows/ci.yml`）在每個 PR 執行下面這些指令（前端在 CI 先跑 `npm ci` 安裝）：
 
 ```sh
 # 後端：engine 和 api 的測試，包含 openapi.json 的同步檢查
@@ -51,7 +47,7 @@ npm test
 npm run build
 ```
 
-改了 API 之後如果同步檢查失敗，執行 `./gradlew :api:generateOpenApi`，再 commit 更新後的 `backend/api/openapi.json`。
+同步檢查失敗時的處理見 [`frontend/README.md`](frontend/README.md) 的「API 型別」。
 
 ## 文件
 

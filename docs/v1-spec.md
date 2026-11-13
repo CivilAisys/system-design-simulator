@@ -64,7 +64,7 @@ system-design-simulator/
       ├─ io/          匯入／匯出、自動存檔
       ├─ api/         產生的型別與 API client
       ├─ examples/    內建範例 JSON（也是後端整合測試的輸入）
-      └─ components/  shadcn/ui 元件
+      └─ components/  shadcn/ui 元件（hooks/、lib/ 是它附帶的工具）
 ```
 
 用多模組把 `engine` 獨立出來，由編譯期保證引擎不會意外依賴 Spring。
@@ -506,7 +506,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 | 2026-11-12 | `successRps` 用**成功機率沿呼叫樹相乘**計算（4.3.1） | fan-out 讓下游 RPS 變成子呼叫，不能直接加總丟棄量；遞迴算法和延遲公式一致、可解釋 |
 | 2026-11-12 | 部分路徑過載時，端到端延遲**維持 `null`**，前端顯示原因 | 過載節點的延遲在穩態下沒有定義，不硬塞假設值；成功率另由 `successRps` 呈現 |
 | 2026-11-12 | 測試範圍：**engine 單元測試＋一個 `/simulate` API 整合測試** | 計算正確性集中在 engine；前端靠手動驗收，階段二再考慮 Playwright |
-| 2026-11-12 | UI 改用 **shadcn/ui + Tailwind v4 + ECharts + Motion**，不用 `@cloudflare/kumo` | 想要華麗又清晰的畫面，需要完全掌控外觀；Kumo 的外觀綁在 Cloudflare 的設計語言 |
+| 2026-11-12 | UI 改用 **shadcn/ui + Tailwind v4 + ECharts + Motion**，不用 `@cloudflare/kumo`（Motion 後來沒用，見 `docs/adr/0002-no-animation-library.md`） | 想要華麗又清晰的畫面，需要完全掌控外觀；Kumo 的外觀綁在 Cloudflare 的設計語言 |
 | 2026-11-12 | 階段一畫布效果只做**流量粒子、節點發光、深色主題** | 成本低且直接幫助理解瓶頸；數字過場、丟棄動畫等階段二有時間序列時一起做 |
 | 2026-11-12 | 多個 Client 時，summary 延遲用**請求數加權平均**，每個 Client 的延遲另外列在 `nodes` | 加權平均代表「隨機一個請求要等多久」；summary 為 `null` 時仍看得到各 Client 的情況 |
 | 2026-11-12 | Client 留在 `nodes` 裡，伺服器類欄位為 `null`，不列入瓶頸 | 前端用同一套方式查所有節點；`null` 明確表示「不適用」，不會被誤認為 0 |
