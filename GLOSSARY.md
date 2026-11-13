@@ -116,3 +116,10 @@ _Avoid_: engine、calculator
 **Simulation result**:
 一次 Run 的完整結果：驗證錯誤、每個 Node 和 Edge 的數字，以及 summary。
 _Avoid_: output、report
+
+**Validation error（驗證錯誤）**:
+拓撲違反 spec 4.5 的規則，例如有環、參數超出範圍。可以指到某個 Node 或 Edge，放在 Simulation result 裡回傳，不是 HTTP 錯誤。
+
+**Format error（格式錯誤）**:
+送來的 JSON 不是合法的拓撲格式，例如缺必填欄位、id 重複、欄位型別不對、版本不支援。指不到某個 Node 或 Edge，API 回 HTTP 400。
+_Avoid_: 用「驗證錯誤」稱呼它

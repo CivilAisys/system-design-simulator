@@ -61,17 +61,41 @@ export function hasOutput(type: NodeType): boolean {
 // usedIds 是這次編輯用過的所有 id（含已刪除的），新節點不能沿用：
 // 過期的結果（Auto-run 關閉或還在 debounce）會用 id 把狀態和驗證錯誤畫到同 id 的新節點上
 export function newNode(type: NodeType, usedIds: ReadonlySet<string>, position: { x: number; y: number }): Node {
-  const { label, idPrefix, defaults } = NODE_KINDS[type]
-  let n = 1
-  while (usedIds.has(`${idPrefix}-${n}`)) {
-    n++
-  }
+  const { label, defaults } = NODE_KINDS[type]
+  const n = nextNodeNumber(type, usedIds)
   return {
-    id: `${idPrefix}-${n}`,
+    id: nodeId(type, n),
     type,
     name: `${label} ${n}`,
     params: { ...defaults },
     state: 'HEALTHY',
     ui: position,
   }
+}
+
+// 同類型中第一個沒用過的節點 id，規則同 newNode
+export function newNodeId(type: NodeType, usedIds: ReadonlySet<string>): string {
+  return nodeId(type, nextNodeNumber(type, usedIds))
+}
+
+function nextNodeNumber(type: NodeType, usedIds: ReadonlySet<string>): number {
+  let n = 1
+  while (usedIds.has(nodeId(type, n))) {
+    n++
+  }
+  return n
+}
+
+function nodeId(type: NodeType, n: number): string {
+  return `${NODE_KINDS[type].idPrefix}-${n}`
+}
+
+// 新邊的 id，理由同 newNode：刪掉再重連同一對節點時不能沿用舊的 id
+export function newEdgeId(source: string, target: string, usedIds: ReadonlySet<string>): string {
+  const base = `e-${source}-${target}`
+  let id = base
+  for (let n = 2; usedIds.has(id); n++) {
+    id = `${base}-${n}`
+  }
+  return id
 }

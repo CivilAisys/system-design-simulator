@@ -115,9 +115,12 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
       fail(`缺少數值參數 params.${param}（或數值太大）`)
       return null
     }
-    if (NODE_PARAM_SPECS[param].integer && !Number.isInteger(value)) {
-      fail(`params.${param} 必須是整數`)
-      return null
+    if (NODE_PARAM_SPECS[param].integer) {
+      const error = checkInteger(value)
+      if (error) {
+        fail(`params.${param} ${error}`)
+        return null
+      }
     }
     kept[param] = value
   }
@@ -167,7 +170,8 @@ function toEdge(
   if (source == null || target == null) {
     return null
   }
-  // 和編輯器的連線規則一致（useTopologyEditor 的 isValidConnection、SimNode 的 handle）
+  // 和編輯器的連線規則一致（useTopologyEditor 的 isValidConnection、SimNode 的 handle）。
+  // 只有經過其他節點的環例外：可以匯入，Run 之後顯示 CYCLE_DETECTED，刪掉邊就能修好
   if (source === target) {
     fail('不能連回自己')
     return null
@@ -192,9 +196,12 @@ function toEdge(
       fail(`${field} 必須是數字（或數值太大）`)
       return null
     }
-    if (field === 'callsPerRequest' && !Number.isInteger(value)) {
-      fail('callsPerRequest 必須是整數')
-      return null
+    if (field === 'callsPerRequest') {
+      const error = checkInteger(value)
+      if (error) {
+        fail(`callsPerRequest ${error}`)
+        return null
+      }
     }
     numbers[field] = value
   }
@@ -247,6 +254,17 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 // JSON.parse 會把 1e400 這類溢位的數字變成 Infinity，送出時又變成 null
+const INT32_MAX = 2 ** 31 - 1
+
+// 整數參數在 API 是 32 位元整數，超出時後端整份拒絕（HTTP 400），沒辦法在錯誤分頁指出是哪個節點，
+// 所以和 Infinity 一樣當成格式錯誤。範圍內但超過上限的值照樣讀入，由 Run 回報（spec 4.5）
+function checkInteger(value: number): string | null {
+  if (!Number.isInteger(value)) {
+    return '必須是整數'
+  }
+  return Math.abs(value) > INT32_MAX ? `數值太大（整數最多 ${INT32_MAX.toLocaleString('en-US')}）` : null
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
@@ -258,9 +276,14 @@ function isNodeType(value: unknown): value is NodeType {
 // 下載完成前不能釋放 URL，Safari 太早釋放會取消下載
 const REVOKE_DELAY_MS = 10_000
 
+// 匯出檔的內容，parseTopology 讀回來會得到相同的拓撲
+export function serializeTopology(topology: Topology): string {
+  return `${JSON.stringify(topology, null, 2)}\n`
+}
+
 // 匯出目前畫布（含 ui 座標）為 JSON 檔下載
 export function downloadTopology(topology: Topology, filename = 'topology.json') {
-  const blob = new Blob([`${JSON.stringify(topology, null, 2)}\n`], { type: 'application/json' })
+  const blob = new Blob([serializeTopology(topology)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

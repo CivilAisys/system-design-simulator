@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * 拓撲的圖結構：只建一次，驗證和計算共用，提供出邊、拓撲排序和環。
  * 兩端有一端不存在的邊不放進圖裡，由 {@link TopologyValidator} 報 UNKNOWN_NODE。
- * id 重複是格式錯誤（錯誤沒辦法指到哪一個），丟 IllegalArgumentException。
+ * id 重複是格式錯誤（錯誤沒辦法指到哪一個），丟 {@link TopologyFormatException}。
  */
 final class TopologyGraph {
 
@@ -29,7 +29,7 @@ final class TopologyGraph {
         var graph = new TopologyGraph();
         for (Node node : topology.nodes()) {
             if (graph.nodes.putIfAbsent(node.id(), node) != null) {
-                throw new IllegalArgumentException("Duplicate node id " + node.id());
+                throw new TopologyFormatException("Duplicate node id " + node.id());
             }
             graph.outgoing.put(node.id(), new ArrayList<>());
             graph.inDegree.put(node.id(), 0);
@@ -37,7 +37,7 @@ final class TopologyGraph {
         var edgeIds = new HashSet<String>();
         for (Edge edge : topology.edges()) {
             if (!edgeIds.add(edge.id())) {
-                throw new IllegalArgumentException("Duplicate edge id " + edge.id());
+                throw new TopologyFormatException("Duplicate edge id " + edge.id());
             }
             if (graph.contains(edge.source()) && graph.contains(edge.target())) {
                 graph.outgoing.get(edge.source()).add(edge);

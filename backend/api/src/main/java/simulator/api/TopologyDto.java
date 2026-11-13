@@ -5,6 +5,7 @@ import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import simulator.engine.Topology;
+import simulator.engine.TopologyFormatException;
 
 /** 拓撲的 JSON 格式，也是匯入／匯出的檔案格式。 */
 @Schema(name = "Topology")
@@ -13,8 +14,13 @@ public record TopologyDto(
         @Schema(requiredMode = REQUIRED) List<NodeDto> nodes,
         @Schema(requiredMode = REQUIRED) List<EdgeDto> edges) {
 
+    private static final int SUPPORTED_VERSION = 1;
+
     Topology toTopology() {
-        Required.of(version, "version");
+        if (Required.of(version, "version") != SUPPORTED_VERSION) {
+            throw new TopologyFormatException(
+                    "Unsupported version " + version + ", only version " + SUPPORTED_VERSION + " is supported");
+        }
         return new Topology(
                 Required.of(nodes, "nodes").stream().map(node -> Required.of(node, "nodes[]").toNode()).toList(),
                 Required.of(edges, "edges").stream().map(edge -> Required.of(edge, "edges[]").toEdge()).toList());

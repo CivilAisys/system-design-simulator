@@ -25,15 +25,35 @@ export function totalRps(rates: ClassRates): number {
 }
 
 // 同一個 origin：開發時由 Vite proxy 把 /api 轉給 Spring
-const client = createClient<paths>({ baseUrl: '' })
+const client = createClient<paths>({ baseUrl: '', fetch: fetchBackend })
 
-export async function simulate(topology: Topology): Promise<SimulationResult> {
-  const { data, error, response } = await client.POST('/api/v1/simulate', {
-    body: topology,
-  })
+const UNREACHABLE_MESSAGE = '連不到後端，請確認後端是否已啟動'
+
+// fetch 只有在連線失敗（網路錯誤、後端沒開又沒有 proxy）或被取消時才會丟例外；
+// 只包這一步，回應解析失敗之類的錯誤不能說成連不到後端
+async function fetchBackend(request: Request): Promise<Response> {
+  try {
+    return await fetch(request)
+  } catch (e) {
+    if (isAbortError(e)) throw e
+    throw new Error(UNREACHABLE_MESSAGE, { cause: e })
+  }
+}
+
+// proxy 連不到後端時的狀態碼（Vite 開發伺服器回 502，空 body）。
+// 後端自己回的錯誤會帶 ProblemDetail，那時顯示後端的說明
+const UNREACHABLE_STATUSES = new Set([502, 503])
+
+// signal 取消時丟出 AbortError（DOMException），呼叫端用 isAbortError 辨認，不當成 Run 失敗
+export async function simulate(topology: Topology, signal?: AbortSignal): Promise<SimulationResult> {
+  const { data, error, response } = await client.POST('/api/v1/simulate', { body: topology, signal })
   const { ok, status } = response
   if (!ok || error !== undefined) {
-    throw new Error(problemMessage(error, status))
+    const message = problemMessage(error)
+    if (message == null && UNREACHABLE_STATUSES.has(status)) {
+      throw new Error(UNREACHABLE_MESSAGE)
+    }
+    throw new Error(message ?? `Run 失敗（HTTP ${status}）`)
   }
   // 型別上成功時一定有 data，但 2xx 空 body（例如 204）時 openapi-fetch 會給 undefined
   if (data === undefined) {
@@ -42,8 +62,13 @@ export async function simulate(topology: Topology): Promise<SimulationResult> {
   return data
 }
 
-// 後端錯誤是 Spring 的 ProblemDetail，優先顯示 detail，其次 title
-function problemMessage(error: unknown, status: number): string {
+// 請求被 AbortSignal 取消（fetch 和讀 body 時都是 DOMException，name 為 AbortError）
+export function isAbortError(e: unknown): boolean {
+  return e instanceof DOMException && e.name === 'AbortError'
+}
+
+// 後端錯誤是 Spring 的 ProblemDetail，優先顯示 detail，其次 title；都沒有時回 null
+function problemMessage(error: unknown): string | null {
   if (typeof error === 'object' && error !== null) {
     const detail = 'detail' in error ? error.detail : undefined
     const title = 'title' in error ? error.title : undefined
@@ -53,5 +78,5 @@ function problemMessage(error: unknown, status: number): string {
       }
     }
   }
-  return `Run 失敗（HTTP ${status}）`
+  return null
 }

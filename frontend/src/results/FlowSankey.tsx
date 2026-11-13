@@ -96,7 +96,8 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
         bottom: 16,
         nodeGap: 16,
         emphasis: { focus: 'adjacency' },
-        label: { color: textColor },
+        // 預設標籤是用來對應連線的 id，要明確指定顯示 name
+        label: { color: textColor, formatter: '{b}' },
         lineStyle: { color: 'gradient', opacity: 0.35 },
       },
     ],
