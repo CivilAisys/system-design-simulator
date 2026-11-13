@@ -130,7 +130,7 @@ public record SimulationResponse(
     public record SummaryDto(
             @Schema(requiredMode = REQUIRED) double offeredRps,
             @Schema(requiredMode = REQUIRED, description = "各 Client 完整成功的請求數總和") double successRps,
-            @Schema(requiredMode = REQUIRED, description = "1 − successRps / offeredRps；沒有流量時為 0") double dropRate,
+            @Schema(requiredMode = REQUIRED, description = "1 − successRps / offeredRps，限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0") double dropRate,
             @Schema(requiredMode = REQUIRED) ClassLatenciesDto avgEndToEndMs,
             @Schema(requiredMode = REQUIRED, nullable = true) String bottleneckNodeId) {
 

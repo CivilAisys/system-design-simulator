@@ -36,9 +36,9 @@ export function ResultsPanel({ topology, result, running, theme }: ResultsPanelP
         {computed && (
           <>
             <p className="text-sm tabular-nums">
-              <span className="mr-2 text-muted-foreground">Success</span>
+              <span className="mr-2 text-muted-foreground">成功</span>
               {formatRps(computed.summary.successRps)}
-              <span className="mx-2 text-muted-foreground">Drop rate</span>
+              <span className="mx-2 text-muted-foreground">丟棄率</span>
               <span className={cn(computed.summary.dropRate > 0 && 'text-destructive')}>
                 {formatPercent(computed.summary.dropRate)}
               </span>

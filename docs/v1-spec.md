@@ -225,7 +225,7 @@ Service 有 fan-out 時，下游的 RPS 是「子呼叫」而不是「使用者�
 
 Client 的 `pass` 記為 1。彙總：
 - `successRps = Σ_client Σ_class client 的該 class rps × S(client, class)`
-- `dropRate = 1 − successRps / offeredRps`；`offeredRps = 0` 時沒有東西被丟，記為 0
+- `dropRate = 1 − successRps / offeredRps`，限制在 [0, 1]，浮點誤差造成的極小值（|x| < 1e-9）歸零；`offeredRps = 0` 時沒有東西被丟，記為 0
 
 > **簡化假設**：各節點的丟棄彼此獨立。
 

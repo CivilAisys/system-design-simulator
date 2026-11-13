@@ -12,6 +12,8 @@ import java.util.Map;
  */
 public final class SteadyStateSimulator implements Simulator {
 
+    private static final double RATIO_TOLERANCE = 1e-9;
+
     @Override
     public SimulationResult simulate(Topology topology) {
         var graph = TopologyGraph.of(topology);
@@ -83,8 +85,16 @@ public final class SteadyStateSimulator implements Simulator {
             }
         }
         // 沒有流量時沒有東西被丟
-        double dropRate = offered > 0 ? 1 - succeeded / offered : 0;
+        double dropRate = offered > 0 ? cleanRatio(1 - succeeded / offered) : 0;
         return new Summary(offered, succeeded, dropRate, endToEnd.average(clients), bottleneck);
+    }
+
+    /**
+     * 浮點誤差會讓健康的拓撲有極小的 drop rate（例如 7 條同權重的邊，比例加起來是 0.9999999999999998），
+     * 前端會把它顯示成紅字的 0.0% 或 -0.0%。接近 0 的值歸零，並限制在 [0, 1]。
+     */
+    private static double cleanRatio(double ratio) {
+        return Math.abs(ratio) < RATIO_TOLERANCE ? 0 : Math.clamp(ratio, 0, 1);
     }
 
     private static Map<String, NodeResult> inNodeOrder(Topology topology, Map<String, NodeResult> results) {

@@ -1,6 +1,5 @@
 package simulator.engine;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -13,26 +12,21 @@ final class SuccessRates {
 
     private final TopologyGraph graph;
     private final Map<String, NodeResult> nodeResults;
-    private final Map<String, Double> readSuccess = new HashMap<>();
-    private final Map<String, Double> writeSuccess = new HashMap<>();
+    private final UpstreamPass<Double> success;
 
     /** {@code order} 是拓撲排序，{@code nodeResults} 要已經有所有伺服器類節點的處理量。 */
     SuccessRates(TopologyGraph graph, List<Node> order, Map<String, NodeResult> nodeResults) {
         this.graph = graph;
         this.nodeResults = nodeResults;
-        for (Node node : order.reversed()) {
-            readSuccess.put(node.id(), success(node, true));
-            writeSuccess.put(node.id(), success(node, false));
-        }
+        this.success = new UpstreamPass<>(order, this::success);
     }
 
     /** Client 送出的請求中，每秒有幾個完整成功。 */
     double client(String clientId, ClassRates sent) {
-        return sent.read() * readSuccess.get(clientId) + sent.write() * writeSuccess.get(clientId);
+        return sent.read() * success.get(clientId, true) + sent.write() * success.get(clientId, false);
     }
 
-    private double success(Node node, boolean read) {
-        Map<String, Double> children = read ? readSuccess : writeSuccess;
+    private double success(Node node, boolean read, Map<String, Double> children) {
         List<Edge> edges = graph.outgoing(node.id());
         double downstream = switch (node) {
             // 依比例分流：成功率是各下游的加權平均。沒有下游時請求沒有地方送，不算成功
