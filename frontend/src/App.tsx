@@ -35,10 +35,11 @@ function Simulator() {
   const { topology } = editor
   const { screenToFlowPosition } = useReactFlow()
   const canvasRef = useRef<HTMLElement>(null)
-  const { result, running, error, stale, autoRun, setAutoRun, run } = useSimulation(topology, {
-    // 上一次的瓶頸通知會和這次的結果（驗證錯誤、HTTP 錯誤）互相矛盾
-    onRun: () => toast.dismiss(BOTTLENECK_TOAST),
-    onResult: notifyBottleneck,
+  const bottleneck = useBottleneckToast()
+  const { result, running, error, stale, autoRun, setAutoRun, run } = useSimulation(editor.model, {
+    onResult: bottleneck.notify,
+    // 上一次的瓶頸通知會和 Run 失敗互相矛盾
+    onError: bottleneck.clear,
   })
 
   // 點擊元件面板時放在目前畫面的中央
@@ -118,19 +119,43 @@ function Simulator() {
   )
 }
 
-// 固定 toast id，連續 Run 時替換而不是堆疊
+// 固定 toast id，連續 Run 時原地更新而不是堆疊
 const BOTTLENECK_TOAST = 'bottleneck'
 
 // 只要有伺服器類節點，後端一定會挑 ρ 最高的當瓶頸（第 4.4 節），
-// 所以只在它至少 WARN（ρ ≥ 0.7）時才通知，全部 OK 時不打擾
-function notifyBottleneck(topology: Topology, result: SimulationResult) {
-  const id = result.summary.bottleneckNodeId
-  if (!result.valid || id == null) return
-  const metrics = result.nodes[id]
-  if (!metrics?.status || metrics.status === 'OK') return
-  const name = topology.nodes.find((node) => node.id === id)?.name ?? id
-  toast.warning(`發現瓶頸：${name}`, {
-    id: BOTTLENECK_TOAST,
-    description: `ρ ${formatUtilization(metrics.utilization)}・${metrics.status}`,
-  })
+// 所以只在它至少 WARN（ρ ≥ 0.7）時才通知，全部 OK 時不打擾。
+// Auto-run 每次修改都會重算：同一個瓶頸（節點和狀態都沒變）只原地更新 ρ，
+// 使用者關掉或自動消失後就不再跳出，直到瓶頸換了節點或狀態
+function useBottleneckToast() {
+  const shown = useRef<{ key: string; open: boolean } | null>(null)
+
+  function clear() {
+    shown.current = null
+    toast.dismiss(BOTTLENECK_TOAST)
+  }
+
+  function notify(topology: Topology, result: SimulationResult) {
+    const id = result.summary.bottleneckNodeId
+    const metrics = id == null ? undefined : result.nodes[id]
+    // 驗證錯誤或沒有瓶頸時，上一次的通知會和這次的結果互相矛盾
+    if (!result.valid || id == null || !metrics?.status || metrics.status === 'OK') {
+      clear()
+      return
+    }
+    const key = `${id}:${metrics.status}`
+    if (shown.current?.key === key && !shown.current.open) return
+    shown.current = { key, open: true }
+    const closed = () => {
+      if (shown.current?.key === key) shown.current.open = false
+    }
+    const name = topology.nodes.find((node) => node.id === id)?.name ?? id
+    toast.warning(`發現瓶頸：${name}`, {
+      id: BOTTLENECK_TOAST,
+      description: `ρ ${formatUtilization(metrics.utilization)}・${metrics.status}`,
+      onDismiss: closed,
+      onAutoClose: closed,
+    })
+  }
+
+  return { notify, clear }
 }

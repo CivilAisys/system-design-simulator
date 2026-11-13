@@ -50,7 +50,7 @@ export function ResultsPanel({ topology, result, running, theme }: ResultsPanelP
 }
 
 function EmptyState({ result, running }: { result: SimulationResult | null; running: boolean }) {
-  // Run 時會先清掉舊結果，這段期間不能顯示「按 Run」，看起來像按鈕沒反應
+  // 計算中會保留舊結果；還沒有結果時（第一次 Run 或上次失敗）計算中不能顯示「按 Run」，看起來像按鈕沒反應
   const text = running ? '計算中…' : result ? '拓撲有驗證錯誤，沒有計算結果' : '按 Run 看結果'
   return <p className="p-4 text-sm text-muted-foreground">{text}</p>
 }

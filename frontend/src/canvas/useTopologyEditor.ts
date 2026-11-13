@@ -94,6 +94,15 @@ export function useTopologyEditor(initial: Topology) {
     [],
   )
 
+  // 只看 data（參數、名稱、連線），拖動和選取只換掉 React Flow 節點本身、data 不變，
+  // 所以這份拓撲在拖動時維持同一個參考，Auto-run 不用每一幀都重新比對
+  const nodeModels = useShallowStable(nodes.map((n) => n.data.node))
+  const edgeModels = useShallowStable(edges.map((e) => e.data.edge))
+  const model = useMemo<Topology>(
+    () => ({ version: TOPOLOGY_VERSION, nodes: nodeModels.map(({ ui: _ui, ...node }) => node), edges: edgeModels }),
+    [nodeModels, edgeModels],
+  )
+
   const topology = useMemo<Topology>(
     () => ({
       version: TOPOLOGY_VERSION,
@@ -107,6 +116,7 @@ export function useTopologyEditor(initial: Topology) {
     nodes,
     edges,
     topology,
+    model,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -115,6 +125,16 @@ export function useTopologyEditor(initial: Topology) {
     updateNode,
     updateEdge,
   }
+}
+
+// 元素逐一相同時沿用上一次的陣列（在 render 中更新 state，React 文件的「儲存前一次 render 的資訊」寫法）
+function useShallowStable<T>(items: T[]): T[] {
+  const [stable, setStable] = useState(items)
+  if (stable.length === items.length && stable.every((item, i) => item === items[i])) {
+    return stable
+  }
+  setStable(items)
+  return items
 }
 
 function toFlowNode(node: Node): SimFlowNode {
