@@ -294,7 +294,7 @@ function Simulator() {
   )
 }
 
-type EditActions = { undo: () => void; redo: () => void; copy: () => boolean; paste: () => boolean }
+type EditActions = { undo: () => void; redo: () => void; copy: () => void; paste: () => boolean }
 
 // Ctrl/Cmd+Z 復原、Ctrl/Cmd+Shift+Z 重做、Ctrl/Cmd+C 複製選取的節點、Ctrl/Cmd+V 貼上。
 // 焦點在輸入框時交給輸入框自己的復原和文字的複製貼上
@@ -316,8 +316,8 @@ function useEditShortcuts({ undo, redo, copy, paste }: EditActions) {
         undo()
       }
     } else if (key === 'c' && !event.shiftKey) {
-      // 不攔截：頁面上有選取的文字（例如結果表格）時，瀏覽器照樣複製文字
-      copy()
+      // 不攔截，瀏覽器照樣複製選取的文字。頁面上有選取的文字（例如結果表格）時，使用者要的是文字，不動節點的剪貼簿
+      if (window.getSelection()?.isCollapsed ?? true) copy()
     } else if (key === 'v' && !event.shiftKey && paste()) {
       event.preventDefault()
     }

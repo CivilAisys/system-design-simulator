@@ -4,7 +4,7 @@ import { newEdgeId, newNodeId } from './catalog'
 // 每貼一次多往右下偏移這麼多，連續貼上的複本不會疊在一起
 const PASTE_OFFSET = 40
 
-// 複製下來的節點（ui 是複製當時的位置）和它們之間的邊
+// 一組節點（含 ui 位置）和它們之間的邊：複製下來的內容，或貼上產生的新節點和邊
 export type Clip = { nodes: Node[]; edges: Edge[] }
 
 // 複製選取的節點，連同兩端都被選取的邊；連到沒被選取的節點的邊不複製。沒有選取節點時回傳 null
@@ -16,12 +16,12 @@ export function copyNodes(nodes: readonly Node[], edges: readonly Edge[], select
   return { nodes: copied, edges: edges.filter((e) => selected.has(e.source) && selected.has(e.target)) }
 }
 
-// 第 times 次貼上（從 1 起算）：參數相同，id 沒用過（見 newNode），名稱和現有的節點不同，位置偏移 times 次
-export function pasteClip(clip: Clip, times: number, usedIds: ReadonlySet<string>, usedNames: Iterable<string>): Clip {
+// 同一份複製內容的第 pastes 次貼上（從 1 起算）：參數相同，id 沒用過（見 newNode），名稱和現有的節點不同，位置偏移 pastes 次
+export function pasteClip(clip: Clip, pastes: number, usedIds: ReadonlySet<string>, usedNames: Iterable<string>): Clip {
   const ids = new Set(usedIds)
   const names = new Set(usedNames)
   const newIds = new Map<string, string>()
-  const offset = PASTE_OFFSET * times
+  const offset = PASTE_OFFSET * pastes
   const nodes = clip.nodes.map((node) => {
     const id = newNodeId(node.type, ids)
     ids.add(id)

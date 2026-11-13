@@ -126,7 +126,7 @@ export function useTopologyEditor(initial: Topology) {
     [usedIds],
   )
 
-  // 複製選取的節點（含位置）。回傳是否有節點可以複製
+  // 複製選取的節點（含位置）。沒有選取節點時不動剪貼簿
   const copy = useCallback(() => {
     const { nodes, edges } = latest.current.present
     const clip = copyNodes(
@@ -137,18 +137,17 @@ export function useTopologyEditor(initial: Topology) {
     if (clip) {
       clipboard.current = { clip, pastes: 0 }
     }
-    return clip != null
   }, [])
 
   // 貼上複製的節點，算一步；選取換成貼上的節點。回傳是否有東西可以貼
   const paste = useCallback(() => {
-    const held = clipboard.current
-    if (!held) {
+    const copied = clipboard.current
+    if (!copied) {
       return false
     }
-    held.pastes++
+    copied.pastes++
     const names = latest.current.present.nodes.map((n) => n.data.node.name)
-    const pasted = pasteClip(held.clip, held.pastes, usedIds, names)
+    const pasted = pasteClip(copied.clip, copied.pastes, usedIds, names)
     for (const item of [...pasted.nodes, ...pasted.edges]) {
       usedIds.add(item.id)
     }
