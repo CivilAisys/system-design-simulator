@@ -1,6 +1,6 @@
 import type { Topology } from '@/api/client'
 
-// walking skeleton 用的寫死拓撲，M3 之後改由使用者在畫布上組出
+// 開啟時畫布上的起始拓撲，使用者可以直接修改或刪光重組
 export const initialTopology: Topology = {
   version: 1,
   nodes: [

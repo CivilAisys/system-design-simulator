@@ -1,18 +1,35 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import { Loader2, Moon, Play, Sun } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
-import { simulate, type SimulationResult, type Topology } from '@/api/client'
+import { simulate, type NodeType, type SimulationResult, type Topology } from '@/api/client'
 import { Canvas } from '@/canvas/Canvas'
 import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
+import { Palette } from '@/canvas/Palette'
+import { PropertiesPanel } from '@/canvas/PropertiesPanel'
+import { useTopologyEditor } from '@/canvas/useTopologyEditor'
 import { ResultsPanel } from '@/results/ResultsPanel'
 import { useTheme } from '@/theme'
 
 export default function App() {
+  // 元件面板、屬性面板和畫布共用同一個 React Flow store（座標換算、刪除）
+  return (
+    <ReactFlowProvider>
+      <Simulator />
+    </ReactFlowProvider>
+  )
+}
+
+function Simulator() {
   const { theme, toggleTheme } = useTheme()
-  const [topology] = useState(initialTopology)
+  const editor = useTopologyEditor(initialTopology)
+  const { topology } = editor
+  const { screenToFlowPosition } = useReactFlow()
+  const canvasRef = useRef<HTMLElement>(null)
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,6 +50,15 @@ export default function App() {
     } finally {
       setRunning(false)
     }
+  }
+
+  // 點擊元件面板時放在目前畫面的中央
+  function addAtCenter(type: NodeType) {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) {
+      return
+    }
+    editor.addNode(type, screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }))
   }
 
   const invalid = result && !result.valid ? result.errors : []
@@ -63,9 +89,29 @@ export default function App() {
           {theme === 'dark' ? <Sun /> : <Moon />}
         </Button>
       </header>
-      <main className="min-h-0 flex-1">
-        <Canvas topology={topology} result={result} colorMode={theme} />
-      </main>
+      <SidebarProvider className="min-h-0 flex-1">
+        <Palette onAdd={addAtCenter} />
+        <main ref={canvasRef} className="min-w-0 flex-1">
+          <Canvas
+            nodes={editor.nodes}
+            edges={editor.edges}
+            result={result}
+            colorMode={theme}
+            onNodesChange={editor.onNodesChange}
+            onEdgesChange={editor.onEdgesChange}
+            onConnect={editor.onConnect}
+            isValidConnection={editor.isValidConnection}
+            onAddNode={editor.addNode}
+          />
+        </main>
+        <PropertiesPanel
+          nodes={editor.nodes}
+          edges={editor.edges}
+          nodeResults={result?.nodes}
+          onUpdateNode={editor.updateNode}
+          onUpdateEdge={editor.updateEdge}
+        />
+      </SidebarProvider>
       <section aria-label="結果" className="h-72 shrink-0 border-t">
         <ResultsPanel topology={topology} result={result} running={running} theme={theme} />
       </section>
