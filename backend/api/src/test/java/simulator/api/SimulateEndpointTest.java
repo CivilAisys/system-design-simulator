@@ -42,7 +42,7 @@ class SimulateEndpointTest {
     @Test
     void simulatesBasicWebAppExample() throws Exception {
         // 前端「範例」選單的「基本 Web App」：Client → LB → Service → Cache → Database
-        byte[] example = Files.readAllBytes(Path.of(System.getProperty("example.basic-web-app")));
+        byte[] example = Files.readAllBytes(basicWebAppExample());
         JsonNode body = simulate(example);
 
         assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "nodes", "edges", "summary");
@@ -104,6 +104,16 @@ class SimulateEndpointTest {
             assertThat(average).isEqualTo(own);
         }
         assertThat(summary.get("bottleneckNodeId").asText()).isEqualTo("svc-1");
+    }
+
+    // Gradle 會用系統屬性傳路徑；直接在 IDE 跑 JUnit 時沒有這個屬性，退回相對於 api 模組的路徑
+    private static Path basicWebAppExample() {
+        String configured = System.getProperty("example.basic-web-app");
+        Path path = Path.of(configured != null ? configured : "../../frontend/src/examples/basic-web-app.json");
+        assertThat(path)
+                .as("找不到內建範例檔 %s：用 Gradle 執行，或把工作目錄設成 backend/api", path.toAbsolutePath())
+                .isRegularFile();
+        return path;
     }
 
     private static void assertServer(JsonNode node, double read, double write, double capacity, double utilization) {
