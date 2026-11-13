@@ -27,6 +27,8 @@ import { restoreTopology, saveTopology, type Restored } from '@/io/autosave'
 import { downloadTopology, parseTopology, serializeTopology } from '@/io/topologyFile'
 import { cn } from '@/lib/utils'
 import { ResultsPanel } from '@/results/ResultsPanel'
+import { ResultsResizer } from '@/results/ResultsResizer'
+import { MAX_RESULTS_RATIO, useResultsHeight } from '@/results/resultsHeight'
 import { useSimulation } from '@/simulation/useSimulation'
 import { useTheme } from '@/theme'
 
@@ -54,6 +56,7 @@ function Simulator() {
     onError: bottleneck.clear,
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [resultsHeight, setResultsHeight] = useResultsHeight()
   useEditShortcuts({ undo, redo, copy: editor.copy, paste: editor.paste })
   useAutosave(topology, restored)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
@@ -279,7 +282,14 @@ function Simulator() {
           onUpdateEdge={editor.updateEdge}
         />
       </SidebarProvider>
-      <section aria-label="結果" className={cn('h-72 shrink-0 border-t', stale && 'opacity-60')}>
+      <ResultsResizer panelId="results" height={resultsHeight} onResize={setResultsHeight} />
+      {/* max-height 用比例：視窗縮小時畫布也不會被擠到看不見 */}
+      <section
+        id="results"
+        aria-label="結果"
+        className={cn('shrink-0', stale && 'opacity-60')}
+        style={{ height: resultsHeight, maxHeight: `${MAX_RESULTS_RATIO * 100}vh` }}
+      >
         <ResultsPanel
           topology={topology}
           result={result}
