@@ -19,6 +19,8 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   const [runKey, setRunKey] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 每次 reset 加一，同一份拓撲重新載入時 Auto-run 也要再跑一次
+  const [generation, setGeneration] = useState(0)
   const latestRun = useRef(0)
   const pendingAutoRun = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -61,6 +63,18 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     }
   }
 
+  // 換了一份拓撲（匯入、載入範例）：舊結果的 id 可能和新拓撲重疊，不能留著疊到畫布上；
+  // 計算中的 Run 也不屬於新拓撲，回來時直接丟棄
+  function reset() {
+    cancelPendingAutoRun()
+    latestRun.current++
+    setResult(null)
+    setRunKey(null)
+    setRunning(false)
+    setError(null)
+    setGeneration((g) => g + 1)
+  }
+
   // 已經送出過同一份拓撲（例如重新打開 Auto-run、或改名稱後又改回來）就不再送
   const autoRunIfChanged = useEffectEvent(() => {
     pendingAutoRun.current = null
@@ -71,12 +85,12 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     if (!autoRun) return
     pendingAutoRun.current = setTimeout(autoRunIfChanged, AUTO_RUN_DEBOUNCE_MS)
     return cancelPendingAutoRun
-  }, [key, autoRun])
+  }, [key, autoRun, generation])
 
   // Auto-run 開啟時，修改後的結果很快會被取代，不標示過期；手動 Run 計算中也不標示
   const stale = !autoRun && result != null && runKey !== key
 
-  return { result, running, error, stale, autoRun, setAutoRun, run }
+  return { result, running, error, stale, autoRun, setAutoRun, run, reset }
 }
 
 // 名稱和 ui 欄位不影響計算（spec 第 6 節），改了不重算、也不算過期

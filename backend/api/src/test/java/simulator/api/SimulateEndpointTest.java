@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -38,23 +40,24 @@ class SimulateEndpointTest {
     private ObjectMapper mapper;
 
     @Test
-    void simulatesStraightTopology() throws Exception {
-        JsonNode body = simulate("/straight-topology.json");
+    void simulatesBasicWebAppExample() throws Exception {
+        // 前端「範例」選單的「基本 Web App」：Client → LB → Service → Cache → Database
+        byte[] example = Files.readAllBytes(basicWebAppExample());
+        JsonNode body = simulate(example);
 
         assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "nodes", "edges", "summary");
         assertThat(body.get("valid").asBoolean()).isTrue();
         assertThat(body.get("errors")).isEmpty();
 
         JsonNode nodes = body.get("nodes");
-        assertThat(fieldNames(nodes)).containsExactly("client-1", "svc-1", "db-1");
+        assertThat(fieldNames(nodes)).containsExactly("client-1", "lb-1", "svc-1", "cache-1", "db-1");
         for (JsonNode node : nodes) {
             assertThat(fieldNames(node)).containsExactlyInAnyOrderElementsOf(NODE_FIELDS);
             assertThat(fieldNames(node.get("arrivalRps"))).containsExactlyInAnyOrder("read", "write");
         }
 
         JsonNode client = nodes.get("client-1");
-        assertThat(client.at("/arrivalRps/read").asDouble()).isCloseTo(900, within(1e-6));
-        assertThat(client.at("/arrivalRps/write").asDouble()).isCloseTo(100, within(1e-6));
+        assertRates(client.get("arrivalRps"), 900, 100);
         assertThat(client.get("throughputRps").asDouble()).isEqualTo(1000);
         assertThat(client.get("droppedRps").asDouble()).isZero();
         assertThat(client.get("successRps").asDouble()).isEqualTo(1000);
@@ -63,23 +66,29 @@ class SimulateEndpointTest {
         }
         // 數值由 engine 的 EndToEndLatencyTest 驗算，這裡只確認 JSON 形狀
         assertThat(fieldNames(client.get("endToEndMs"))).containsExactlyInAnyOrder("read", "write");
-        assertThat(fieldNames(client.at("/endToEndMs/read")))
-                .containsExactlyInAnyOrder("ms", "approximate", "overloadedNodeIds", "undefinedReason");
-        assertThat(client.at("/endToEndMs/read/ms").isNumber()).isTrue();
-        assertThat(client.at("/endToEndMs/write/ms").isNumber()).isTrue();
-        assertThat(client.at("/endToEndMs/read/undefinedReason").isNull()).isTrue();
+        for (String requestClass : List.of("read", "write")) {
+            JsonNode latency = client.at("/endToEndMs/" + requestClass);
+            assertThat(fieldNames(latency))
+                    .containsExactlyInAnyOrder("ms", "approximate", "overloadedNodeIds", "undefinedReason");
+            assertThat(latency.get("ms").isNumber()).isTrue();
+            assertThat(latency.get("approximate").asBoolean()).isFalse();
+            assertThat(latency.get("overloadedNodeIds")).isEmpty();
+            assertThat(latency.get("undefinedReason").isNull()).isTrue();
+        }
 
-        JsonNode svc = nodes.get("svc-1");
-        assertThat(svc.get("capacityRps").asDouble()).isEqualTo(8000);
-        assertThat(svc.get("utilization").asDouble()).isCloseTo(0.125, within(1e-9));
-        assertThat(svc.get("avgLatencyMs").asDouble()).isCloseTo(50, within(1e-6));
-        assertThat(svc.get("status").asText()).isEqualTo("OK");
-        assertThat(svc.get("endToEndMs").isNull()).isTrue();
-        assertThat(svc.get("successRps").isNull()).isTrue();
+        // 容量 = instances × concurrency / serviceTimeMs；Cache 只把 read miss（20%）和 write 往下送
+        assertServer(nodes.get("lb-1"), 900, 100, 1_000_000, 0.001);
+        assertServer(nodes.get("svc-1"), 900, 100, 8_000, 0.125);
+        assertServer(nodes.get("cache-1"), 900, 100, 100_000, 0.01);
+        assertServer(nodes.get("db-1"), 180, 100, 10_000, 0.028);
+        assertThat(nodes.at("/svc-1/avgLatencyMs").asDouble()).isCloseTo(50, within(1e-6));
 
-        JsonNode e1 = body.at("/edges/e1/rps");
-        assertThat(e1.get("read").asDouble()).isCloseTo(900, within(1e-6));
-        assertThat(e1.get("write").asDouble()).isCloseTo(100, within(1e-6));
+        JsonNode edges = body.get("edges");
+        assertThat(fieldNames(edges)).containsExactly("e1", "e2", "e3", "e4");
+        for (String id : List.of("e1", "e2", "e3")) {
+            assertRates(edges.at("/" + id + "/rps"), 900, 100);
+        }
+        assertRates(edges.at("/e4/rps"), 180, 100);
 
         JsonNode summary = body.get("summary");
         assertThat(fieldNames(summary)).containsExactlyInAnyOrder("offeredRps", "successRps", "dropRate",
@@ -87,9 +96,43 @@ class SimulateEndpointTest {
         assertThat(summary.get("offeredRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("successRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("dropRate").asDouble()).isZero();
-        // 只有一個 Client 時等於該 Client 的延遲
-        assertThat(summary.get("avgEndToEndMs")).isEqualTo(client.get("endToEndMs"));
+        // 只有一個 Client 時等於該 Client 的延遲（加權平均會有浮點誤差，ms 用容差比對）
+        for (String requestClass : List.of("read", "write")) {
+            ObjectNode average = summary.at("/avgEndToEndMs/" + requestClass).deepCopy();
+            ObjectNode own = client.at("/endToEndMs/" + requestClass).deepCopy();
+            assertThat(average.remove("ms").asDouble()).isCloseTo(own.remove("ms").asDouble(), within(1e-9));
+            assertThat(average).isEqualTo(own);
+        }
         assertThat(summary.get("bottleneckNodeId").asText()).isEqualTo("svc-1");
+    }
+
+    // Gradle 會用系統屬性傳路徑；直接在 IDE 跑 JUnit 時沒有這個屬性，退回相對於 api 模組的路徑
+    private static Path basicWebAppExample() {
+        String configured = System.getProperty("example.basic-web-app");
+        Path path = Path.of(configured != null ? configured : "../../frontend/src/examples/basic-web-app.json");
+        assertThat(path)
+                .as("找不到內建範例檔 %s：用 Gradle 執行，或把工作目錄設成 backend/api", path.toAbsolutePath())
+                .isRegularFile();
+        return path;
+    }
+
+    private static void assertServer(JsonNode node, double read, double write, double capacity, double utilization) {
+        assertRates(node.get("arrivalRps"), read, write);
+        assertThat(node.get("throughputRps").asDouble()).isCloseTo(read + write, within(1e-6));
+        assertThat(node.get("droppedRps").asDouble()).isZero();
+        assertThat(node.get("capacityRps").asDouble()).isCloseTo(capacity, within(1e-6));
+        assertThat(node.get("utilization").asDouble()).isCloseTo(utilization, within(1e-9));
+        assertThat(node.get("avgQueueMs").isNumber()).isTrue();
+        assertThat(node.get("avgLatencyMs").isNumber()).isTrue();
+        assertThat(node.get("status").asText()).isEqualTo("OK");
+        // 只有 Client 才有
+        assertThat(node.get("successRps").isNull()).isTrue();
+        assertThat(node.get("endToEndMs").isNull()).isTrue();
+    }
+
+    private static void assertRates(JsonNode rates, double read, double write) {
+        assertThat(rates.get("read").asDouble()).isCloseTo(read, within(1e-6));
+        assertThat(rates.get("write").asDouble()).isCloseTo(write, within(1e-6));
     }
 
     @Test
@@ -235,11 +278,7 @@ class SimulateEndpointTest {
                 .content(mapper.writeValueAsString(topology)));
     }
 
-    private JsonNode simulate(String resource) throws Exception {
-        byte[] topology;
-        try (InputStream in = getClass().getResourceAsStream(resource)) {
-            topology = in.readAllBytes();
-        }
+    private JsonNode simulate(byte[] topology) throws Exception {
         String body = mvc.perform(post("/api/v1/simulate").contentType(MediaType.APPLICATION_JSON).content(topology))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
