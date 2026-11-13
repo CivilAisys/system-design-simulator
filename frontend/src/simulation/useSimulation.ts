@@ -17,6 +17,8 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   const [result, setResult] = useState<SimulationResult | null>(null)
   // 最新一次送出的 Run 是哪個拓撲（含計算中），用來判斷過期和要不要再送；失敗時清掉，之後可以重試
   const [runKey, setRunKey] = useState<string | null>(null)
+  // 最新一次送出的 Run 當時的節點名稱。驗證錯誤的訊息由後端用當時的名稱組成，有錯誤時改名也要重新檢查
+  const [runNames, setRunNames] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 每次 reset 加一，同一份拓撲重新載入時 Auto-run 也要再跑一次
@@ -25,6 +27,9 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   const pendingAutoRun = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const key = useMemo(() => simulationKey(topology), [topology])
+  const names = useMemo(() => nameKey(topology), [topology])
+  // 名稱不影響計算，只有結果裡有驗證錯誤（訊息帶著名稱）時改名才需要重新 Run
+  const outdated = runKey !== key || (result?.valid === false && runNames !== names)
 
   async function run() {
     // 手動 Run 取代還在倒數的 Auto-run，同一份拓撲不送兩次
@@ -32,6 +37,7 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     const id = ++latestRun.current
     const target = topology
     setRunKey(key)
+    setRunNames(names)
     setRunning(true)
     setError(null)
     // 計算中保留舊結果，Auto-run 時畫布才不會每次修改都閃一下
@@ -78,22 +84,27 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   // 已經送出過同一份拓撲（例如重新打開 Auto-run、或改名稱後又改回來）就不再送
   const autoRunIfChanged = useEffectEvent(() => {
     pendingAutoRun.current = null
-    if (runKey !== key) run()
+    if (outdated) run()
   })
 
+  // 依賴 outdated：計算中改了名稱，回來的結果才發現有驗證錯誤時，也要再跑一次
   useEffect(() => {
     if (!autoRun) return
     pendingAutoRun.current = setTimeout(autoRunIfChanged, AUTO_RUN_DEBOUNCE_MS)
     return cancelPendingAutoRun
-  }, [key, autoRun, generation])
+  }, [key, names, outdated, autoRun, generation])
 
   // Auto-run 開啟時，修改後的結果很快會被取代，不標示過期；手動 Run 計算中也不標示
-  const stale = !autoRun && result != null && runKey !== key
+  const stale = !autoRun && result != null && outdated
 
   return { result, running, error, stale, autoRun, setAutoRun, run, reset }
 }
 
-// 名稱和 ui 欄位不影響計算（spec 第 6 節），改了不重算、也不算過期
+// 名稱和 ui 欄位不影響計算（spec 第 6 節），改了不重算、也不算過期（有驗證錯誤時的名稱見 nameKey）
 function simulationKey(topology: Topology): string {
   return JSON.stringify({ ...topology, nodes: topology.nodes.map(({ ui: _ui, name: _name, ...node }) => node) })
+}
+
+function nameKey(topology: Topology): string {
+  return JSON.stringify(topology.nodes.map(({ id, name }) => [id, name]))
 }
