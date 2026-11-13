@@ -34,7 +34,7 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
 }
 
 export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {
-  // 權重總和為 0 時無法分流，所以要 > 0
+  // weight 為 0 的下游收不到流量，等於沒有接（spec 4.5），所以要 > 0
   weight: { label: 'weight', min: 0, minExclusive: true, slider: { min: 0.1, max: 10, scale: 'linear', step: 0.1 } },
   callsPerRequest: {
     label: 'callsPerRequest',

@@ -14,6 +14,7 @@ import type { NodeType, SimulationResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
+import { groupErrors, type ElementErrors } from './validation'
 
 const nodeTypes = { sim: SimNode }
 const edgeTypes = { rps: RpsEdge }
@@ -25,6 +26,8 @@ type CanvasProps = {
   nodes: SimFlowNode[]
   edges: RpsFlowEdge[]
   result: SimulationResult | null
+  // 拓撲在上次 Run 之後改過
+  stale: boolean
   colorMode: ColorMode
   onNodesChange: (changes: NodeChange<SimFlowNode>[]) => void
   onEdgesChange: (changes: EdgeChange<RpsFlowEdge>[]) => void
@@ -37,6 +40,7 @@ export function Canvas({
   nodes,
   edges,
   result,
+  stale,
   colorMode,
   onNodesChange,
   onEdgesChange,
@@ -46,14 +50,23 @@ export function Canvas({
 }: CanvasProps) {
   const { screenToFlowPosition } = useReactFlow()
 
-  // 結果只在畫的時候疊上去，不寫進編輯狀態
+  // 結果和驗證錯誤只在畫的時候疊上去，不寫進編輯狀態
+  const errors = useMemo(() => groupErrors(result?.errors ?? []), [result])
   const shownNodes = useMemo<SimFlowNode[]>(
-    () => nodes.map((n) => ({ ...n, data: { ...n.data, result: result?.nodes[n.id] } })),
-    [nodes, result],
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        data: { ...n.data, result: result?.nodes[n.id], errors: withStale(errors.nodes.get(n.id), stale) },
+      })),
+    [nodes, result, errors, stale],
   )
   const shownEdges = useMemo<RpsFlowEdge[]>(
-    () => edges.map((e) => ({ ...e, data: { ...e.data, result: result?.edges[e.id] } })),
-    [edges, result],
+    () =>
+      edges.map((e) => ({
+        ...e,
+        data: { ...e.data, result: result?.edges[e.id], errors: withStale(errors.edges.get(e.id), stale) },
+      })),
+    [edges, result, errors, stale],
   )
 
   function onDragOver(event: DragEvent) {
@@ -93,4 +106,8 @@ export function Canvas({
       <Controls />
     </ReactFlow>
   )
+}
+
+function withStale(messages: string[] | undefined, stale: boolean): ElementErrors | undefined {
+  return messages && { messages, stale }
 }

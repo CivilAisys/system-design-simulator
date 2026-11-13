@@ -229,7 +229,7 @@
           },
           "undefinedReason" : {
             "type" : [ "string", "null" ],
-            "enum" : [ "OVERLOADED", "NO_DOWNSTREAM", "NO_TRAFFIC" ]
+            "enum" : [ "OVERLOADED", "NO_TRAFFIC" ]
           }
         },
         "required" : [ "approximate", "ms", "overloadedNodeIds", "undefinedReason" ]
@@ -309,7 +309,12 @@
             }
           },
           "summary" : {
-            "$ref" : "#/components/schemas/Summary"
+            "description" : "驗證失敗時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/Summary"
+            }, {
+              "type" : "null"
+            } ]
           }
         },
         "required" : [ "edges", "errors", "nodes", "summary", "valid" ]

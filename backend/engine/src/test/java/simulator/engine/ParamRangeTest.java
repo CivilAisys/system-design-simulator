@@ -1,8 +1,7 @@
 package simulator.engine;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
@@ -12,7 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** 參數範圍（spec 3.2、4.5）：不合法時 simulate() 丟 IllegalArgumentException。 */
+/** 參數範圍（spec 3.2、4.5）：不合法時回傳 INVALID_PARAM，附上有問題的節點或邊。 */
 class ParamRangeTest {
 
     private static final CapacityParams CAPACITY = new CapacityParams(1, 100, 10);
@@ -25,6 +24,16 @@ class ParamRangeTest {
                         new ServiceNode("s", "API", NodeHealth.HEALTHY, serviceCapacity, CallMode.SEQUENTIAL),
                         new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
                 List.of(clientEdge, serviceEdge)));
+    }
+
+    /** 只有一個 INVALID_PARAM 錯誤，指向 {@code nodeId} 或 {@code edgeId}，訊息包含 {@code messagePart}。 */
+    private static void assertInvalidParam(SimulationResult result, String nodeId, String edgeId,
+            String messagePart) {
+        assertThat(result.valid()).isFalse();
+        assertThat(result.errors())
+                .extracting(ValidationError::code, ValidationError::nodeId, ValidationError::edgeId)
+                .containsExactly(tuple("INVALID_PARAM", nodeId, edgeId));
+        assertThat(result.errors().getFirst().message()).contains(messagePart);
     }
 
     private static ClientNode client(double rps, double readRatio) {
@@ -53,79 +62,73 @@ class ParamRangeTest {
     @ParameterizedTest
     @MethodSource("invalidClients")
     void invalidClientParamsAreRejected(ClientNode client) {
-        assertThatThrownBy(() -> run(client, CAPACITY, clientEdge(1, 1, 1), serviceEdge(1, 1, 1)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("c");
+        assertInvalidParam(run(client, CAPACITY, clientEdge(1, 1, 1),
+                serviceEdge(1, 1, 1)), "c", null, "「Users」");
     }
 
     @ParameterizedTest
     @MethodSource("invalidCapacityParams")
     void invalidCapacityParamsAreRejected(CapacityParams params) {
-        assertThatThrownBy(() -> run(client(100, 0.9), params,clientEdge(1, 1, 1), serviceEdge(1, 1, 1)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("s");
+        assertInvalidParam(run(client(100, 0.9),
+                params, clientEdge(1, 1, 1), serviceEdge(1, 1, 1)), "s", null, "「API」");
     }
 
     @Test
     void negativeClientEdgeWeightIsRejected() {
-        assertThatThrownBy(() -> run(client(100, 0.9), CAPACITY, clientEdge(-1, 1, 1), serviceEdge(1, 1, 1)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("e1");
+        assertInvalidParam(run(client(100, 0.9),
+                CAPACITY, clientEdge(-1, 1, 1), serviceEdge(1, 1, 1)), null, "e1", "weight");
     }
 
     @Test
     void invalidLoadBalancerParamsAreRejected() {
-        assertThatThrownBy(() -> simulator.simulate(new Topology(
+        SimulationResult result = simulator.simulate(new Topology(
                 List.of(client(100, 0.9),
                         new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, new CapacityParams(0, 100, 10)),
                         new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
-                List.of(new Edge("e1", "c", "lb", 1, 1, 1), new Edge("e2", "lb", "db", 1, 1, 1)))))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("lb");
+                List.of(new Edge("e1", "c", "lb", 1, 1, 1), new Edge("e2", "lb", "db", 1, 1, 1))));
+
+        assertInvalidParam(result, "lb", null, "instances");
     }
 
     @Test
     void negativeLoadBalancerEdgeWeightIsRejected() {
-        assertThatThrownBy(() -> simulator.simulate(new Topology(
+        SimulationResult result = simulator.simulate(new Topology(
                 List.of(client(100, 0.9),
                         new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, CAPACITY),
                         new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
-                List.of(new Edge("e1", "c", "lb", 1, 1, 1), new Edge("e2", "lb", "db", -1, 1, 1)))))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("e2");
+                List.of(new Edge("e1", "c", "lb", 1, 1, 1), new Edge("e2", "lb", "db", -1, 1, 1))));
+
+        assertInvalidParam(result, null, "e2", "weight");
     }
 
     @ParameterizedTest
     @ValueSource(doubles = {-0.1, 1.1, Double.NaN})
     void invalidCacheHitRatioIsRejected(double hitRatio) {
-        assertThatThrownBy(() -> simulator.simulate(new Topology(
+        SimulationResult result = simulator.simulate(new Topology(
                 List.of(client(100, 0.9),
                         new CacheNode("cache", "Redis", NodeHealth.HEALTHY, CAPACITY, hitRatio),
                         new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
-                List.of(new Edge("e1", "c", "cache", 1, 1, 1), new Edge("e2", "cache", "db", 1, 1, 1)))))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("hitRatio");
+                List.of(new Edge("e1", "c", "cache", 1, 1, 1), new Edge("e2", "cache", "db", 1, 1, 1))));
+
+        assertInvalidParam(result, "cache", null, "hitRatio");
     }
 
     @Test
     void serviceEdgeWithLessThanOneCallIsRejected() {
-        assertThatThrownBy(() -> run(client(100, 0.9), CAPACITY, clientEdge(1, 1, 1), serviceEdge(1, 0, 1)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("e2");
+        assertInvalidParam(run(client(100, 0.9),
+                CAPACITY, clientEdge(1, 1, 1), serviceEdge(1, 0, 1)), null, "e2", "callsPerRequest");
     }
 
     @Test
     void negativeLatencyIsRejected() {
-        assertThatThrownBy(() -> run(client(100, 0.9), CAPACITY, clientEdge(1, 1, 1), serviceEdge(1, 1, -1)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("e2");
+        assertInvalidParam(run(client(100, 0.9),
+                CAPACITY, clientEdge(1, 1, 1), serviceEdge(1, 1, -1)), null, "e2", "latencyMs");
     }
 
     @Test
     void fieldsThatDoNotApplyToTheSourceAreIgnored() {
         // weight 只用在 Client／LB 的邊，callsPerRequest 只用在 Service 的邊
-        assertThatCode(() -> run(client(100, 0.9), CAPACITY, clientEdge(1, 0, 1), serviceEdge(-1, 1, 1)))
-                .doesNotThrowAnyException();
+        assertThat(run(client(100, 0.9), CAPACITY, clientEdge(1, 0, 1), serviceEdge(-1, 1, 1)).valid()).isTrue();
     }
 
     @Test

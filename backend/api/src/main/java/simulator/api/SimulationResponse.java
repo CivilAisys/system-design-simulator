@@ -28,7 +28,8 @@ public record SimulationResponse(
         @Schema(requiredMode = REQUIRED) List<ValidationErrorDto> errors,
         @Schema(requiredMode = REQUIRED) Map<String, NodeResultDto> nodes,
         @Schema(requiredMode = REQUIRED) Map<String, EdgeResultDto> edges,
-        @Schema(requiredMode = REQUIRED) SummaryDto summary) {
+        @Schema(requiredMode = REQUIRED, nullable = true, description = "驗證失敗時為 null")
+        SummaryDto summary) {
 
     static SimulationResponse from(SimulationResult result) {
         return new SimulationResponse(
@@ -36,7 +37,7 @@ public record SimulationResponse(
                 result.errors().stream().map(ValidationErrorDto::from).toList(),
                 mapValues(result.nodes(), NodeResultDto::from),
                 mapValues(result.edges(), EdgeResultDto::from),
-                SummaryDto.from(result.summary()));
+                result.summary() == null ? null : SummaryDto.from(result.summary()));
     }
 
     private static <A, B> Map<String, B> mapValues(Map<String, A> source, Function<A, B> mapper) {

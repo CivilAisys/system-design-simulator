@@ -184,17 +184,16 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 
 Client 本身沒有 W（記為 0）。
 
-**「路徑」只算這個 class 實際會走到的下游**：一個請求平均往某條邊送的次數（Client／LB 的 `weight_i / Σweight`、Service 的 `callsPerRequest`、Cache read 的 `1 − hitRatio`）為 0 時，那個下游不在這個 class 的路徑上，公式裡也略過它（避免 `0 × null`）。例如 `hitRatio = 1` 時 read 不會到 DB，DB 被 write 壓到過載只讓 write 變成 `null`。
+**「路徑」只算這個 class 實際會走到的下游**：一個請求平均往某條邊送的次數為 0 時（目前只有 Cache read 的 `1 − hitRatio`，weight 和 `callsPerRequest` 都不能為 0），那個下游不在這個 class 的路徑上，公式裡也略過它（避免 `0 × null`）。例如 `hitRatio = 1` 時 read 不會到 DB，DB 被 write 壓到過載只讓 write 變成 `null`。
 
 端到端延遲在下列情況記為 `null`，回應的 `undefinedReason` 說明原因：
 
 | `undefinedReason` | 情況 |
 |---|---|
 | `OVERLOADED` | 路徑上有節點過載，系統不在穩態。`overloadedNodeIds` 列出這些節點 |
-| `NO_DOWNSTREAM` | 路徑上有 Client 或 LB 沒有下游，請求沒有地方送（驗證規則 `NO_DOWNSTREAM` 會把這種拓撲擋下，這裡是驗證前的保底，不能算成 0 ms 拉低平均） |
 | `NO_TRAFFIC` | 沒有這個 class 的請求，沒有平均可言 |
 
-同時有過載和沒有下游時記為 `OVERLOADED`。前端要在 `null` 旁邊顯示原因（例如「DB 過載，穩態延遲無定義」），並搭配 `successRps`（4.3.1）讓使用者看到還有多少請求成功。原因和過載節點由後端判斷，前端只負責顯示。
+Client 或 LB 沒有下游時請求沒有地方送，這種拓撲會被驗證規則 `NO_DOWNSTREAM`（4.5）擋下，不會進到計算。前端要在 `null` 旁邊顯示原因（例如「DB 過載，穩態延遲無定義」），並搭配 `successRps`（4.3.1）讓使用者看到還有多少請求成功。原因和過載節點由後端判斷，前端只負責顯示。
 
 **多個 Client**：每個 Client 各自的端到端延遲 `L(client, class)` 放在回應 `nodes` 中該 Client 的 `endToEndMs`。`summary.avgEndToEndMs` 用各 Client 該 class 的請求數加權平均：
 
@@ -254,7 +253,17 @@ Client 的 `pass` 記為 1。彙總：
 | 同一對 source → target 只能有一條邊 | `DUPLICATE_EDGE` |
 | 參數範圍（rps ≥ 0、0 ≤ ratio ≤ 1、instances ≥ 1、serviceTimeMs > 0…） | `INVALID_PARAM` |
 
-每個錯誤要附上 `nodeId` 或 `edgeId`，前端用來把有問題的節點標出來。
+每個錯誤要附上 `nodeId` 或 `edgeId`，前端用來把有問題的節點標出來：
+
+- `NO_CLIENT` 兩個都是 `null`（沒有可以指的節點）。
+- `CYCLE_DETECTED` 在環上的每個節點各一個錯誤；環下游、夾在兩個環中間的節點不算。
+- `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`NO_DOWNSTREAM` 附 `nodeId`。
+- `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則，但仍算在另一端的上下游數量裡（畫布上看得到這條邊，不重複報錯）。
+- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。每條都合法但總和溢位成無限大時無法計算比例，附該節點的 `nodeId`。
+
+錯誤依 `NO_CLIENT`、各節點、各邊排列，節點和邊依輸入順序。`message` 是給使用者看的中文說明，用節點名稱指稱節點。
+
+節點或邊的 `id` 重複、缺少必填欄位是**格式錯誤**，錯誤沒辦法指到哪一個節點，回 HTTP 400。
 
 ### 4.6 驗算用的測試案例
 
@@ -348,7 +357,7 @@ Client 的 `pass` 記為 1。彙總：
 }
 ```
 
-驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
+驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單，不做任何計算：`nodes`、`edges` 為 `{}`，`summary` 為 `null`。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
 
 **Client 節點**：`arrivalRps` 是它送出的流量；`successRps` 和 `endToEndMs` 只有 Client 才有，代表這個 Client 的請求有多少成功、平均要等多久。其餘描述伺服器的欄位（容量、使用率、排隊、延遲、狀態）都是 `null`；非 Client 節點的 `endToEndMs` 也是 `null`。
 

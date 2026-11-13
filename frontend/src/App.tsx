@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
 import { Switch } from '@/components/ui/switch'
-import { type NodeType, type SimulationResult, type Topology } from '@/api/client'
+import { isComputed, type NodeType, type SimulationResult, type Topology, type ValidationError } from '@/api/client'
 import { Canvas } from '@/canvas/Canvas'
 import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
@@ -33,7 +33,7 @@ function Simulator() {
   const { theme, toggleTheme } = useTheme()
   const editor = useTopologyEditor(initialTopology)
   const { topology } = editor
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView } = useReactFlow()
   const canvasRef = useRef<HTMLElement>(null)
   const bottleneck = useBottleneckToast()
   const { result, running, error, stale, autoRun, setAutoRun, run } = useSimulation(editor.model, {
@@ -51,9 +51,28 @@ function Simulator() {
     editor.addNode(type, screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }))
   }
 
-  const invalid = result && !result.valid ? result.errors : []
-  const message =
-    error ?? (invalid.length > 0 ? `驗證錯誤：${invalid.map((e) => e.message).join('；')}` : null)
+  // 錯誤指到的節點：節點錯誤是它本身，邊錯誤是邊的兩端。
+  // 結果可能比畫布舊（Auto-run 還在 debounce），已經刪掉的節點或邊回傳空陣列
+  function errorNodeIds({ nodeId, edgeId }: ValidationError): string[] {
+    if (nodeId != null) {
+      return editor.nodes.some((n) => n.id === nodeId) ? [nodeId] : []
+    }
+    const edge = editor.edges.find((e) => e.id === edgeId)
+    return edge ? [edge.source, edge.target] : []
+  }
+
+  // 選取有問題的節點或邊（屬性面板切到它），並把它移到畫面中央
+  function focusError(error: ValidationError) {
+    const ids = errorNodeIds(error)
+    if (ids.length === 0) {
+      return
+    }
+    editor.select({ nodeId: error.nodeId, edgeId: error.nodeId == null ? error.edgeId : null })
+    void fitView({ nodes: ids.map((id) => ({ id })), duration: 300, maxZoom: 1.5 })
+  }
+
+  const invalidCount = result && !result.valid ? result.errors.length : 0
+  const message = error ?? (invalidCount > 0 ? `拓撲有 ${invalidCount} 個驗證錯誤，見「錯誤」分頁` : null)
 
   return (
     <div className="flex h-screen flex-col">
@@ -95,6 +114,7 @@ function Simulator() {
             nodes={editor.nodes}
             edges={editor.edges}
             result={result}
+            stale={stale}
             colorMode={theme}
             onNodesChange={editor.onNodesChange}
             onEdgesChange={editor.onEdgesChange}
@@ -112,7 +132,14 @@ function Simulator() {
         />
       </SidebarProvider>
       <section aria-label="結果" className={cn('h-72 shrink-0 border-t', stale && 'opacity-60')}>
-        <ResultsPanel topology={topology} result={result} running={running} theme={theme} />
+        <ResultsPanel
+          topology={topology}
+          result={result}
+          running={running}
+          theme={theme}
+          canFocusError={(e) => errorNodeIds(e).length > 0}
+          onFocusError={focusError}
+        />
       </section>
       <Toaster theme={theme} position="top-right" />
     </div>
@@ -135,10 +162,10 @@ function useBottleneckToast() {
   }
 
   function notify(topology: Topology, result: SimulationResult) {
-    const id = result.summary.bottleneckNodeId
+    const id = isComputed(result) ? result.summary.bottleneckNodeId : null
     const metrics = id == null ? undefined : result.nodes[id]
     // 驗證錯誤或沒有瓶頸時，上一次的通知會和這次的結果互相矛盾
-    if (!result.valid || id == null || !metrics?.status || metrics.status === 'OK') {
+    if (id == null || !metrics?.status || metrics.status === 'OK') {
       clear()
       return
     }

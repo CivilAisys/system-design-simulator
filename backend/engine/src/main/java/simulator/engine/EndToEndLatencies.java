@@ -8,12 +8,12 @@ import java.util.Set;
 
 /**
  * spec 4.3 的端到端延遲：由下游往上游算每個節點的 L(n, class)，再依請求數加權成 summary。
- * 一個 class 不會走到的下游（weight 0、read 全部命中）不算在路徑上，它過載也不影響這個 class。
+ * 一個 class 不會走到的下游（例如 hitRatio = 1 時 read 不會往下送）不算在路徑上，它過載也不影響這個 class。
  */
 final class EndToEndLatencies {
 
-    /** 計算中的 L(n, class)。{@code ms} 為 null 時，overloaded 不為空或 dangling 為 true。 */
-    private record Path(Double ms, boolean approximate, Set<String> overloaded, boolean dangling) {
+    /** 計算中的 L(n, class)。{@code ms} 為 null 時，overloaded 不為空。 */
+    private record Path(Double ms, boolean approximate, Set<String> overloaded) {
     }
 
     private final Topology topology;
@@ -82,7 +82,6 @@ final class EndToEndLatencies {
             }
         }
         List<Edge> edges = graph.outgoing(node.id());
-        boolean dangling = edges.isEmpty() && (node instanceof ClientNode || node instanceof LoadBalancerNode);
         boolean parallel = node instanceof ServiceNode service && service.callMode() == CallMode.PARALLEL;
         boolean approximate = false;
         int called = 0;
@@ -95,7 +94,6 @@ final class EndToEndLatencies {
             called++;
             Path child = children.get(edge.target());
             overloaded.addAll(child.overloaded());
-            dangling |= child.dangling();
             if (child.ms() == null) {
                 continue;
             }
@@ -103,22 +101,19 @@ final class EndToEndLatencies {
             double cost = visits * (edge.latencyMs() * 2 + child.ms());
             downstream = parallel ? Math.max(downstream, cost) : downstream + cost;
         }
-        if (!overloaded.isEmpty() || dangling) {
-            return new Path(null, false, overloaded, dangling);
+        if (!overloaded.isEmpty()) {
+            return new Path(null, false, overloaded);
         }
         // 只呼叫一個下游時，最大值就是它本身，不是近似
-        return new Path(own + downstream, approximate || (parallel && called > 1), Set.of(), false);
+        return new Path(own + downstream, approximate || (parallel && called > 1), Set.of());
     }
 
     private EndToEndLatency latency(Path path) {
         return path.ms() != null ? EndToEndLatency.of(path.ms(), path.approximate()) : undefined(path.overloaded());
     }
 
-    /** 過載優先：沒有過載節點時才是沒有下游。 */
     private EndToEndLatency undefined(Set<String> overloaded) {
-        return overloaded.isEmpty()
-                ? EndToEndLatency.undefined(UndefinedReason.NO_DOWNSTREAM, List.of())
-                : EndToEndLatency.undefined(UndefinedReason.OVERLOADED, inInputOrder(overloaded));
+        return EndToEndLatency.undefined(UndefinedReason.OVERLOADED, inInputOrder(overloaded));
     }
 
     private static EndToEndLatency noTraffic() {

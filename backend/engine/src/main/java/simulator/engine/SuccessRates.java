@@ -29,7 +29,7 @@ final class SuccessRates {
     private double success(Node node, boolean read, Map<String, Double> children) {
         List<Edge> edges = graph.outgoing(node.id());
         double downstream = switch (node) {
-            // 依比例分流：成功率是各下游的加權平均。沒有下游時請求沒有地方送，不算成功
+            // 依比例分流：成功率是各下游的加權平均
             case ClientNode client -> weightedSum(edges, children, read);
             case LoadBalancerNode lb -> weightedSum(edges, children, read);
             // 任何一個子呼叫失敗，整個請求就失敗

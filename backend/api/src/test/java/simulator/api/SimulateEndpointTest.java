@@ -184,9 +184,31 @@ class SimulateEndpointTest {
     }
 
     @Test
-    void edgeFromUnknownNodeIsBadRequest() throws Exception {
+    void invalidTopologyIsOkWithErrorsAndNoResults() throws Exception {
+        // 拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤（spec 5）
         ObjectNode topology = straightTopology();
         ((ObjectNode) topology.at("/edges/1")).put("source", "ghost");
+
+        JsonNode body = mapper.readTree(postTopology(topology)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.get("valid").asBoolean()).isFalse();
+        assertThat(body.get("errors")).hasSize(1);
+        JsonNode error = body.at("/errors/0");
+        assertThat(fieldNames(error)).containsExactlyInAnyOrder("code", "message", "nodeId", "edgeId");
+        assertThat(error.get("code").asText()).isEqualTo("UNKNOWN_NODE");
+        assertThat(error.get("edgeId").asText()).isEqualTo("e2");
+        assertThat(error.get("nodeId").isNull()).isTrue();
+        assertThat(body.get("nodes")).isEmpty();
+        assertThat(body.get("edges")).isEmpty();
+        assertThat(body.get("summary").isNull()).isTrue();
+    }
+
+    @Test
+    void duplicateNodeIdIsBadRequest() throws Exception {
+        ObjectNode topology = straightTopology();
+        ((ObjectNode) topology.at("/nodes/2")).put("id", "svc-1");
 
         postTopology(topology).andExpect(status().isBadRequest());
     }

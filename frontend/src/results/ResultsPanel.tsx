@@ -1,10 +1,11 @@
 import { lazy, Suspense } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { SimulationResult, Topology } from '@/api/client'
+import { isComputed, type SimulationResult, type Topology, type ValidationError } from '@/api/client'
 import type { Theme } from '@/theme'
 import { cn } from '@/lib/utils'
 import { formatPercent, formatRps } from '@/canvas/format'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
+import { ErrorList } from './ErrorList'
 import { MetricsTable } from './MetricsTable'
 
 // ECharts 很大，切到 Sankey Tab 才載入
@@ -15,11 +16,13 @@ type ResultsPanelProps = {
   result: SimulationResult | null
   running: boolean
   theme: Theme
+  canFocusError: (error: ValidationError) => boolean
+  onFocusError: (error: ValidationError) => void
 }
 
-export function ResultsPanel({ topology, result, running, theme }: ResultsPanelProps) {
+export function ResultsPanel({ topology, result, running, theme, canFocusError, onFocusError }: ResultsPanelProps) {
   // 驗證失敗時不做任何計算，指標表和 Sankey 都沒有東西可畫
-  const computed = result?.valid ? result : null
+  const computed = isComputed(result) ? result : null
   const errorCount = result?.errors.length ?? 0
   const empty = <EmptyState result={result} running={running} />
   // 所有邊都是 0 流量（例如 Client rps = 0）時 Sankey 沒有東西可畫
@@ -64,8 +67,13 @@ export function ResultsPanel({ topology, result, running, theme }: ResultsPanelP
           empty
         )}
       </TabsContent>
-      {/* 錯誤清單由 #8 填入 */}
-      <TabsContent value="errors" className="min-h-0 overflow-auto" />
+      <TabsContent value="errors" className="min-h-0 overflow-auto">
+        {result ? (
+          <ErrorList errors={result.errors} canFocus={canFocusError} onFocus={onFocusError} />
+        ) : (
+          empty
+        )}
+      </TabsContent>
     </Tabs>
   )
 }

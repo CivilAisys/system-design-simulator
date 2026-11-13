@@ -7,10 +7,13 @@ import {
 } from '@xyflow/react'
 import type { Edge, EdgeResult } from '@/api/client'
 import { formatRps } from './format'
+import type { ElementErrors } from './validation'
 
 export type RpsEdgeData = {
   edge: Edge
   result?: EdgeResult
+  // 這條邊的驗證錯誤
+  errors?: ElementErrors
 }
 
 // React Flow 的 edge.data 是選填，這裡一定有對應的 Edge
@@ -32,11 +35,7 @@ export function RpsEdge({
 
   return (
     <>
-      <BaseEdge
-        path={path}
-        markerEnd={markerEnd}
-        style={selected ? { stroke: 'var(--primary)', strokeWidth: 2 } : undefined}
-      />
+      <BaseEdge path={path} markerEnd={markerEnd} style={edgeStyle(selected, data.errors)} />
       {rps && (
         <EdgeLabelRenderer>
           <div
@@ -49,4 +48,12 @@ export function RpsEdge({
       )}
     </>
   )
+}
+
+// 驗證錯誤用紅色，過期時畫淡；同時被選取時加粗，看得出選到的是它
+function edgeStyle(selected: boolean | undefined, errors: ElementErrors | undefined) {
+  if (errors) {
+    return { stroke: 'var(--destructive)', strokeWidth: selected ? 3 : 2, strokeOpacity: errors.stale ? 0.3 : 1 }
+  }
+  return selected ? { stroke: 'var(--primary)', strokeWidth: 2 } : undefined
 }

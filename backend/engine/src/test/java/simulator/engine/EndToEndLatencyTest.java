@@ -146,35 +146,7 @@ class EndToEndLatencyTest {
         assertThat(result.summary().avgEndToEndMs().write().undefinedReason()).isEqualTo(UndefinedReason.NO_TRAFFIC);
     }
 
-    @Test
-    void clientWithoutDownstreamHasNoLatencyAndMakesSummaryUndefined() {
-        // 還沒連線的 Client 不能算成 0 ms 拉低平均（#8 會把它變成驗證錯誤）
-        SimulationResult result = simulator.simulate(new Topology(
-                List.of(
-                        new ClientNode("web", "Web", NodeHealth.HEALTHY, 100, 0.9),
-                        new ClientNode("draft", "Draft", NodeHealth.HEALTHY, 100, 0.9),
-                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, fixedLatency(10))),
-                List.of(new Edge("e1", "web", "db", 1, 1, 0))));
 
-        assertLatencies(result.nodes().get("web").endToEndMs(), 10.0, 10.0);
-        assertLatencies(result.nodes().get("draft").endToEndMs(), null, null);
-        assertThat(result.nodes().get("draft").endToEndMs().read().undefinedReason())
-                .isEqualTo(UndefinedReason.NO_DOWNSTREAM);
-        assertLatencies(result.summary().avgEndToEndMs(), null, null);
-        assertThat(result.summary().avgEndToEndMs().read().undefinedReason()).isEqualTo(UndefinedReason.NO_DOWNSTREAM);
-    }
-
-    @Test
-    void loadBalancerWithoutDownstreamHasNoLatency() {
-        SimulationResult result = simulator.simulate(new Topology(
-                List.of(
-                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 100, 0.9),
-                        new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, fixedLatency(1))),
-                List.of(new Edge("e1", "client", "lb", 1, 1, 0))));
-
-        assertThat(result.nodes().get("client").endToEndMs().read().undefinedReason())
-                .isEqualTo(UndefinedReason.NO_DOWNSTREAM);
-    }
 
     @Test
     void overloadedNodeOnThePathMakesLatencyUndefined() {

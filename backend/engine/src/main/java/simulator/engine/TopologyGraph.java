@@ -2,15 +2,19 @@ package simulator.engine;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * 拓撲的圖結構：只建一次，建立時先驗證，再提供出邊與拓撲排序。
- * 不合法時丟 IllegalArgumentException（#8 會改成收集驗證錯誤）。
+ * 拓撲的圖結構：只建一次，驗證和計算共用，提供出邊、拓撲排序和環。
+ * 兩端有一端不存在的邊不放進圖裡，由 {@link TopologyValidator} 報 UNKNOWN_NODE。
+ * id 重複是格式錯誤（錯誤沒辦法指到哪一個），丟 IllegalArgumentException。
  */
 final class TopologyGraph {
 
@@ -24,22 +28,41 @@ final class TopologyGraph {
     static TopologyGraph of(Topology topology) {
         var graph = new TopologyGraph();
         for (Node node : topology.nodes()) {
-            graph.addNode(node);
+            if (graph.nodes.putIfAbsent(node.id(), node) != null) {
+                throw new IllegalArgumentException("Duplicate node id " + node.id());
+            }
+            graph.outgoing.put(node.id(), new ArrayList<>());
+            graph.inDegree.put(node.id(), 0);
         }
         var edgeIds = new HashSet<String>();
         for (Edge edge : topology.edges()) {
             if (!edgeIds.add(edge.id())) {
                 throw new IllegalArgumentException("Duplicate edge id " + edge.id());
             }
-            graph.addEdge(edge);
+            if (graph.contains(edge.source()) && graph.contains(edge.target())) {
+                graph.outgoing.get(edge.source()).add(edge);
+                graph.inDegree.merge(edge.target(), 1, Integer::sum);
+            }
         }
-        graph.checkSplitWeights();
-        graph.checkCacheDownstream();
         return graph;
+    }
+
+    boolean contains(String nodeId) {
+        return nodes.containsKey(nodeId);
+    }
+
+    /** 不存在時為 null。 */
+    Node node(String nodeId) {
+        return nodes.get(nodeId);
     }
 
     List<Edge> outgoing(String nodeId) {
         return outgoing.get(nodeId);
+    }
+
+    /** Client／LB 依 weight 比例分流（spec 3.3）。 */
+    static boolean splitsByWeight(Node node) {
+        return node instanceof ClientNode || node instanceof LoadBalancerNode;
     }
 
     /**
@@ -61,6 +84,72 @@ final class TopologyGraph {
         return outgoing.get(nodeId).stream().mapToDouble(Edge::weight).sum();
     }
 
+    /**
+     * 在環上的節點：所在的強連通分量（Tarjan）大於一個節點，或有連到自己的邊。
+     * 環的下游、夾在兩個環中間的節點都不算。用明確的堆疊代替遞迴，節點很多時也不會 StackOverflowError。
+     */
+    Set<String> nodesOnCycles() {
+        Map<String, Integer> index = new HashMap<>();
+        Map<String, Integer> low = new HashMap<>();
+        Deque<String> component = new ArrayDeque<>();
+        Set<String> onComponent = new HashSet<>();
+        Set<String> onCycles = new HashSet<>();
+        Deque<Visit> calls = new ArrayDeque<>();
+        for (String root : nodes.keySet()) {
+            if (index.containsKey(root)) {
+                continue;
+            }
+            calls.push(visit(root, index, low, component, onComponent));
+            while (!calls.isEmpty()) {
+                String id = calls.peek().id();
+                Iterator<Edge> edges = calls.peek().edges();
+                if (edges.hasNext()) {
+                    Edge edge = edges.next();
+                    String target = edge.target();
+                    if (target.equals(id)) {
+                        onCycles.add(id);
+                    }
+                    if (!index.containsKey(target)) {
+                        calls.push(visit(target, index, low, component, onComponent));
+                    } else if (onComponent.contains(target)) {
+                        low.merge(id, index.get(target), Math::min);
+                    }
+                    continue;
+                }
+                calls.pop();
+                if (!calls.isEmpty()) {
+                    low.merge(calls.peek().id(), low.get(id), Math::min);
+                }
+                if (low.get(id).equals(index.get(id))) {
+                    List<String> members = new ArrayList<>();
+                    String member;
+                    do {
+                        member = component.pop();
+                        onComponent.remove(member);
+                        members.add(member);
+                    } while (!member.equals(id));
+                    if (members.size() > 1) {
+                        onCycles.addAll(members);
+                    }
+                }
+            }
+        }
+        return onCycles;
+    }
+
+    /** Tarjan 遞迴中的一層：正在看哪個節點，以及它還沒看過的出邊。 */
+    private record Visit(String id, Iterator<Edge> edges) {
+    }
+
+    private Visit visit(String id, Map<String, Integer> index, Map<String, Integer> low,
+            Deque<String> component, Set<String> onComponent) {
+        index.put(id, index.size());
+        low.put(id, index.get(id));
+        component.push(id);
+        onComponent.add(id);
+        return new Visit(id, outgoing.get(id).iterator());
+    }
+
     /** Kahn's algorithm，同層依輸入順序，讓結果可重現。 */
     List<Node> topologicalOrder() {
         Map<String, Integer> remaining = new HashMap<>(inDegree);
@@ -76,112 +165,10 @@ final class TopologyGraph {
                 }
             }
         }
+        // 驗證過的拓撲沒有環
         if (order.size() != nodes.size()) {
-            throw new IllegalArgumentException("Topology contains a cycle");
+            throw new IllegalStateException("Topology contains a cycle; validate it first");
         }
         return order;
-    }
-
-    private void addNode(Node node) {
-        if (nodes.putIfAbsent(node.id(), node) != null) {
-            throw new IllegalArgumentException("Duplicate node id " + node.id());
-        }
-        checkParams(node);
-        outgoing.put(node.id(), new ArrayList<>());
-        inDegree.put(node.id(), 0);
-    }
-
-    private void addEdge(Edge edge) {
-        Node source = nodes.get(edge.source());
-        Node target = nodes.get(edge.target());
-        if (source == null || target == null) {
-            throw new IllegalArgumentException("Edge " + edge.id() + " references an unknown node");
-        }
-        if (source instanceof DatabaseNode) {
-            throw new IllegalArgumentException("Database " + source.id() + " cannot have downstream edges");
-        }
-        if (target instanceof ClientNode) {
-            throw new IllegalArgumentException("Client " + target.id() + " cannot have upstream edges");
-        }
-        checkParams(edge, source);
-        outgoing.get(source.id()).add(edge);
-        inDegree.merge(target.id(), 1, Integer::sum);
-    }
-
-    /** 參數範圍（spec 3.2、4.5）。 */
-    private static void checkParams(Node node) {
-        String where = "Node " + node.id();
-        switch (node) {
-            case ClientNode client -> {
-                requireAtLeast(client.rps(), 0, where, "rps");
-                requireBetween(client.readRatio(), 0, 1, where, "readRatio");
-            }
-            case LoadBalancerNode lb -> checkCapacityParams(lb.capacityParams(), where);
-            case ServiceNode service -> checkCapacityParams(service.capacityParams(), where);
-            case CacheNode cache -> {
-                checkCapacityParams(cache.capacityParams(), where);
-                requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio");
-            }
-            case DatabaseNode database -> checkCapacityParams(database.capacityParams(), where);
-        }
-    }
-
-    private static void checkCapacityParams(CapacityParams params, String where) {
-        requireAtLeast(params.instances(), 1, where, "instances");
-        requireAtLeast(params.concurrency(), 1, where, "concurrency");
-        if (!(params.serviceTimeMs() > 0) || Double.isInfinite(params.serviceTimeMs())) {
-            throw invalid(where, "serviceTimeMs", "a finite number > 0", params.serviceTimeMs());
-        }
-    }
-
-    /** 只檢查對這個起點有意義的欄位，其他欄位計算時忽略（spec 3.4）。 */
-    private static void checkParams(Edge edge, Node source) {
-        String where = "Edge " + edge.id();
-        requireAtLeast(edge.latencyMs(), 0, where, "latencyMs");
-        switch (source) {
-            case ClientNode client -> requireAtLeast(edge.weight(), 0, where, "weight");
-            case LoadBalancerNode lb -> requireAtLeast(edge.weight(), 0, where, "weight");
-            case ServiceNode service -> requireAtLeast(edge.callsPerRequest(), 1, where, "callsPerRequest");
-            case CacheNode cache -> {
-            }
-            case DatabaseNode database -> {
-            }
-        }
-    }
-
-    private static void requireAtLeast(double value, double min, String where, String param) {
-        if (!(value >= min) || Double.isInfinite(value)) {
-            throw invalid(where, param, "a finite number >= " + min, value);
-        }
-    }
-
-    private static void requireBetween(double value, double min, double max, String where, String param) {
-        if (!(value >= min && value <= max)) {
-            throw invalid(where, param, "between " + min + " and " + max, value);
-        }
-    }
-
-    private static IllegalArgumentException invalid(String where, String param, String expected, double actual) {
-        return new IllegalArgumentException(where + " param " + param + " must be " + expected + " but was " + actual);
-    }
-
-    /** Client／LB 依 weight 比例分流，權重總和為 0 時無法分配。 */
-    private void checkSplitWeights() {
-        for (Node node : nodes.values()) {
-            List<Edge> edges = outgoing.get(node.id());
-            if ((node instanceof ClientNode || node instanceof LoadBalancerNode) && !edges.isEmpty()
-                    && edges.stream().mapToDouble(Edge::weight).sum() <= 0) {
-                throw new IllegalArgumentException("Node " + node.id() + " edge weights must sum to more than 0");
-            }
-        }
-    }
-
-    /** Cache 的 miss 和 write 只會送往同一個下游。 */
-    private void checkCacheDownstream() {
-        for (Node node : nodes.values()) {
-            if (node instanceof CacheNode && outgoing.get(node.id()).size() != 1) {
-                throw new IllegalArgumentException("Cache " + node.id() + " must have exactly one downstream edge");
-            }
-        }
     }
 }
