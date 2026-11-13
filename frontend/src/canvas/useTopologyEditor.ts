@@ -72,6 +72,18 @@ export function useTopologyEditor(initial: Topology) {
     [usedIds],
   )
 
+  // 整份換成另一個拓撲（匯入、載入範例）。它的 id 也算用過，之後新建的節點和邊不會撞到
+  const load = useCallback(
+    (topology: Topology) => {
+      for (const item of [...topology.nodes, ...topology.edges]) {
+        usedIds.add(item.id)
+      }
+      setNodes(topology.nodes.map(toFlowNode))
+      setEdges(topology.edges.map(toFlowEdge))
+    },
+    [usedIds],
+  )
+
   // 只選取這個節點或邊（另一個傳 null），屬性面板會切到它
   const select = useCallback((target: { nodeId: string | null; edgeId: string | null }) => {
     setNodes((ns) => ns.map((n) => withSelected(n, n.id === target.nodeId)))
@@ -132,6 +144,7 @@ export function useTopologyEditor(initial: Topology) {
     onConnect,
     isValidConnection,
     addNode,
+    load,
     select,
     updateNode,
     updateEdge,

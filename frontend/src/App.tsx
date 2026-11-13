@@ -1,9 +1,15 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import { Loader2, Moon, Play, Sun } from 'lucide-react'
+import { ChevronDown, Download, Loader2, Moon, Play, Sun, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
@@ -15,6 +21,8 @@ import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
+import { EXAMPLES } from '@/examples'
+import { downloadTopology, parseTopology } from '@/io/topologyFile'
 import { cn } from '@/lib/utils'
 import { ResultsPanel } from '@/results/ResultsPanel'
 import { useSimulation } from '@/simulation/useSimulation'
@@ -36,11 +44,53 @@ function Simulator() {
   const { screenToFlowPosition, fitView } = useReactFlow()
   const canvasRef = useRef<HTMLElement>(null)
   const bottleneck = useBottleneckToast()
-  const { result, running, error, stale, autoRun, setAutoRun, run } = useSimulation(editor.model, {
+  const { result, running, error, stale, autoRun, setAutoRun, run, reset } = useSimulation(editor.model, {
     onResult: bottleneck.notify,
     // 上一次的瓶頸通知會和 Run 失敗互相矛盾
     onError: bottleneck.clear,
   })
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
+  // 但必須在新節點進到 React Flow 之後才呼叫，所以放在 effect 裡
+  const [fitRequest, setFitRequest] = useState(0)
+  useEffect(() => {
+    if (fitRequest > 0) void fitView({ duration: 300 })
+  }, [fitRequest, fitView])
+
+  // 匯入和載入範例共用：換掉畫布，清掉舊拓撲的結果和通知；Auto-run 開啟時會自動 Run
+  function loadTopology(next: Topology) {
+    editor.load(next)
+    reset()
+    bottleneck.clear()
+    setFitRequest((n) => n + 1)
+  }
+
+  async function importFile(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    // 清掉選取，同一個檔案改過之後可以再匯入一次
+    input.value = ''
+    if (!file) {
+      return
+    }
+    let text: string
+    try {
+      text = await file.text()
+    } catch {
+      toast.error(`匯入失敗：讀不到 ${file.name}`)
+      return
+    }
+    const parsed = parseTopology(text)
+    if (!parsed.ok) {
+      const [first, ...rest] = parsed.errors
+      toast.error(`匯入失敗：${file.name} 格式錯誤`, {
+        description: rest.length > 0 ? `${first}（另有 ${rest.length} 個錯誤）` : first,
+      })
+      return
+    }
+    loadTopology(parsed.topology)
+    toast.success(`已匯入 ${file.name}`)
+  }
 
   // 點擊元件面板時放在目前畫面的中央
   function addAtCenter(type: NodeType) {
@@ -97,10 +147,42 @@ function Simulator() {
             {message}
           </span>
         )}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={importFile}
+          />
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+            <Upload />
+            匯入
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => downloadTopology(topology)}>
+            <Download />
+            匯出
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                範例
+                <ChevronDown />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {EXAMPLES.map((example) => (
+                <DropdownMenuItem key={example.id} onSelect={() => loadTopology(example.topology)}>
+                  {example.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <Button
           variant="ghost"
           size="icon-sm"
-          className="ml-auto shrink-0"
+          className="shrink-0"
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? '切換為淺色' : '切換為深色'}
         >
