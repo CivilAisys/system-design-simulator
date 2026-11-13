@@ -113,6 +113,7 @@ system-design-simulator/
 
 - 欄位只在對應的起點有意義：`weight` 只用在 Client／LB 的邊，`callsPerRequest` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（匯出的檔案一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
 - 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
+- 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去；匯入有環的檔案不擋，Run 之後在錯誤分頁顯示。
 
 ### 3.5 節點健康狀況（預留）
 - `state`（Health）：階段一只有 `HEALTHY`。階段二加入 `DOWN`、`DEGRADED`。
