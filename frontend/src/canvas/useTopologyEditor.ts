@@ -25,8 +25,8 @@ export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'laten
 type CanvasState = {
   nodes: SimFlowNode[]
   edges: RpsFlowEdge[]
-  // 第幾份拓撲：每次匯入、載入範例換一個新號碼。復原或重做跨過整份換掉的那一步時，號碼會變
-  document: number
+  // 第幾次換掉整份拓撲（匯入、載入範例），0 是一開始的拓撲。復原或重做跨過整份換掉的那一步時，號碼會變
+  loadId: number
 }
 
 // 畫布上的 React Flow nodes／edges 是唯一的狀態來源（含位置和選取），
@@ -41,7 +41,7 @@ export function useTopologyEditor(initial: Topology) {
   useLayoutEffect(() => {
     latest.current = history
   }, [history])
-  const lastDocument = useRef(0)
+  const lastLoadId = useRef(0)
   // 用過的節點和邊 id（含已刪除的），新建時不沿用，見 newNode。只在事件中修改，不影響畫面。
   // 復原回來的節點和邊因此不會和別的元素同 id，畫布上的結果（以 id 對應）不會套錯
   const [usedIds] = useState(() => new Set([...initial.nodes, ...initial.edges].map((item) => item.id)))
@@ -110,16 +110,16 @@ export function useTopologyEditor(initial: Topology) {
   )
 
   // 整份換成另一個拓撲（匯入、載入範例），算一步，可以復原。它的 id 也算用過，之後新建的節點和邊不會撞到。
-  // 回傳新拓撲的號碼，給 undoLoad 用
+  // 回傳這次的 loadId，給 undoLoad 用
   const load = useCallback(
     (topology: Topology) => {
       for (const item of [...topology.nodes, ...topology.edges]) {
         usedIds.add(item.id)
       }
-      const document = ++lastDocument.current
+      const loadId = ++lastLoadId.current
       const at = Date.now()
-      setHistory((h) => commit(h, toCanvasState(topology, document), { group: null, at }))
-      return document
+      setHistory((h) => commit(h, toCanvasState(topology, loadId), { group: null, at }))
+      return loadId
     },
     [usedIds],
   )
@@ -184,7 +184,7 @@ export function useTopologyEditor(initial: Topology) {
     // 同一個 task 裡連按兩次時，第二次要看到第一次的結果
     latest.current = next
     setHistory(next)
-    return next.present.document !== current.present.document
+    return next.present.loadId !== current.present.loadId
   }, [])
   const undoEdit = useCallback(() => travel(undo), [travel])
   const redoEdit = useCallback(() => travel(redo), [travel])
@@ -192,9 +192,9 @@ export function useTopologyEditor(initial: Topology) {
   // 匯入、載入範例的通知上的「復原」：只在最後一步還是這次換掉時復原。
   // 之後又改過就不動（回傳 false），免得連後來的修改一起復原
   const undoLoad = useCallback(
-    (document: number) => {
+    (loadId: number) => {
       const { present, past } = latest.current
-      if (present.document !== document || past.at(-1)?.document === document) {
+      if (present.loadId !== loadId || past.at(-1)?.loadId === loadId) {
         return false
       }
       return travel(undo)
@@ -291,8 +291,8 @@ function fieldGroup(target: string, patch: object): string {
   return `${target}:${fields.sort().join(',')}`
 }
 
-function toCanvasState(topology: Topology, document: number): CanvasState {
-  return { nodes: topology.nodes.map(toFlowNode), edges: topology.edges.map(toFlowEdge), document }
+function toCanvasState(topology: Topology, loadId: number): CanvasState {
+  return { nodes: topology.nodes.map(toFlowNode), edges: topology.edges.map(toFlowEdge), loadId }
 }
 
 // 元素逐一相同時沿用上一次的陣列（在 render 中更新 state，React 文件的「儲存前一次 render 的資訊」寫法）

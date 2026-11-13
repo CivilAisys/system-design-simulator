@@ -60,17 +60,19 @@ function Simulator() {
 
   // 匯入和載入範例共用：換掉畫布，通知上可以復原
   function loadTopology(next: Topology, message: string) {
-    const document = editor.load(next)
-    replaced()
+    const loadId = editor.load(next)
+    resetForNewTopology()
     toast.success(message, {
       id: LOAD_TOAST,
-      action: { label: '復原', onClick: () => undoLoad(document) },
+      // 預設 4 秒太短，來不及看清楚新拓撲再決定要不要復原
+      duration: LOAD_TOAST_MS,
+      action: { label: '復原', onClick: () => undoLoad(loadId) },
     })
   }
 
   // 整份拓撲換掉（匯入、載入範例，或復原／重做跨過它們）：清掉另一份拓撲的結果和通知，
   // 把整張圖放進畫面；Auto-run 開啟時會自動 Run
-  function replaced() {
+  function resetForNewTopology() {
     reset()
     bottleneck.clear()
     setFitRequest((n) => n + 1)
@@ -78,7 +80,7 @@ function Simulator() {
 
   // 復原或重做跨過了匯入、載入範例，那則通知上的「復原」已經不適用
   function travelledAcrossLoad() {
-    replaced()
+    resetForNewTopology()
     toast.dismiss(LOAD_TOAST)
   }
 
@@ -90,8 +92,8 @@ function Simulator() {
     if (editor.redo()) travelledAcrossLoad()
   }
 
-  function undoLoad(document: number) {
-    if (editor.undoLoad(document)) {
+  function undoLoad(loadId: number) {
+    if (editor.undoLoad(loadId)) {
       travelledAcrossLoad()
     } else {
       toast.info('換掉之後又改過畫布，請用工具列的「復原」一步步回去')
@@ -224,7 +226,10 @@ function Simulator() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {EXAMPLES.map((example) => (
-                <DropdownMenuItem key={example.id} onSelect={() => loadTopology(example.topology, `已載入範例「${example.label}」`)}>
+                <DropdownMenuItem
+                  key={example.id}
+                  onSelect={() => loadTopology(example.topology, `已載入範例「${example.label}」`)}
+                >
                   {example.label}
                 </DropdownMenuItem>
               ))}
@@ -305,6 +310,7 @@ function useUndoShortcuts(undo: () => void, redo: () => void) {
 
 // 匯入、載入範例的通知，同一時間只留最新的一則
 const LOAD_TOAST = 'load'
+const LOAD_TOAST_MS = 10_000
 
 // 固定 toast id，連續 Run 時原地更新而不是堆疊
 const BOTTLENECK_TOAST = 'bottleneck'
