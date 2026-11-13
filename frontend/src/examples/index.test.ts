@@ -6,6 +6,11 @@ import { EXAMPLES } from './index'
 const files = import.meta.glob<unknown>('./*.json', { eager: true, import: 'default' })
 
 describe('內建範例', () => {
+  it('找得到範例檔', () => {
+    // glob 沒找到任何檔案時，下面的 it.each 不會產生測試
+    expect(Object.keys(files).length).toBeGreaterThan(0)
+  })
+
   it.each(Object.entries(files))('%s 通過匯入檢查', (_, data) => {
     expect(toTopology(data)).toMatchObject({ ok: true })
   })

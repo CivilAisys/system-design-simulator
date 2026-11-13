@@ -49,10 +49,15 @@ function validFile() {
   }
 }
 
-type File = ReturnType<typeof validFile>
+type FileData = ReturnType<typeof validFile>
+
+// 測試要拿掉必填欄位，型別上不允許 delete，集中在這裡繞過
+function remove(target: object, field: string) {
+  delete (target as Record<string, unknown>)[field]
+}
 
 // 改一份合法檔案後匯入，回傳錯誤訊息（合法時測試失敗）
-function errorsOf(edit: (file: File) => unknown): string[] {
+function errorsOf(edit: (file: FileData) => unknown): string[] {
   const file = validFile()
   const result = toTopology(edit(file) ?? file)
   if (result.ok) {
@@ -75,7 +80,7 @@ describe('合法的檔案', () => {
   })
 
   it('丟掉未知欄位和該類型用不到的參數', () => {
-    const file = validFile() as Record<string, unknown> & File
+    const file = validFile() as Record<string, unknown> & FileData
     file.extra = true
     Object.assign(file.nodes[0], { color: 'red' })
     Object.assign(file.nodes[0].params, { instances: 3, callMode: 'SEQUENTIAL' })
@@ -121,16 +126,23 @@ describe('格式錯誤', () => {
     })
 
     it.each([
-      ['id', '缺少 id'],
       ['name', '缺少 name'],
       ['params', '缺少 params'],
     ] as const)('缺少 %s', (field, message) => {
-      const errors = errorsOf((f) => {
-        // 拿掉的是 Database，沒有出邊，連到它的邊只在缺 id 時另外報錯
-        delete (f.nodes[4] as Partial<File['nodes'][4]>)[field]
-      })
-      const prefix = field === 'id' ? 'nodes[4]' : 'nodes[4]（id "db"）'
-      expect(errors[0]).toBe(`${prefix}：${message}`)
+      // 拿掉的是 Database，它沒有出邊
+      expect(errorsOf((f) => remove(f.nodes[4], field))).toEqual([`nodes[4]（id "db"）：${message}`])
+    })
+
+    // 沒有 id 就無法知道哪些邊連到它，所以連到 db 的邊也報不存在的節點
+    it.each([
+      ['缺少 id', (f: FileData) => remove(f.nodes[4], 'id')],
+      ['id 是空字串', (f: FileData) => void (f.nodes[4].id = '')],
+    ])('%s', (_, edit) => {
+      expect(errorsOf(edit)).toEqual([
+        'nodes[4]：缺少 id',
+        'edges[3]（id "e4"）：target 指到不存在的節點 "db"',
+        'edges[4]（id "e5"）：target 指到不存在的節點 "db"',
+      ])
     })
 
     it('type 不是已知的類型', () => {
@@ -140,7 +152,7 @@ describe('格式錯誤', () => {
     })
 
     it('缺少數值參數', () => {
-      expect(errorsOf((f) => void delete (f.nodes[3].params as Partial<File['nodes'][3]['params']>).hitRatio)).toEqual([
+      expect(errorsOf((f) => remove(f.nodes[3].params, 'hitRatio'))).toEqual([
         'nodes[3]（id "cache"）：缺少數值參數 params.hitRatio（或數值太大）',
       ])
     })
@@ -192,7 +204,7 @@ describe('格式錯誤', () => {
     })
 
     it.each(['id', 'source', 'target'] as const)('缺少 %s', (field) => {
-      const errors = errorsOf((f) => void delete (f.edges[0] as Partial<File['edges'][0]>)[field])
+      const errors = errorsOf((f) => remove(f.edges[0], field))
       const prefix = field === 'id' ? 'edges[0]' : 'edges[0]（id "e1"）'
       expect(errors).toEqual([`${prefix}：缺少 ${field}`])
     })
@@ -201,6 +213,18 @@ describe('格式錯誤', () => {
       expect(errorsOf((f) => void Object.assign(f.edges[0], { [field]: '1' }))).toEqual([
         `edges[0]（id "e1"）：${field} 必須是數字（或數值太大）`,
       ])
+    })
+
+    it('數值溢位成 Infinity', () => {
+      const text = JSON.stringify(validFile()).replace('"latencyMs":0.5', '"latencyMs":1e400')
+      expect(parseTopology(text)).toEqual({
+        ok: false,
+        errors: ['edges[1]（id "e2"）：latencyMs 必須是數字（或數值太大）'],
+      })
+    })
+
+    it('source 是空字串', () => {
+      expect(errorsOf((f) => void (f.edges[0].source = ''))).toEqual(['edges[0]（id "e1"）：缺少 source'])
     })
 
     it('callsPerRequest 不是整數', () => {
@@ -272,8 +296,8 @@ describe('畫不出來的邊', () => {
 describe('沒有座標的節點', () => {
   it('排成一列，放在有座標的節點下方', () => {
     const file = validFile()
-    delete (file.nodes[1] as Partial<File['nodes'][1]>).ui
-    delete (file.nodes[2] as Partial<File['nodes'][2]>).ui
+    remove(file.nodes[1], 'ui')
+    remove(file.nodes[2], 'ui')
     file.nodes[0].ui = { x: -50, y: 0 }
 
     const positions = topologyOf(file).nodes.map((n) => n.ui)
@@ -289,7 +313,7 @@ describe('沒有座標的節點', () => {
 
   it('全部都沒有座標時從原點開始排', () => {
     const file = validFile()
-    file.nodes.forEach((n) => delete (n as Partial<typeof n>).ui)
+    file.nodes.forEach((n) => remove(n, 'ui'))
 
     const positions = topologyOf(file).nodes.map((n) => n.ui)
     expect(positions).toEqual([0, 280, 560, 840, 1120].map((x) => ({ x, y: 0 })))
@@ -297,7 +321,7 @@ describe('沒有座標的節點', () => {
 
   it('有座標的節點都在右邊時，從 x = 0 開始排', () => {
     const file = validFile()
-    delete (file.nodes[0] as Partial<File['nodes'][0]>).ui
+    remove(file.nodes[0], 'ui')
 
     expect(topologyOf(file).nodes[0].ui).toEqual({ x: 0, y: 380 })
   })
