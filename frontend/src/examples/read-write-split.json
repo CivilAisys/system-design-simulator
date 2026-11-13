@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "nodes": [
+    { "id": "client-1", "type": "CLIENT", "name": "Users",
+      "params": { "rps": 2000, "readRatio": 0.9 },
+      "ui": { "x": 0, "y": 110 } },
+    { "id": "lb-1", "type": "LOAD_BALANCER", "name": "LB",
+      "params": { "instances": 1, "concurrency": 1000, "serviceTimeMs": 1 },
+      "state": "HEALTHY",
+      "ui": { "x": 280, "y": 110 } },
+    { "id": "svc-1", "type": "SERVICE", "name": "Catalog API",
+      "params": { "instances": 2, "concurrency": 200, "serviceTimeMs": 30, "callMode": "SEQUENTIAL" },
+      "state": "HEALTHY",
+      "ui": { "x": 560, "y": 0 } },
+    { "id": "cache-1", "type": "CACHE", "name": "Catalog Cache",
+      "params": { "instances": 1, "concurrency": 1, "serviceTimeMs": 0.01, "hitRatio": 0.9 },
+      "state": "HEALTHY",
+      "ui": { "x": 840, "y": 0 } },
+    { "id": "db-1", "type": "DATABASE", "name": "Catalog DB",
+      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 },
+      "state": "HEALTHY",
+      "ui": { "x": 1120, "y": 0 } },
+    { "id": "svc-2", "type": "SERVICE", "name": "Order API",
+      "params": { "instances": 2, "concurrency": 200, "serviceTimeMs": 50, "callMode": "SEQUENTIAL" },
+      "state": "HEALTHY",
+      "ui": { "x": 560, "y": 220 } },
+    { "id": "db-2", "type": "DATABASE", "name": "Order DB",
+      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 },
+      "state": "HEALTHY",
+      "ui": { "x": 840, "y": 220 } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "client-1", "target": "lb-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e2", "source": "lb-1", "target": "svc-1", "weight": 3, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e3", "source": "lb-1", "target": "svc-2", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e4", "source": "svc-1", "target": "cache-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e5", "source": "cache-1", "target": "db-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e6", "source": "svc-2", "target": "db-2", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "nodes": [
+    { "id": "client-1", "type": "CLIENT", "name": "Users",
+      "params": { "rps": 500, "readRatio": 0.9 },
+      "ui": { "x": 0, "y": 220 } },
+    { "id": "svc-1", "type": "SERVICE", "name": "Gateway",
+      "params": { "instances": 2, "concurrency": 200, "serviceTimeMs": 5, "callMode": "SEQUENTIAL" },
+      "state": "HEALTHY",
+      "ui": { "x": 280, "y": 220 } },
+    { "id": "svc-2", "type": "SERVICE", "name": "User Service",
+      "params": { "instances": 2, "concurrency": 200, "serviceTimeMs": 20, "callMode": "SEQUENTIAL" },
+      "state": "HEALTHY",
+      "ui": { "x": 560, "y": 0 } },
+    { "id": "db-1", "type": "DATABASE", "name": "User DB",
+      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 },
+      "state": "HEALTHY",
+      "ui": { "x": 840, "y": 0 } },
+    { "id": "svc-3", "type": "SERVICE", "name": "Product Service",
+      "params": { "instances": 2, "concurrency": 200, "serviceTimeMs": 30, "callMode": "SEQUENTIAL" },
+      "state": "HEALTHY",
+      "ui": { "x": 560, "y": 220 } },
+    { "id": "db-2", "type": "DATABASE", "name": "Product DB",
+      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 },
+      "state": "HEALTHY",
+      "ui": { "x": 840, "y": 220 } },
+    { "id": "svc-4", "type": "SERVICE", "name": "Recommendation",
+      "params": { "instances": 2, "concurrency": 200, "serviceTimeMs": 40, "callMode": "SEQUENTIAL" },
+      "state": "HEALTHY",
+      "ui": { "x": 560, "y": 440 } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "client-1", "target": "svc-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e2", "source": "svc-1", "target": "svc-2", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e3", "source": "svc-1", "target": "svc-3", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e4", "source": "svc-1", "target": "svc-4", "weight": 1, "callsPerRequest": 3, "latencyMs": 1 },
+    { "id": "e5", "source": "svc-2", "target": "db-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e6", "source": "svc-3", "target": "db-2", "weight": 1, "callsPerRequest": 2, "latencyMs": 1 }
+  ]
+}

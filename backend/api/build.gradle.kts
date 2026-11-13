@@ -19,14 +19,14 @@ dependencies {
 }
 
 val openApiFile = layout.projectDirectory.file("openapi.json")
-// 前端內建範例，/simulate 整合測試直接讀同一份檔案（spec 第 7 節）
-val basicWebAppExample = rootProject.layout.projectDirectory.file("../frontend/src/examples/basic-web-app.json")
+// 前端內建範例，/simulate 整合測試直接讀同樣的檔案（spec 第 7 節）
+val examplesDir = rootProject.layout.projectDirectory.dir("../frontend/src/examples")
 
 tasks.test {
     inputs.file(openApiFile).withPropertyName("openApiFile")
     systemProperty("openapi.file", openApiFile.asFile.absolutePath)
-    inputs.file(basicWebAppExample).withPropertyName("basicWebAppExample")
-    systemProperty("example.basic-web-app", basicWebAppExample.asFile.absolutePath)
+    inputs.files(examplesDir.asFileTree.matching { include("*.json") }).withPropertyName("examples")
+    systemProperty("examples.dir", examplesDir.asFile.absolutePath)
 }
 
 // 重新產生 openapi.json：跑同一個同步測試，但改成寫檔而不是比對
