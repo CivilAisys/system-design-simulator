@@ -89,6 +89,16 @@ export function checkNumber(spec: NumberSpec, value: number): string | null {
   return null
 }
 
+// 輸入框的字串 → 數值。空白要當成不合法，不能像 Number('') 變成 0
+export function parseDraft(text: string): number {
+  return text.trim() === '' ? Number.NaN : Number(text)
+}
+
+// 輸入框要顯示的字串：草稿已經代表目前的值（例如還在打的 "1."）就保留，否則換成目前的值
+export function syncDraft(draft: string, value: number): string {
+  return parseDraft(draft) === value ? draft : String(value)
+}
+
 function describeRange(spec: NumberSpec): string {
   const lower = `${spec.minExclusive ? '>' : '≥'} ${spec.min}`
   return spec.max === undefined ? lower : `${spec.min} ～ ${spec.max}`
