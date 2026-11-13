@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { checkNumber, EDGE_PARAM_SPECS, fromSlider, NODE_PARAM_SPECS, sliderRange, toSlider } from './params'
+import {
+  checkNumber,
+  EDGE_PARAM_SPECS,
+  fromSlider,
+  NODE_PARAM_SPECS,
+  parseDraft,
+  sliderRange,
+  syncDraft,
+  toSlider,
+} from './params'
 
 const { rps, readRatio, instances, concurrency, serviceTimeMs } = NODE_PARAM_SPECS
 const { weight, latencyMs } = EDGE_PARAM_SPECS
@@ -99,5 +108,38 @@ describe('對數刻度', () => {
 
   it.each([1, 20, 5000, 1_000_000])('2 位有效數字的值 %d 換到 slider 再換回來不變', (value) => {
     expect(fromSlider(rps, toSlider(rps, value))).toBe(value)
+  })
+})
+
+describe('parseDraft', () => {
+  it('空白不是 0', () => {
+    expect(parseDraft('')).toBeNaN()
+    expect(parseDraft('  ')).toBeNaN()
+  })
+
+  it('數字字串', () => {
+    expect(parseDraft('0')).toBe(0)
+    expect(parseDraft(' 1.5 ')).toBe(1.5)
+    expect(parseDraft('1.')).toBe(1)
+  })
+
+  it('非數字', () => {
+    expect(parseDraft('abc')).toBeNaN()
+  })
+})
+
+describe('syncDraft', () => {
+  it('清空的輸入框在值變成 0 時顯示 0', () => {
+    expect(syncDraft('', 0)).toBe('0')
+  })
+
+  it('不合法的草稿換成目前的值', () => {
+    expect(syncDraft('abc', 0.5)).toBe('0.5')
+    expect(syncDraft('2', 0.5)).toBe('0.5')
+  })
+
+  it('還在打的合法字串保持不動', () => {
+    expect(syncDraft('1.', 1)).toBe('1.')
+    expect(syncDraft('0.50', 0.5)).toBe('0.50')
   })
 })
