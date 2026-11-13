@@ -10,13 +10,17 @@ const FlowSankey = lazy(() => import('./FlowSankey').then((module) => ({ default
 type ResultsPanelProps = {
   topology: Topology
   result: SimulationResult | null
+  running: boolean
   theme: Theme
 }
 
-export function ResultsPanel({ topology, result, theme }: ResultsPanelProps) {
+export function ResultsPanel({ topology, result, running, theme }: ResultsPanelProps) {
   // 驗證失敗時不做任何計算，指標表和 Sankey 都沒有東西可畫
   const computed = result?.valid ? result : null
   const errorCount = result?.errors.length ?? 0
+  const empty = <EmptyState result={result} running={running} />
+  // 所有邊都是 0 流量（例如 Client rps = 0）時 Sankey 沒有東西可畫
+  const hasFlow = computed != null && Object.values(computed.edges).some(({ rps }) => rps.read + rps.write > 0)
 
   return (
     <Tabs defaultValue="metrics" className="h-full gap-0 p-2">
@@ -26,15 +30,17 @@ export function ResultsPanel({ topology, result, theme }: ResultsPanelProps) {
         <TabsTrigger value="errors">錯誤 ({errorCount})</TabsTrigger>
       </TabsList>
       <TabsContent value="metrics" className="min-h-0 overflow-auto">
-        {computed ? <MetricsTable topology={topology} result={computed} /> : <EmptyState result={result} />}
+        {computed ? <MetricsTable topology={topology} result={computed} /> : empty}
       </TabsContent>
       <TabsContent value="sankey" className="min-h-0">
-        {computed ? (
+        {computed && hasFlow ? (
           <Suspense>
             <FlowSankey topology={topology} result={computed} theme={theme} />
           </Suspense>
+        ) : computed ? (
+          <p className="p-4 text-sm text-muted-foreground">所有連線的流量都是 0</p>
         ) : (
-          <EmptyState result={result} />
+          empty
         )}
       </TabsContent>
       {/* 錯誤清單由 #8 填入 */}
@@ -43,7 +49,8 @@ export function ResultsPanel({ topology, result, theme }: ResultsPanelProps) {
   )
 }
 
-function EmptyState({ result }: { result: SimulationResult | null }) {
-  const text = result ? '拓撲有驗證錯誤，沒有計算結果' : '按 Run 看結果'
+function EmptyState({ result, running }: { result: SimulationResult | null; running: boolean }) {
+  // Run 時會先清掉舊結果，這段期間不能顯示「按 Run」，看起來像按鈕沒反應
+  const text = running ? '計算中…' : result ? '拓撲有驗證錯誤，沒有計算結果' : '按 Run 看結果'
   return <p className="p-4 text-sm text-muted-foreground">{text}</p>
 }

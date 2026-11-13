@@ -6,6 +6,8 @@ export function formatUtilization(rho: number | null | undefined): string {
 }
 
 export function formatRps(rps: number): string {
+  // 不到 0.5 的正數四捨五入會變成 0，看起來像沒有流量
+  if (rps > 0 && rps < 0.5) return '< 1 rps'
   return `${Math.round(rps).toLocaleString()} rps`
 }
 

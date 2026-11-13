@@ -24,25 +24,33 @@ type FlowSankeyProps = {
 
 export function FlowSankey({ topology, result, theme }: FlowSankeyProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<echarts.ECharts | null>(null)
 
+  // 實例只建一次，之後用 setOption 更新，數值才會有過渡動畫、重算時不會閃
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     const chart = echarts.init(container)
-    chart.setOption(sankeyOption(topology, result, theme))
+    chartRef.current = chart
     const observer = new ResizeObserver(() => chart.resize())
     observer.observe(container)
     return () => {
       observer.disconnect()
       chart.dispose()
+      chartRef.current = null
     }
+  }, [])
+
+  useEffect(() => {
+    chartRef.current?.setOption(sankeyOption(topology, result, theme))
   }, [topology, result, theme])
 
   return <div ref={containerRef} className="size-full" />
 }
 
 function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme): SankeyOption {
-  const textColor = theme === 'dark' ? '#e5e5e5' : '#171717'
+  const dark = theme === 'dark'
+  const textColor = dark ? '#e5e5e5' : '#171717'
   // 流量和邊上的 label 用同一個數字：read + write
   const links = topology.edges.flatMap((edge) => {
     const rps = result.edges[edge.id]?.rps
@@ -63,6 +71,10 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
   return {
     tooltip: {
       trigger: 'item',
+      // ECharts 預設白底，深色主題要自己給
+      backgroundColor: dark ? '#262626' : '#ffffff',
+      borderColor: dark ? '#404040' : '#e5e5e5',
+      textStyle: { color: textColor },
       formatter: (params) => {
         const item = Array.isArray(params) ? params[0] : params
         if (item?.dataType !== 'edge') return `${item?.name ?? ''}：${formatRps(Number(item?.value ?? 0))}`
