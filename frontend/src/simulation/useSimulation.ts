@@ -23,7 +23,9 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   const [error, setError] = useState<string | null>(null)
   // 每次 reset 加一，同一份拓撲重新載入時 Auto-run 也要再跑一次
   const [generation, setGeneration] = useState(0)
-  const latestRun = useRef(0)
+  // 最新一次 Run 的請求；新的 Run 或 reset 時取消，後端不必再算沒人要的結果。
+  // 回應回來時 controller 已經不是這一個，就表示有更新的 Run 或 reset 接手
+  const inFlight = useRef<AbortController | null>(null)
   const pendingAutoRun = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const key = useMemo(() => simulationKey(topology), [topology])
@@ -36,7 +38,9 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   async function run() {
     // 手動 Run 取代還在倒數的 Auto-run，同一份拓撲不送兩次
     cancelPendingAutoRun()
-    const id = ++latestRun.current
+    abortInFlight()
+    const controller = new AbortController()
+    inFlight.current = controller
     const target = topology
     const targetNames = names
     setRunKey(key)
@@ -45,9 +49,11 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     // 計算中保留舊結果，Auto-run 時畫布才不會每次修改都閃一下
     let next: SimulationResult
     try {
-      next = await simulate(target)
+      next = await simulate(target, controller.signal)
     } catch (e) {
-      if (id !== latestRun.current) return
+      // 被取消的請求（AbortError）已經有較新的 Run 或 reset 接手，不算失敗
+      if (controller !== inFlight.current) return
+      inFlight.current = null
       // Run 失敗時畫布不能留著舊的狀態色和 RPS
       setResult(null)
       setRunKey(null)
@@ -57,7 +63,8 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
       return
     }
     // 較早送出但較晚回來的回應直接丟棄，也不能把較新那次的 running 關掉
-    if (id !== latestRun.current) return
+    if (controller !== inFlight.current) return
+    inFlight.current = null
     setResult(next)
     setResultNames(targetNames)
     setRunning(false)
@@ -72,11 +79,16 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     }
   }
 
+  function abortInFlight() {
+    inFlight.current?.abort()
+    inFlight.current = null
+  }
+
   // 換了一份拓撲（匯入、載入範例）：舊結果的 id 可能和新拓撲重疊，不能留著疊到畫布上；
-  // 計算中的 Run 也不屬於新拓撲，回來時直接丟棄
+  // 計算中的 Run 也不屬於新拓撲，取消掉
   function reset() {
     cancelPendingAutoRun()
-    latestRun.current++
+    abortInFlight()
     setResult(null)
     setRunKey(null)
     setRunning(false)
@@ -98,6 +110,9 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     pendingAutoRun.current = setTimeout(autoRunIfNeeded, AUTO_RUN_DEBOUNCE_MS)
     return cancelPendingAutoRun
   }, [key, names, namesOutdated, autoRun, generation])
+
+  // 離開畫面時取消還沒回來的請求
+  useEffect(() => abortInFlight, [])
 
   // Auto-run 開啟時，修改後的結果很快會被取代，不標示過期；手動 Run 計算中也不標示
   const stale = !autoRun && result != null && needsRun
