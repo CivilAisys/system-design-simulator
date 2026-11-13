@@ -6,6 +6,15 @@
 - A ticket's PR targets `develop` and its body contains `Closes #<issue-number>`, so merging closes the issue and unblocks the tickets it blocks.
 - Hotfix for a release: branch `hotfix/<short-name>` from `main`, PR it to `main` and tag a patch version, then merge it back into `develop`.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every PR to `develop` or `main`, and again on each new commit pushed to it. Two jobs:
+
+- **Backend tests**: `./gradlew test` in `backend/`, which runs the engine and api tests, including the `openapi.json` sync check.
+- **Frontend lint and build**: in `frontend/`, `npm ci` (its postinstall generates the API types from `openapi.json`), then `npm run lint` and `npm run build` (`tsc -b` type check, then `vite build`).
+
+Run the same commands locally before opening a PR. If the sync check fails, run `./gradlew :api:generateOpenApi` and commit the updated `openapi.json`.
+
 ## Agent skills
 
 ### Issue tracker
