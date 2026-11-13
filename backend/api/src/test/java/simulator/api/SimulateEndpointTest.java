@@ -47,7 +47,7 @@ class SimulateEndpointTest {
     @Test
     void simulatesBasicWebAppExample() throws Exception {
         // 前端「範例」選單的「基本 Web App」：Client → LB → Service → Cache → Database
-        byte[] example = Files.readAllBytes(basicWebAppExample());
+        byte[] example = Files.readAllBytes(examplesDir().resolve("basic-web-app.json"));
         JsonNode body = simulate(example);
 
         assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "nodes", "edges", "summary");
@@ -111,13 +111,58 @@ class SimulateEndpointTest {
         assertThat(summary.get("bottleneckNodeId").asText()).isEqualTo("svc-1");
     }
 
+    // 範例選單的每一個範例都要通過驗證、有計算結果；數字由各自的情境決定，不逐一檢查
+    @ParameterizedTest
+    @MethodSource("exampleFiles")
+    void everyExampleIsValid(String example) throws Exception {
+        JsonNode body = simulate(Files.readAllBytes(examplesDir().resolve(example)));
+
+        assertThat(body.get("errors")).as("%s 的驗證錯誤", example).isEmpty();
+        assertThat(body.get("valid").asBoolean()).isTrue();
+        assertThat(body.get("summary").isObject()).isTrue();
+    }
+
+    // 「過載」範例要示範的情境：一載入就有過載的瓶頸和丟棄
+    @Test
+    void overloadExampleHasOverloadedBottleneck() throws Exception {
+        JsonNode body = simulate(Files.readAllBytes(examplesDir().resolve("overload.json")));
+
+        String bottleneck = body.at("/summary/bottleneckNodeId").asText();
+        assertThat(body.at("/nodes/" + bottleneck + "/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(body.at("/summary/dropRate").asDouble()).isPositive();
+        assertThat(body.at("/summary/avgEndToEndMs/write/ms").isNull()).isTrue();
+    }
+
+    // 「Fan-out」範例要示範的情境：切到 PARALLEL 時端到端延遲變短，並標示近似
+    @Test
+    void fanOutExampleIsApproximateWhenParallel() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(Files.readAllBytes(examplesDir().resolve("fan-out.json")));
+        double sequential = simulate(mapper.writeValueAsBytes(example)).at("/summary/avgEndToEndMs/read/ms").asDouble();
+        set(example, "/nodes/1/params/callMode", mapper.getNodeFactory().textNode("PARALLEL"));
+
+        JsonNode parallel = simulate(mapper.writeValueAsBytes(example)).at("/summary/avgEndToEndMs/read");
+        assertThat(parallel.get("approximate").asBoolean()).isTrue();
+        assertThat(parallel.get("ms").asDouble()).isLessThan(sequential);
+    }
+
+    static Stream<String> exampleFiles() throws Exception {
+        List<String> files;
+        try (Stream<Path> listing = Files.list(examplesDir())) {
+            files = listing.map(path -> path.getFileName().toString()).filter(name -> name.endsWith(".json"))
+                    .sorted().toList();
+        }
+        // 資料夾裡沒有範例檔時參數化測試不會執行任何案例，不能當成通過
+        assertThat(files).as("%s 裡沒有範例檔", examplesDir()).isNotEmpty();
+        return files.stream();
+    }
+
     // Gradle 會用系統屬性傳路徑；直接在 IDE 跑 JUnit 時沒有這個屬性，退回相對於 api 模組的路徑
-    private static Path basicWebAppExample() {
-        String configured = System.getProperty("example.basic-web-app");
-        Path path = Path.of(configured != null ? configured : "../../frontend/src/examples/basic-web-app.json");
+    private static Path examplesDir() {
+        String configured = System.getProperty("examples.dir");
+        Path path = Path.of(configured != null ? configured : "../../frontend/src/examples");
         assertThat(path)
-                .as("找不到內建範例檔 %s：用 Gradle 執行，或把工作目錄設成 backend/api", path.toAbsolutePath())
-                .isRegularFile();
+                .as("找不到內建範例資料夾 %s：用 Gradle 執行，或把工作目錄設成 backend/api", path.toAbsolutePath())
+                .isDirectory();
         return path;
     }
 

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "nodes": [
+    { "id": "client-1", "type": "CLIENT", "name": "Flash Sale",
+      "params": { "rps": 5000, "readRatio": 0.5 },
+      "ui": { "x": 0, "y": 0 } },
+    { "id": "lb-1", "type": "LOAD_BALANCER", "name": "LB",
+      "params": { "instances": 1, "concurrency": 1000, "serviceTimeMs": 1 },
+      "state": "HEALTHY",
+      "ui": { "x": 280, "y": 0 } },
+    { "id": "svc-1", "type": "SERVICE", "name": "Checkout API",
+      "params": { "instances": 4, "concurrency": 200, "serviceTimeMs": 50, "callMode": "SEQUENTIAL" },
+      "state": "HEALTHY",
+      "ui": { "x": 560, "y": 0 } },
+    { "id": "cache-1", "type": "CACHE", "name": "Inventory Cache",
+      "params": { "instances": 1, "concurrency": 1, "serviceTimeMs": 0.01, "hitRatio": 0.6 },
+      "state": "HEALTHY",
+      "ui": { "x": 840, "y": 0 } },
+    { "id": "db-1", "type": "DATABASE", "name": "Order DB",
+      "params": { "instances": 1, "concurrency": 50, "serviceTimeMs": 20 },
+      "state": "HEALTHY",
+      "ui": { "x": 1120, "y": 0 } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "client-1", "target": "lb-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e2", "source": "lb-1", "target": "svc-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e3", "source": "svc-1", "target": "cache-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e4", "source": "cache-1", "target": "db-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 }
+  ]
+}
