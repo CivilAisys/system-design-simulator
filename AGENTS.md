@@ -11,7 +11,7 @@
 `.github/workflows/ci.yml` runs on every PR to `develop` or `main`, and again on each new commit pushed to it. Two jobs:
 
 - **Backend tests**: `./gradlew test` in `backend/`, which runs the engine and api tests, including the `openapi.json` sync check.
-- **Frontend lint and build**: in `frontend/`, `npm ci` (its postinstall generates the API types from `openapi.json`), then `npm run lint` and `npm run build` (`tsc -b` type check, then `vite build`).
+- **Frontend lint and build**: in `frontend/`, `npm ci` (its postinstall generates the API types from `openapi.json`), then `npm run lint`, `npm test` (Vitest unit tests) and `npm run build` (`tsc -b` type check, then `vite build`). The job name stays "Frontend lint and build" because branch protection requires that check by name.
 
 Run the same commands locally before opening a PR. If the sync check fails, run `./gradlew :api:generateOpenApi` and commit the updated `openapi.json`.
 
