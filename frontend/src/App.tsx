@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
@@ -22,6 +23,7 @@ import { Palette } from '@/canvas/Palette'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
 import { EXAMPLES } from '@/examples'
+import { restoreTopology, saveTopology } from '@/io/autosave'
 import { downloadTopology, parseTopology } from '@/io/topologyFile'
 import { cn } from '@/lib/utils'
 import { ResultsPanel } from '@/results/ResultsPanel'
@@ -39,7 +41,9 @@ export default function App() {
 
 function Simulator() {
   const { theme, toggleTheme } = useTheme()
-  const editor = useTopologyEditor(initialTopology)
+  // 上次的畫布（自動存檔），讀不回來時用起始拓撲
+  const [restored] = useState(() => restoreTopology(initialTopology))
+  const editor = useTopologyEditor(restored.topology)
   const { topology } = editor
   const { screenToFlowPosition, fitView } = useReactFlow()
   const canvasRef = useRef<HTMLElement>(null)
@@ -51,6 +55,7 @@ function Simulator() {
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
   useUndoShortcuts(undo, redo)
+  useAutosave(topology, restored.error)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
   // 但必須在新節點進到 React Flow 之後才呼叫，所以放在 effect 裡
   const [fitRequest, setFitRequest] = useState(0)
@@ -225,6 +230,10 @@ function Simulator() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => loadTopology(initialTopology, '已回到起始拓撲')}>
+                起始拓撲
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               {EXAMPLES.map((example) => (
                 <DropdownMenuItem
                   key={example.id}
@@ -307,6 +316,22 @@ function useUndoShortcuts(undo: () => void, redo: () => void) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 }
+
+// 畫布有任何變化（含位置和選取）就存起來，重新整理後還原。
+// 存檔讀不回來時提示一次；存檔會被目前的畫布（起始拓撲）蓋掉
+function useAutosave(topology: Topology, restoreError: string | null) {
+  useEffect(() => {
+    saveTopology(topology)
+  }, [topology])
+  // Toaster 是子元件，它的 effect 先執行、已經在接收通知。固定 id，StrictMode 重跑 effect 也只有一則
+  useEffect(() => {
+    if (restoreError != null) {
+      toast.warning('讀不回上次的畫布，已回到起始拓撲', { id: RESTORE_TOAST, description: restoreError })
+    }
+  }, [restoreError])
+}
+
+const RESTORE_TOAST = 'restore'
 
 // 匯入、載入範例的通知，同一時間只留最新的一則
 const LOAD_TOAST = 'load'
