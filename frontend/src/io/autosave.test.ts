@@ -4,10 +4,9 @@ import { initialTopology } from '@/canvas/initialTopology'
 import { EXAMPLES } from '@/examples'
 import { restoreTopology, saveTopology, type TopologyStorage } from './autosave'
 
-function memoryStorage(initial: Record<string, string> = {}): TopologyStorage & { items: Record<string, string> } {
+function memoryStorage(initial: Record<string, string> = {}): TopologyStorage {
   const items = { ...initial }
   return {
-    items,
     getItem: (key) => items[key] ?? null,
     setItem: (key, value) => {
       items[key] = value

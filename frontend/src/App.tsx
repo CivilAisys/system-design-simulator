@@ -23,8 +23,8 @@ import { Palette } from '@/canvas/Palette'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
 import { EXAMPLES } from '@/examples'
-import { restoreTopology, saveTopology } from '@/io/autosave'
-import { downloadTopology, parseTopology } from '@/io/topologyFile'
+import { restoreTopology, saveTopology, type Restored } from '@/io/autosave'
+import { downloadTopology, parseTopology, serializeTopology } from '@/io/topologyFile'
 import { cn } from '@/lib/utils'
 import { ResultsPanel } from '@/results/ResultsPanel'
 import { useSimulation } from '@/simulation/useSimulation'
@@ -55,7 +55,7 @@ function Simulator() {
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
   useUndoShortcuts(undo, redo)
-  useAutosave(topology, restored.error)
+  useAutosave(topology, restored)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
   // 但必須在新節點進到 React Flow 之後才呼叫，所以放在 effect 裡
   const [fitRequest, setFitRequest] = useState(0)
@@ -317,18 +317,24 @@ function useUndoShortcuts(undo: () => void, redo: () => void) {
   }, [])
 }
 
-// 畫布有任何變化（含位置和選取）就存起來，重新整理後還原。
-// 存檔讀不回來時提示一次；存檔會被目前的畫布（起始拓撲）蓋掉
-function useAutosave(topology: Topology, restoreError: string | null) {
+// 拓撲內容（含位置）變了就存起來，重新整理後還原。選取、量尺寸也會換掉 topology 的參考，但內容沒變不寫。
+// 一開始記成還原出來的拓撲：存檔讀不回來時，使用者動手修改之前不蓋掉它，重新整理還會再提示
+function useAutosave(topology: Topology, restored: Restored) {
+  const saved = useRef<string | null>(null)
   useEffect(() => {
-    saveTopology(topology)
-  }, [topology])
-  // Toaster 是子元件，它的 effect 先執行、已經在接收通知。固定 id，StrictMode 重跑 effect 也只有一則
-  useEffect(() => {
-    if (restoreError != null) {
-      toast.warning('讀不回上次的畫布，已回到起始拓撲', { id: RESTORE_TOAST, description: restoreError })
+    saved.current ??= serializeTopology(restored.topology)
+    const text = serializeTopology(topology)
+    if (text !== saved.current) {
+      saved.current = text
+      saveTopology(topology)
     }
-  }, [restoreError])
+  }, [topology, restored])
+  // sonner 會把 Toaster 訂閱前就發出的通知補給它。固定 id，StrictMode 重跑 effect 也只有一則
+  useEffect(() => {
+    if (restored.error != null) {
+      toast.warning('讀不回上次的畫布，已回到起始拓撲', { id: RESTORE_TOAST, description: restored.error })
+    }
+  }, [restored])
 }
 
 const RESTORE_TOAST = 'restore'
