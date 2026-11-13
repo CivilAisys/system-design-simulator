@@ -47,7 +47,7 @@ class SimulateEndpointTest {
     @Test
     void simulatesBasicWebAppExample() throws Exception {
         // 前端「範例」選單的「基本 Web App」：Client → LB → Service → Cache → Database
-        byte[] example = Files.readAllBytes(examplesDir().resolve("basic-web-app.json"));
+        byte[] example = readExample("basic-web-app.json");
         JsonNode body = simulate(example);
 
         assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "nodes", "edges", "summary");
@@ -115,7 +115,7 @@ class SimulateEndpointTest {
     @ParameterizedTest
     @MethodSource("exampleFiles")
     void everyExampleIsValid(String example) throws Exception {
-        JsonNode body = simulate(Files.readAllBytes(examplesDir().resolve(example)));
+        JsonNode body = simulate(readExample(example));
 
         assertThat(body.get("errors")).as("%s 的驗證錯誤", example).isEmpty();
         assertThat(body.get("valid").asBoolean()).isTrue();
@@ -125,20 +125,26 @@ class SimulateEndpointTest {
     // 「過載」範例要示範的情境：一載入就有過載的瓶頸和丟棄
     @Test
     void overloadExampleHasOverloadedBottleneck() throws Exception {
-        JsonNode body = simulate(Files.readAllBytes(examplesDir().resolve("overload.json")));
+        JsonNode body = simulate(readExample("overload.json"));
 
         String bottleneck = body.at("/summary/bottleneckNodeId").asText();
         assertThat(body.at("/nodes/" + bottleneck + "/status").asText()).isEqualTo("OVERLOADED");
         assertThat(body.at("/summary/dropRate").asDouble()).isPositive();
+        // read 的 Cache miss 和 write 都會走到過載的 DB，兩種請求的延遲都無定義
+        assertThat(body.at("/summary/avgEndToEndMs/read/ms").isNull()).isTrue();
         assertThat(body.at("/summary/avgEndToEndMs/write/ms").isNull()).isTrue();
     }
 
     // 「Fan-out」範例要示範的情境：切到 PARALLEL 時端到端延遲變短，並標示近似
     @Test
     void fanOutExampleIsApproximateWhenParallel() throws Exception {
-        ObjectNode example = (ObjectNode) mapper.readTree(Files.readAllBytes(examplesDir().resolve("fan-out.json")));
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("fan-out.json"));
         double sequential = simulate(mapper.writeValueAsBytes(example)).at("/summary/avgEndToEndMs/read/ms").asDouble();
-        set(example, "/nodes/1/params/callMode", mapper.getNodeFactory().textNode("PARALLEL"));
+        for (JsonNode node : example.get("nodes")) {
+            if (node.get("name").asText().equals("Gateway")) {
+                ((ObjectNode) node.get("params")).put("callMode", "PARALLEL");
+            }
+        }
 
         JsonNode parallel = simulate(mapper.writeValueAsBytes(example)).at("/summary/avgEndToEndMs/read");
         assertThat(parallel.get("approximate").asBoolean()).isTrue();
@@ -154,6 +160,10 @@ class SimulateEndpointTest {
         // 資料夾裡沒有範例檔時參數化測試不會執行任何案例，不能當成通過
         assertThat(files).as("%s 裡沒有範例檔", examplesDir()).isNotEmpty();
         return files.stream();
+    }
+
+    private static byte[] readExample(String fileName) throws Exception {
+        return Files.readAllBytes(examplesDir().resolve(fileName));
     }
 
     // Gradle 會用系統屬性傳路徑；直接在 IDE 跑 JUnit 時沒有這個屬性，退回相對於 api 模組的路徑

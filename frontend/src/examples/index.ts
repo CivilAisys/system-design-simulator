@@ -14,7 +14,7 @@ export const EXAMPLES: Example[] = [
   { id: 'read-write-split', label: '讀寫分流', topology: builtIn(readWriteSplit) },
   // Gateway 呼叫三個下游（含 callsPerRequest 3）：切換 Call mode 比較依序與平行的端到端延遲
   { id: 'fan-out', label: 'Fan-out', topology: builtIn(fanOut) },
-  // Order DB 被 write 和 Cache miss 壓到過載：瓶頸通知、Dropped、Drop rate 和「延遲無定義」
+  // Inventory DB 被 write 和 Cache miss 壓到過載：瓶頸通知、Dropped、Drop rate 和「延遲無定義」
   { id: 'overload', label: '過載', topology: builtIn(overload) },
 ]
 

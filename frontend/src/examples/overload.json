@@ -16,7 +16,7 @@
       "params": { "instances": 1, "concurrency": 1, "serviceTimeMs": 0.01, "hitRatio": 0.6 },
       "state": "HEALTHY",
       "ui": { "x": 840, "y": 0 } },
-    { "id": "db-1", "type": "DATABASE", "name": "Order DB",
+    { "id": "db-1", "type": "DATABASE", "name": "Inventory DB",
       "params": { "instances": 1, "concurrency": 50, "serviceTimeMs": 20 },
       "state": "HEALTHY",
       "ui": { "x": 1120, "y": 0 } }

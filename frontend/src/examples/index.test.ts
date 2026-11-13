@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { toTopology } from '@/io/topologyFile'
 import { EXAMPLES } from './index'
 
-// 這個資料夾裡的所有範例檔，包含還沒加進選單的
+// 這個資料夾裡的所有範例檔
 const files = import.meta.glob<unknown>('./*.json', { eager: true, import: 'default' })
 
 describe('內建範例', () => {
@@ -13,6 +13,12 @@ describe('內建範例', () => {
 
   it.each(Object.entries(files))('%s 通過匯入檢查', (_, data) => {
     expect(toTopology(data)).toMatchObject({ ok: true })
+  })
+
+  // 後端整合測試跑資料夾裡的每一個檔案，選單漏掉的範例檔就只測到、使用者看不到
+  it('每個範例檔都在選單裡，id 和檔名相同', () => {
+    const names = Object.keys(files).map((path) => path.replace(/^\.\/(.*)\.json$/, '$1'))
+    expect(EXAMPLES.map((example) => example.id).sort()).toEqual(names.sort())
   })
 
   it('選單裡的範例都有內容', () => {
