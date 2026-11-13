@@ -15,7 +15,7 @@ export const MERGE_MS = 1000
 
 export type Step = {
   // 同一個群組的連續修改併成一步；null 表示一定是新的一步
-  group?: string | null
+  group: string | null
   at: number
 }
 
@@ -24,7 +24,7 @@ export function createHistory<T>(present: T): History<T> {
 }
 
 // 記成新的一步，重做紀錄清空。和上一步同一個群組、離上一次修改不到 MERGE_MS 時併進上一步
-export function commit<T>(history: History<T>, next: T, { group = null, at }: Step): History<T> {
+export function commit<T>(history: History<T>, next: T, { group, at }: Step): History<T> {
   if (next === history.present) {
     return history
   }

@@ -4,8 +4,8 @@ import { commit, createHistory, MERGE_MS, redo, replace, undo } from './history'
 describe('commit', () => {
   it('每次修改記成一步，可以一步步復原', () => {
     let h = createHistory('a')
-    h = commit(h, 'b', { at: 1 })
-    h = commit(h, 'c', { at: 2 })
+    h = commit(h, 'b', { group: null, at: 1 })
+    h = commit(h, 'c', { group: null, at: 2 })
     expect(h.present).toBe('c')
     h = undo(h)
     expect(h.present).toBe('b')
@@ -16,7 +16,7 @@ describe('commit', () => {
 
   it('沒有改變時不記', () => {
     const h = createHistory('a')
-    expect(commit(h, 'a', { at: 1 })).toBe(h)
+    expect(commit(h, 'a', { group: null, at: 1 })).toBe(h)
   })
 
   it('同一個群組連續修改併成一步', () => {
@@ -34,16 +34,16 @@ describe('commit', () => {
     h = commit(h, 1, { group: 'rps', at: 0 })
     h = commit(h, 2, { group: 'rps', at: MERGE_MS })
     h = commit(h, 3, { group: 'latency', at: MERGE_MS + 1 })
-    h = commit(h, 4, { at: MERGE_MS + 2 })
-    h = commit(h, 5, { at: MERGE_MS + 3 })
+    h = commit(h, 4, { group: null, at: MERGE_MS + 2 })
+    h = commit(h, 5, { group: null, at: MERGE_MS + 3 })
     expect(h.past).toEqual([0, 1, 2, 3, 4])
   })
 
   it('復原後做新的修改，重做紀錄清空', () => {
     let h = createHistory('a')
-    h = commit(h, 'b', { at: 1 })
+    h = commit(h, 'b', { group: null, at: 1 })
     h = undo(h)
-    h = commit(h, 'c', { at: 2 })
+    h = commit(h, 'c', { group: null, at: 2 })
     expect(h.future).toEqual([])
     expect(redo(h)).toBe(h)
   })
@@ -61,7 +61,7 @@ describe('commit', () => {
   it('只留最近 100 步', () => {
     let h = createHistory(0)
     for (let i = 1; i <= 150; i++) {
-      h = commit(h, i, { at: i })
+      h = commit(h, i, { group: null, at: i })
     }
     expect(h.past).toHaveLength(100)
     expect(h.past[0]).toBe(50)
@@ -71,12 +71,12 @@ describe('commit', () => {
 describe('replace', () => {
   it('改狀態但不算一步，也不清重做紀錄', () => {
     let h = createHistory('a')
-    h = commit(h, 'b', { at: 1 })
+    h = commit(h, 'b', { group: null, at: 1 })
     h = undo(h)
     h = replace(h, 'a*')
     expect(h.past).toEqual([])
     expect(h.future).toEqual(['b'])
-    expect(undo(commit(h, 'c', { at: 2 })).present).toBe('a*')
+    expect(undo(commit(h, 'c', { group: null, at: 2 })).present).toBe('a*')
   })
 
   it('不打斷正在合併的群組', () => {
@@ -91,8 +91,8 @@ describe('replace', () => {
 describe('undo／redo', () => {
   it('重做回到復原前', () => {
     let h = createHistory('a')
-    h = commit(h, 'b', { at: 1 })
-    h = commit(h, 'c', { at: 2 })
+    h = commit(h, 'b', { group: null, at: 1 })
+    h = commit(h, 'c', { group: null, at: 2 })
     h = undo(undo(h))
     h = redo(h)
     expect(h.present).toBe('b')

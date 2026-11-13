@@ -118,17 +118,18 @@ export function useTopologyEditor(initial: Topology) {
     )
   }, [])
 
-  // 連續修改同一個欄位（打字、拖 slider）併成一步
+  // 連續修改同一個欄位（打字、拖 slider）併成一步。值沒變（例如 "5" 打成 "5."）不算一步
   const updateNode = useCallback(
     (id: string, patch: NodePatch) =>
       edit(
         (state) => ({
           ...state,
           nodes: state.nodes.map((n) => {
-            if (n.id !== id) {
+            const node = n.data.node
+            const unchanged = sameValues(node, { name: patch.name }) && sameValues(node.params, patch.params ?? {})
+            if (n.id !== id || unchanged) {
               return n
             }
-            const node = n.data.node
             return {
               ...n,
               data: {
@@ -148,7 +149,11 @@ export function useTopologyEditor(initial: Topology) {
       edit(
         (state) => ({
           ...state,
-          edges: state.edges.map((e) => (e.id === id ? { ...e, data: { ...e.data, edge: { ...e.data.edge, ...patch } } } : e)),
+          edges: state.edges.map((e) =>
+            e.id === id && !sameValues(e.data.edge, patch)
+              ? { ...e, data: { ...e.data, edge: { ...e.data.edge, ...patch } } }
+              : e,
+          ),
         }),
         fieldGroup(`edge:${id}`, patch),
       ),
@@ -217,12 +222,12 @@ function isRemove(change: NodeChange | EdgeChange): boolean {
   return change.type === 'remove'
 }
 
-// 新增、刪除、移動節點算一步；選取和量尺寸不算。
+// 刪除、移動節點算一步（新增節點走 addNode）；選取和量尺寸不算。
 // 拖動時 React Flow 每一幀都送 dragging 的位置，只在開始拖（節點還沒在拖）時記一步，中途和放開都不算
 function isNodeEdit(changes: NodeChange<SimFlowNode>[], nodes: SimFlowNode[]): boolean {
   return changes.some((change) => {
     if (change.type !== 'position') {
-      return change.type === 'remove' || change.type === 'add' || change.type === 'replace'
+      return change.type === 'remove'
     }
     return change.position != null && !nodes.find((n) => n.id === change.id)?.dragging
   })
@@ -232,6 +237,12 @@ function isNodeEdit(changes: NodeChange<SimFlowNode>[], nodes: SimFlowNode[]): b
 function moveGroup(changes: NodeChange<SimFlowNode>[]): string | null {
   const moved = changes.flatMap((change) => (change.type === 'position' && !change.dragging ? [change.id] : []))
   return moved.length > 0 ? `move:${moved.join(',')}` : null
+}
+
+// patch 裡有給的欄位都和 current 相同
+function sameValues(current: object, patch: object): boolean {
+  const values = current as Record<string, unknown>
+  return Object.entries(patch).every(([field, value]) => value === undefined || Object.is(values[field], value))
 }
 
 // 同一個元素的同一組欄位才併成一步
