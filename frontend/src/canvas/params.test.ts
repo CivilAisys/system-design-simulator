@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { NodeParams } from './catalog'
 import {
+  checkNodeParam,
   checkNumber,
   EDGE_PARAM_SPECS,
   fromSlider,
@@ -11,7 +13,7 @@ import {
 } from './params'
 
 const { rps, readRatio, instances, concurrency, serviceTimeMs } = NODE_PARAM_SPECS
-const { weight, latencyMs } = EDGE_PARAM_SPECS
+const { weight, callsPerRequest, latencyMs } = EDGE_PARAM_SPECS
 
 describe('checkNumber', () => {
   it.each([
@@ -20,33 +22,64 @@ describe('checkNumber', () => {
     [readRatio, 0],
     [readRatio, 1],
     [instances, 1],
-    [serviceTimeMs, 0.001],
+    [serviceTimeMs, 0.000001],
+    [serviceTimeMs, 1e7],
     [latencyMs, 0],
+    [rps, 1e12],
+    [weight, 1e6],
   ])('%#: 範圍內的值合法', (spec, value) => {
     expect(checkNumber(spec, value)).toBeNull()
   })
 
   it('不是有限的數字', () => {
-    expect(checkNumber(rps, Number.NaN)).toBe('請輸入數字（≥ 0）')
-    expect(checkNumber(rps, Number.POSITIVE_INFINITY)).toBe('請輸入數字（≥ 0）')
+    expect(checkNumber(rps, Number.NaN)).toBe('請輸入數字（0 ～ 1,000,000,000,000）')
+    expect(checkNumber(rps, Number.POSITIVE_INFINITY)).toBe('請輸入數字（0 ～ 1,000,000,000,000）')
   })
 
   it('整數參數不是整數', () => {
-    expect(checkNumber(instances, 1.5)).toBe('必須是整數（≥ 1）')
+    expect(checkNumber(instances, 1.5)).toBe('必須是整數（1 ～ 1,000,000）')
   })
 
   it('小於下限', () => {
-    expect(checkNumber(rps, -1)).toBe('超出範圍（≥ 0）')
-    expect(checkNumber(instances, 0)).toBe('超出範圍（≥ 1）')
+    expect(checkNumber(rps, -1)).toBe('超出範圍（0 ～ 1,000,000,000,000）')
+    expect(checkNumber(instances, 0)).toBe('超出範圍（1 ～ 1,000,000）')
+    expect(checkNumber(serviceTimeMs, 0)).toBe('超出範圍（0.000001 ～ 10,000,000）')
   })
 
   it('下限不含本身時，等於下限也不合法', () => {
-    expect(checkNumber(serviceTimeMs, 0)).toBe('超出範圍（> 0）')
-    expect(checkNumber(weight, 0)).toBe('超出範圍（> 0）')
+    expect(checkNumber(weight, 0)).toBe('超出範圍（> 0 且 ≤ 1,000,000）')
   })
 
   it('大於上限', () => {
     expect(checkNumber(readRatio, 1.01)).toBe('超出範圍（0 ～ 1）')
+    expect(checkNumber(rps, 1.1e12)).toBe('超出範圍（0 ～ 1,000,000,000,000）')
+    expect(checkNumber(callsPerRequest, 10_001)).toBe('超出範圍（1 ～ 10,000）')
+    expect(checkNumber(latencyMs, 1.1e7)).toBe('超出範圍（0 ～ 10,000,000）')
+  })
+})
+
+describe('checkNodeParam', () => {
+  const params: NodeParams = { instances: 1000, concurrency: 1000, serviceTimeMs: 10 }
+
+  it('instances × concurrency 剛好是上限時合法', () => {
+    expect(checkNodeParam(params, 'instances', 1000)).toBeNull()
+  })
+
+  it('乘積超過上限時不合法，即使各自都在範圍內', () => {
+    expect(checkNodeParam(params, 'instances', 1001)).toBe(
+      'instances × concurrency 不能超過 1,000,000（目前是 1,001,000）',
+    )
+    expect(checkNodeParam(params, 'concurrency', 2000)).toBe(
+      'instances × concurrency 不能超過 1,000,000（目前是 2,000,000）',
+    )
+  })
+
+  it('單一參數不合法時先報那個錯', () => {
+    expect(checkNodeParam(params, 'instances', 0)).toBe('超出範圍（1 ～ 1,000,000）')
+  })
+
+  it('其他參數只看自己的範圍', () => {
+    expect(checkNodeParam(params, 'serviceTimeMs', 1e7)).toBeNull()
   })
 })
 

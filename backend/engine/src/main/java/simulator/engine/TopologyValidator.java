@@ -1,9 +1,12 @@
 package simulator.engine;
 
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -14,6 +17,15 @@ import java.util.stream.Stream;
  * 錯誤依 NO_CLIENT、各節點、各邊排列，節點和邊依輸入順序。
  */
 final class TopologyValidator {
+
+    // 參數上限（spec 4.5）：超過時 Run 太慢或結果溢位成 Infinity。前端 params.ts 用同一組數值
+    static final double MAX_RPS = 1e12;
+    static final long MAX_WORKERS = 1_000_000;
+    static final double MIN_SERVICE_TIME_MS = 1e-6;
+    static final double MAX_SERVICE_TIME_MS = 1e7;
+    static final double MAX_LATENCY_MS = 1e7;
+    static final int MAX_CALLS_PER_REQUEST = 10_000;
+    static final double MAX_WEIGHT = 1e6;
 
     private final Topology topology;
     private final TopologyGraph graph;
@@ -62,11 +74,8 @@ final class TopologyValidator {
         if (node instanceof ClientNode && upstreams.containsKey(node.id())) {
             nodeError(node, "CLIENT_HAS_INPUT", "Client " + name + " 不能有上游連線");
         }
-        if (TopologyGraph.splitsByWeight(node)) {
-            if (downstream == 0) {
-                nodeError(node, "NO_DOWNSTREAM", name + " 沒有下游，請求沒有地方送");
-            }
-            checkWeightSum(node);
+        if (TopologyGraph.splitsByWeight(node) && downstream == 0) {
+            nodeError(node, "NO_DOWNSTREAM", name + " 沒有下游，請求沒有地方送");
         }
         if (node instanceof CacheNode && downstream != 1) {
             nodeError(node, "CACHE_DOWNSTREAM_COUNT",
@@ -74,18 +83,6 @@ final class TopologyValidator {
         }
         if (node instanceof DatabaseNode && downstream > 0) {
             nodeError(node, "DATABASE_HAS_OUTPUT", "Database " + name + " 不能有下游連線");
-        }
-    }
-
-    /**
-     * 每條 weight 都合法時，總和還可能溢位成無限大，各邊的比例會變成 0、下游收不到流量。
-     * 有不合法的 weight 時那條邊已經報錯，不再報總和。
-     */
-    private void checkWeightSum(Node node) {
-        List<Edge> edges = graph.outgoing(node.id());
-        if (edges.stream().allMatch(edge -> isPositive(edge.weight()))
-                && Double.isInfinite(edges.stream().mapToDouble(Edge::weight).sum())) {
-            nodeError(node, "INVALID_PARAM", name(node.id()) + " 的下游連線 weight 總和太大，無法計算比例");
         }
     }
 
@@ -107,14 +104,14 @@ final class TopologyValidator {
         Consumer<String> report = message -> nodeError(node, "INVALID_PARAM", message);
         switch (node) {
             case ClientNode client -> {
-                requireAtLeast(client.rps(), 0, where, "rps", report);
-                requireRatio(client.readRatio(), where, "readRatio", report);
+                requireBetween(client.rps(), 0, MAX_RPS, where, "rps", report);
+                requireBetween(client.readRatio(), 0, 1, where, "readRatio", report);
             }
             case LoadBalancerNode lb -> checkCapacityParams(lb.capacityParams(), where, report);
             case ServiceNode service -> checkCapacityParams(service.capacityParams(), where, report);
             case CacheNode cache -> {
                 checkCapacityParams(cache.capacityParams(), where, report);
-                requireRatio(cache.hitRatio(), where, "hitRatio", report);
+                requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
             }
             case DatabaseNode database -> checkCapacityParams(database.capacityParams(), where, report);
         }
@@ -123,19 +120,26 @@ final class TopologyValidator {
     private static void checkCapacityParams(CapacityParams params, String where, Consumer<String> report) {
         requireAtLeast(params.instances(), 1, where, "instances", report);
         requireAtLeast(params.concurrency(), 1, where, "concurrency", report);
-        requirePositive(params.serviceTimeMs(), where, "serviceTimeMs", report);
+        // 上限看乘積：worker 數決定 Erlang C 的計算量，各自檢查擋不住 40000 × 50000
+        if (params.instances() >= 1 && params.concurrency() >= 1 && params.workers() > MAX_WORKERS) {
+            report.accept(invalid(where, "instances × concurrency", "≤ " + bound(MAX_WORKERS), params.workers()));
+        }
+        requireBetween(params.serviceTimeMs(), MIN_SERVICE_TIME_MS, MAX_SERVICE_TIME_MS, where, "serviceTimeMs",
+                report);
     }
 
     /** 只檢查對這個起點有意義的欄位，其他欄位計算時忽略（spec 3.4）。 */
     private void checkParams(Edge edge, Node source) {
         String where = "連線 " + describe(edge);
         Consumer<String> report = message -> edgeError(edge, "INVALID_PARAM", message);
-        requireAtLeast(edge.latencyMs(), 0, where, "latencyMs", report);
+        requireBetween(edge.latencyMs(), 0, MAX_LATENCY_MS, where, "latencyMs", report);
         if (TopologyGraph.splitsByWeight(source)) {
             // weight 為 0 的下游收不到流量，等於沒有接
-            requirePositive(edge.weight(), where, "weight", report);
+            if (!(edge.weight() > 0 && edge.weight() <= MAX_WEIGHT)) {
+                report.accept(invalid(where, "weight", "> 0 且 ≤ " + bound(MAX_WEIGHT), edge.weight()));
+            }
         } else if (source instanceof ServiceNode) {
-            requireAtLeast(edge.callsPerRequest(), 1, where, "callsPerRequest", report);
+            requireBetween(edge.callsPerRequest(), 1, MAX_CALLS_PER_REQUEST, where, "callsPerRequest", report);
         }
     }
 
@@ -144,28 +148,24 @@ final class TopologyValidator {
     private static void requireAtLeast(double value, double min, String where, String param,
             Consumer<String> report) {
         if (!(value >= min) || Double.isInfinite(value)) {
-            report.accept(invalid(where, param, "≥ " + number(min), value));
+            report.accept(invalid(where, param, "≥ " + bound(min), value));
         }
     }
 
-    private static void requirePositive(double value, String where, String param, Consumer<String> report) {
-        if (!isPositive(value)) {
-            report.accept(invalid(where, param, "> 0", value));
-        }
-    }
-
-    private static boolean isPositive(double value) {
-        return value > 0 && !Double.isInfinite(value);
-    }
-
-    private static void requireRatio(double value, String where, String param, Consumer<String> report) {
-        if (!(value >= 0 && value <= 1)) {
-            report.accept(invalid(where, param, "介於 0 和 1 之間", value));
+    private static void requireBetween(double value, double min, double max, String where, String param,
+            Consumer<String> report) {
+        if (!(value >= min && value <= max)) {
+            report.accept(invalid(where, param, "介於 " + bound(min) + " 和 " + bound(max) + " 之間", value));
         }
     }
 
     private static String invalid(String where, String param, String expected, double actual) {
         return where + " 的 " + param + " 必須 " + expected + "，目前是 " + number(actual);
+    }
+
+    /** 合法範圍的邊界，例如 0.000001、1,000,000。前端的範圍說明用同樣的寫法 */
+    private static String bound(double value) {
+        return new DecimalFormat("#,##0.######", DecimalFormatSymbols.getInstance(Locale.ROOT)).format(value);
     }
 
     /** 整數不顯示小數點（1 而不是 1.0）；超出 long 能精確表示的範圍時照 double 顯示，例如 -1.0E20。 */

@@ -97,6 +97,15 @@ describe('合法的檔案', () => {
     })
     expect(topology.edges).toEqual([{ id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 }])
   })
+
+  it('超出參數範圍的值照樣讀入，留給 Run 在錯誤分頁回報', () => {
+    const file = validFile()
+    Object.assign(file.nodes[2].params, { instances: 40_000, concurrency: 50_000 })
+    file.nodes[0].params.rps = 1e13
+    file.edges[2].callsPerRequest = 100_000
+
+    expect(topologyOf(file)).toEqual(file)
+  })
 })
 
 describe('格式錯誤', () => {
@@ -177,6 +186,12 @@ describe('格式錯誤', () => {
       ])
     })
 
+    it('整數參數超出 32 位元整數', () => {
+      expect(errorsOf((f) => void (f.nodes[2].params.instances = 1e10))).toEqual([
+        'nodes[2]（id "svc"）：params.instances 數值太大（整數最多 2,147,483,647）',
+      ])
+    })
+
     it('Service 的 callMode 不合法', () => {
       expect(errorsOf((f) => void (f.nodes[2].params.callMode = 'ASYNC'))).toEqual([
         'nodes[2]（id "svc"）：params.callMode 必須是 SEQUENTIAL 或 PARALLEL',
@@ -221,6 +236,12 @@ describe('格式錯誤', () => {
         ok: false,
         errors: ['edges[1]（id "e2"）：latencyMs 必須是數字（或數值太大）'],
       })
+    })
+
+    it('callsPerRequest 超出 32 位元整數', () => {
+      expect(errorsOf((f) => void (f.edges[2].callsPerRequest = 2 ** 31))).toEqual([
+        'edges[2]（id "e3"）：callsPerRequest 數值太大（整數最多 2,147,483,647）',
+      ])
     })
 
     it('source 是空字串', () => {

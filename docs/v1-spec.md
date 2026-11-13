@@ -251,7 +251,7 @@ Client 的 `pass` 記為 1。彙總：
 | Client／LB 至少一個下游（Service 可以是終點，代表不依賴其他元件的服務） | `NO_DOWNSTREAM` |
 | 邊的 source / target 必須存在 | `UNKNOWN_NODE` |
 | 同一對 source → target 只能有一條邊 | `DUPLICATE_EDGE` |
-| 參數範圍（rps ≥ 0、0 ≤ ratio ≤ 1、instances ≥ 1、serviceTimeMs > 0…） | `INVALID_PARAM` |
+| 參數範圍（見下方合法範圍） | `INVALID_PARAM` |
 
 每個錯誤要附上 `nodeId` 或 `edgeId`，前端用來把有問題的節點標出來：
 
@@ -259,7 +259,23 @@ Client 的 `pass` 記為 1。彙總：
 - `CYCLE_DETECTED` 在環上的每個節點各一個錯誤；環下游、夾在兩個環中間的節點不算。
 - `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`NO_DOWNSTREAM` 附 `nodeId`。
 - `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則，但仍算在另一端的上下游數量裡（畫布上看得到這條邊，不重複報錯）。
-- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。每條都合法但總和溢位成無限大時無法計算比例，附該節點的 `nodeId`。
+- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。
+
+參數的合法範圍。上限擋掉會讓 Run 太慢（worker 數決定 Erlang C 的計算量）或結果溢位成 `Infinity` 的極端數值；屬性面板的輸入框用同一組範圍，匯入超出範圍的檔案時不擋，Run 之後在錯誤分頁顯示。
+
+| 參數 | 合法範圍 |
+|---|---|
+| `rps` | 0 ～ 1,000,000,000,000（1e12） |
+| `readRatio`、`hitRatio` | 0 ～ 1 |
+| `instances`、`concurrency` | 各自 ≥ 1 的整數，且 `instances × concurrency` ≤ 1,000,000（看乘積，不是各自檢查） |
+| `serviceTimeMs` | 0.000001 ～ 10,000,000（1e-6 ～ 1e7） |
+| `latencyMs` | 0 ～ 10,000,000（1e7） |
+| `callsPerRequest` | 1 ～ 10,000 的整數 |
+| `weight` | > 0 且 ≤ 1,000,000（1e6） |
+
+Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms，十幾個節點就超過 1 秒。這組上限保證的是一般大小的拓撲：上百個接近滿載的節點仍可能超過 1 秒，幾十層、每層都把 `callsPerRequest` 開到上限的依序呼叫鏈，端到端延遲仍可能溢位。
+
+匯入檔案裡的整數參數（`instances`、`concurrency`、`callsPerRequest`）超出 32 位元整數時，API 沒辦法解析，所以匯入時就當成格式錯誤擋下；32 位元範圍內但超過上限的值照樣讀入。
 
 錯誤依 `NO_CLIENT`、各節點、各邊排列，節點和邊依輸入順序。`message` 是給使用者看的中文說明，用節點名稱指稱節點。
 

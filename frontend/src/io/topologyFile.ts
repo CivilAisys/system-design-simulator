@@ -115,9 +115,12 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
       fail(`缺少數值參數 params.${param}（或數值太大）`)
       return null
     }
-    if (NODE_PARAM_SPECS[param].integer && !Number.isInteger(value)) {
-      fail(`params.${param} 必須是整數`)
-      return null
+    if (NODE_PARAM_SPECS[param].integer) {
+      const error = checkInteger(value)
+      if (error) {
+        fail(`params.${param} ${error}`)
+        return null
+      }
     }
     kept[param] = value
   }
@@ -192,9 +195,12 @@ function toEdge(
       fail(`${field} 必須是數字（或數值太大）`)
       return null
     }
-    if (field === 'callsPerRequest' && !Number.isInteger(value)) {
-      fail('callsPerRequest 必須是整數')
-      return null
+    if (field === 'callsPerRequest') {
+      const error = checkInteger(value)
+      if (error) {
+        fail(`callsPerRequest ${error}`)
+        return null
+      }
     }
     numbers[field] = value
   }
@@ -247,6 +253,17 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 // JSON.parse 會把 1e400 這類溢位的數字變成 Infinity，送出時又變成 null
+const INT32_MAX = 2 ** 31 - 1
+
+// 整數參數在 API 是 32 位元整數，超出時後端整份拒絕（HTTP 400），沒辦法在錯誤分頁指出是哪個節點，
+// 所以和 Infinity 一樣當成格式錯誤。範圍內但超過上限的值照樣讀入，由 Run 回報（spec 4.5）
+function checkInteger(value: number): string | null {
+  if (!Number.isInteger(value)) {
+    return '必須是整數'
+  }
+  return Math.abs(value) > INT32_MAX ? `數值太大（整數最多 ${INT32_MAX.toLocaleString('en-US')}）` : null
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }

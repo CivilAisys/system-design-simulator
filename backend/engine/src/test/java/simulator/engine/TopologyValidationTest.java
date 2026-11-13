@@ -217,16 +217,6 @@ class TopologyValidationTest {
     }
 
     @Test
-    void weightsWhoseSumOverflowAreRejected() {
-        // 1e308 + 1e308 = Infinity，各邊比例會變成 0，下游收不到流量
-        SimulationResult result = run(List.of(client("c"), loadBalancer("lb"), database("a"), database("b")),
-                List.of(edge("e1", "c", "lb"), new Edge("e2", "lb", "a", 1e308, 1, 1),
-                        new Edge("e3", "lb", "b", 1e308, 1, 1)));
-
-        assertErrors(result, tuple("INVALID_PARAM", "lb", null));
-    }
-
-    @Test
     void largeNumbersAreShownAsIs() {
         SimulationResult result = run(List.of(new ClientNode("c", "c", NodeHealth.HEALTHY, -1e20, 0.9),
                 database("db")), List.of(edge("e1", "c", "db")));
