@@ -2,6 +2,8 @@ import { lazy, Suspense } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { SimulationResult, Topology } from '@/api/client'
 import type { Theme } from '@/theme'
+import { cn } from '@/lib/utils'
+import { formatPercent, formatRps } from '@/canvas/format'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 import { MetricsTable } from './MetricsTable'
 
@@ -32,10 +34,20 @@ export function ResultsPanel({ topology, result, running, theme }: ResultsPanelP
           <TabsTrigger value="errors">錯誤 ({errorCount})</TabsTrigger>
         </TabsList>
         {computed && (
-          <p className="text-sm">
-            <span className="mr-2 text-muted-foreground">平均端到端延遲</span>
-            <EndToEndLatencyText latencies={computed.summary.avgEndToEndMs} topology={topology} />
-          </p>
+          <>
+            <p className="text-sm tabular-nums">
+              <span className="mr-2 text-muted-foreground">Success</span>
+              {formatRps(computed.summary.successRps)}
+              <span className="mx-2 text-muted-foreground">Drop rate</span>
+              <span className={cn(computed.summary.dropRate > 0 && 'text-destructive')}>
+                {formatPercent(computed.summary.dropRate)}
+              </span>
+            </p>
+            <p className="text-sm">
+              <span className="mr-2 text-muted-foreground">平均端到端延遲</span>
+              <EndToEndLatencyText latencies={computed.summary.avgEndToEndMs} topology={topology} />
+            </p>
+          </>
         )}
       </div>
       <TabsContent value="metrics" className="min-h-0 overflow-auto">

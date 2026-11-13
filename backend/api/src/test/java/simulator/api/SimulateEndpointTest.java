@@ -27,7 +27,7 @@ import org.springframework.test.web.servlet.ResultActions;
 class SimulateEndpointTest {
 
     private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps",
-            "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status");
+            "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status");
     private static final List<String> SERVER_FIELDS = List.of("capacityRps", "utilization", "avgQueueMs",
             "avgLatencyMs", "status");
 
@@ -57,6 +57,7 @@ class SimulateEndpointTest {
         assertThat(client.at("/arrivalRps/write").asDouble()).isCloseTo(100, within(1e-6));
         assertThat(client.get("throughputRps").asDouble()).isEqualTo(1000);
         assertThat(client.get("droppedRps").asDouble()).isZero();
+        assertThat(client.get("successRps").asDouble()).isEqualTo(1000);
         for (String field : SERVER_FIELDS) {
             assertThat(client.get(field).isNull()).as("client %s", field).isTrue();
         }
@@ -74,14 +75,18 @@ class SimulateEndpointTest {
         assertThat(svc.get("avgLatencyMs").asDouble()).isCloseTo(50, within(1e-6));
         assertThat(svc.get("status").asText()).isEqualTo("OK");
         assertThat(svc.get("endToEndMs").isNull()).isTrue();
+        assertThat(svc.get("successRps").isNull()).isTrue();
 
         JsonNode e1 = body.at("/edges/e1/rps");
         assertThat(e1.get("read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(e1.get("write").asDouble()).isCloseTo(100, within(1e-6));
 
         JsonNode summary = body.get("summary");
-        assertThat(fieldNames(summary)).contains("offeredRps", "avgEndToEndMs", "bottleneckNodeId");
+        assertThat(fieldNames(summary)).containsExactlyInAnyOrder("offeredRps", "successRps", "dropRate",
+                "avgEndToEndMs", "bottleneckNodeId");
         assertThat(summary.get("offeredRps").asDouble()).isEqualTo(1000);
+        assertThat(summary.get("successRps").asDouble()).isEqualTo(1000);
+        assertThat(summary.get("dropRate").asDouble()).isZero();
         // 只有一個 Client 時等於該 Client 的延遲
         assertThat(summary.get("avgEndToEndMs")).isEqualTo(client.get("endToEndMs"));
         assertThat(summary.get("bottleneckNodeId").asText()).isEqualTo("svc-1");

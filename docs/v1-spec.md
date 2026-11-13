@@ -225,7 +225,7 @@ Service 有 fan-out 時，下游的 RPS 是「子呼叫」而不是「使用者�
 
 Client 的 `pass` 記為 1。彙總：
 - `successRps = Σ_client Σ_class client 的該 class rps × S(client, class)`
-- `dropRate = 1 − successRps / offeredRps`
+- `dropRate = 1 − successRps / offeredRps`；`offeredRps = 0` 時沒有東西被丟，記為 0
 
 > **簡化假設**：各節點的丟棄彼此獨立。
 
@@ -357,7 +357,7 @@ Client 的 `pass` 記為 1。彙總：
 - `0` 表示「這個量存在，數值剛好是零」，例如沒有流量的 Service `utilization: 0`、Client `droppedRps: 0`。
 - `null` 有兩種意思：**不適用**（Client 的 `utilization`、`status` 等）和**無定義**（過載時的延遲，見 4.2、4.3）。
 - 前端把 `null` 顯示為「—」，不能當成 0。「無定義」的情況要附上原因；`status: null` 的節點不變色、不發光。
-- 流量類欄位（`arrivalRps`、`throughputRps`、`droppedRps`、`successRps`）永遠是數字，不會是 `null`。
+- 流量類欄位（`arrivalRps`、`throughputRps`、`droppedRps`）永遠是數字，不會是 `null`。`successRps` 只有 Client 有：Client 一律是數字，其他節點是 `null`（不適用，fan-out 後下游的子呼叫數不是使用者請求數）。
 
 ---
 
