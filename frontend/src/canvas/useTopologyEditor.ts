@@ -7,9 +7,10 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import type { Edge, Node, NodeType, Topology } from '@/api/client'
-import { newNode, type NodeParams } from './catalog'
+import { newEdgeId, newNode, type NodeParams } from './catalog'
 import type { SimFlowNode } from './SimNode'
 import { arrowMarker } from './edgeStyle'
+import { copyNodes, pasteClip, type Clip } from './clipboard'
 import { canConnect } from './graph'
 import { commit, createHistory, redo, replace, undo, type History, type Step } from './history'
 import type { RpsFlowEdge } from './RpsEdge'
@@ -46,6 +47,8 @@ export function useTopologyEditor(initial: Topology) {
   // 復原回來的節點和邊因此不會和別的元素同 id，畫布上的結果（以 id 對應）不會套錯
   const [usedIds] = useState(() => new Set([...initial.nodes, ...initial.edges].map((item) => item.id)))
   const removeGroup = useRemoveGroup()
+  // 複製下來的節點和已經貼上幾次（每次貼上多偏移一點）。只在這個分頁裡，不用系統剪貼簿
+  const clipboard = useRef<{ clip: Clip; pastes: number } | null>(null)
 
   // 修改畫布，記成一步
   const edit = useCallback((update: (state: CanvasState) => CanvasState, group: string | null = null) => {
@@ -82,8 +85,7 @@ export function useTopologyEditor(initial: Topology) {
 
   const onConnect = useCallback(
     (c: Connection) => {
-      // 刪掉再重連同一對節點時不能沿用舊的 id，理由同 newNode
-      const id = unusedId(`e-${c.source}-${c.target}`, usedIds)
+      const id = newEdgeId(c.source, c.target, usedIds)
       usedIds.add(id)
       edit((state) => {
         if (!canConnect(state.edges, c.source, c.target)) {
@@ -123,6 +125,46 @@ export function useTopologyEditor(initial: Topology) {
     },
     [usedIds],
   )
+
+  // 複製選取的節點（含位置）。回傳是否有節點可以複製
+  const copy = useCallback(() => {
+    const { nodes, edges } = latest.current.present
+    const clip = copyNodes(
+      nodes.map((n) => ({ ...n.data.node, ui: n.position })),
+      edges.map((e) => e.data.edge),
+      new Set(nodes.flatMap((n) => (n.selected ? [n.id] : []))),
+    )
+    if (clip) {
+      clipboard.current = { clip, pastes: 0 }
+    }
+    return clip != null
+  }, [])
+
+  // 貼上複製的節點，算一步；選取換成貼上的節點。回傳是否有東西可以貼
+  const paste = useCallback(() => {
+    const held = clipboard.current
+    if (!held) {
+      return false
+    }
+    held.pastes++
+    const names = latest.current.present.nodes.map((n) => n.data.node.name)
+    const pasted = pasteClip(held.clip, held.pastes, usedIds, names)
+    for (const item of [...pasted.nodes, ...pasted.edges]) {
+      usedIds.add(item.id)
+    }
+    edit((state) => ({
+      ...state,
+      nodes: [
+        ...state.nodes.map((n) => withSelected(n, false)),
+        ...pasted.nodes.map((node) => ({ ...toFlowNode(node), selected: true })),
+      ],
+      edges: [
+        ...state.edges.map((e) => withSelected(e, false)),
+        ...pasted.edges.map(toFlowEdge),
+      ],
+    }))
+    return true
+  }, [usedIds, edit])
 
   // 只選取這個節點或邊（另一個傳 null），屬性面板會切到它
   const select = useCallback((target: { nodeId: string | null; edgeId: string | null }) => {
@@ -231,6 +273,8 @@ export function useTopologyEditor(initial: Topology) {
     isValidConnection,
     addNode,
     load,
+    copy,
+    paste,
     select,
     updateNode,
     updateEdge,
@@ -303,15 +347,6 @@ function useShallowStable<T>(items: T[]): T[] {
   }
   setStable(items)
   return items
-}
-
-// base 沒用過就用 base，否則加上 -2、-3…
-function unusedId(base: string, usedIds: ReadonlySet<string>): string {
-  let id = base
-  for (let n = 2; usedIds.has(id); n++) {
-    id = `${base}-${n}`
-  }
-  return id
 }
 
 // 選取狀態沒變時沿用原物件，React Flow 不用重畫它
