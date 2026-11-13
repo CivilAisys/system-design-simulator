@@ -283,7 +283,7 @@ class TopologyValidationTest {
     void duplicateNodeIdIsMalformed() {
         assertThatThrownBy(() -> run(List.of(client("c"), service("x"), database("x")),
                 List.of(edge("e1", "c", "x"))))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(TopologyFormatException.class)
                 .hasMessageContaining("x");
     }
 
@@ -291,7 +291,7 @@ class TopologyValidationTest {
     void duplicateEdgeIdIsMalformed() {
         assertThatThrownBy(() -> run(List.of(client("c"), service("s"), database("db")),
                 List.of(edge("e1", "c", "s"), edge("e1", "s", "db"))))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(TopologyFormatException.class)
                 .hasMessageContaining("e1");
     }
 }
