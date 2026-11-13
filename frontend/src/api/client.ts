@@ -4,6 +4,7 @@ import type { components, paths } from './schema'
 export type Topology = components['schemas']['Topology']
 export type Node = components['schemas']['Node']
 export type NodeType = Node['type']
+export type Edge = components['schemas']['Edge']
 export type NodeResult = components['schemas']['NodeResult']
 export type EdgeResult = components['schemas']['EdgeResult']
 export type Status = NonNullable<NodeResult['status']>

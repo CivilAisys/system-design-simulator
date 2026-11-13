@@ -5,22 +5,38 @@ import {
   type EdgeProps,
   type Edge as FlowEdge,
 } from '@xyflow/react'
-import type { EdgeResult } from '@/api/client'
+import type { Edge, EdgeResult } from '@/api/client'
 import { formatRps } from './format'
 
 export type RpsEdgeData = {
+  edge: Edge
   result?: EdgeResult
 }
 
-export type RpsFlowEdge = FlowEdge<RpsEdgeData, 'rps'>
+// React Flow 的 edge.data 是選填，這裡一定有對應的 Edge
+export type RpsFlowEdge = FlowEdge<RpsEdgeData, 'rps'> & { data: RpsEdgeData }
 
-export function RpsEdge({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, data }: EdgeProps<RpsFlowEdge>) {
+export function RpsEdge({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  selected,
+  data,
+}: EdgeProps<RpsFlowEdge>) {
   const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
-  const rps = data?.result?.rps
+  const rps = data.result?.rps
 
   return (
     <>
-      <BaseEdge path={path} markerEnd={markerEnd} />
+      <BaseEdge
+        path={path}
+        markerEnd={markerEnd}
+        style={selected ? { stroke: 'var(--primary)', strokeWidth: 2 } : undefined}
+      />
       {rps && (
         <EdgeLabelRenderer>
           <div

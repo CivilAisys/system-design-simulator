@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
-import { Database, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { Node, NodeResult, NodeType, Status } from '@/api/client'
+import type { Node, NodeResult, Status } from '@/api/client'
+import { hasInput, hasOutput, NODE_KINDS } from './catalog'
 import { formatUtilization } from './format'
 
 export type SimNodeData = {
@@ -10,14 +10,6 @@ export type SimNodeData = {
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
-
-const ICONS: Record<NodeType, LucideIcon> = {
-  CLIENT: Users,
-  LOAD_BALANCER: Network,
-  SERVICE: Server,
-  CACHE: Zap,
-  DATABASE: Database,
-}
 
 // 第 4.4 節的狀態色，用 ring 和光暈疊在 bg-card 上，不改底色
 const STATUS_CLASSES: Record<Status, string> = {
@@ -34,9 +26,9 @@ const STATUS_TEXT: Record<Status, string> = {
   OVERLOADED: 'text-red-500',
 }
 
-export function SimNode({ data }: NodeProps<SimFlowNode>) {
+export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { node, result } = data
-  const Icon = ICONS[node.type]
+  const Icon = NODE_KINDS[node.type].icon
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
 
@@ -45,9 +37,10 @@ export function SimNode({ data }: NodeProps<SimFlowNode>) {
       className={cn(
         'min-w-36 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm',
         status && STATUS_CLASSES[status],
+        selected && 'border-primary',
       )}
     >
-      {node.type !== 'CLIENT' && <Handle type="target" position={Position.Left} />}
+      {hasInput(node.type) && <Handle type="target" position={Position.Left} />}
       <div className="flex items-center gap-2">
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         <span className="font-medium">{node.name}</span>
@@ -58,7 +51,7 @@ export function SimNode({ data }: NodeProps<SimFlowNode>) {
           {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{status}</span>}
         </div>
       )}
-      {node.type !== 'DATABASE' && <Handle type="source" position={Position.Right} />}
+      {hasOutput(node.type) && <Handle type="source" position={Position.Right} />}
     </div>
   )
 }
