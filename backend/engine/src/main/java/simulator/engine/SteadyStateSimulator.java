@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * v1 的穩態計算：先驗證拓撲（有錯誤就不計算），每個節點視為 M/M/c，依拓撲排序由上游往下游計算流量，
+ * 階段一的穩態計算：先驗證拓撲（有錯誤就不計算），每個節點視為 M/M/c，依拓撲排序由上游往下游計算流量，
  * 再由下游往上游計算端到端延遲與成功率。
  */
 public final class SteadyStateSimulator implements Simulator {

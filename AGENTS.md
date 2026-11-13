@@ -1,6 +1,6 @@
 ## Git workflow
 
-- `main` holds released versions only. It is protected: never push to it directly. A release is a PR from `develop` to `main`, followed by a SemVer tag on `main` (for example `v1.0.0`).
+- `main` holds released versions only. It is protected: never push to it directly. A release is a PR from `develop` to `main`, followed by a SemVer tag on `main` (for example `v0.2.0`). Version numbers stay 0.x for now; bump rules are in `docs/adr/0001-versioning.md`. Set the same version in `frontend/package.json` and `backend/build.gradle.kts` before releasing.
 - `develop` is the default branch. All work branches start from an up-to-date `develop` and go back to it through a PR.
 - Branch names: `feat/<issue-number>-<short-name>` for a ticket (for example `feat/1-backend-skeleton`), `fix/<issue-number>-<short-name>` for a bug, `chore/<short-name>` for work with no issue.
 - A ticket's PR targets `develop` and its body contains `Closes #<issue-number>`, so merging closes the issue and unblocks the tickets it blocks.
