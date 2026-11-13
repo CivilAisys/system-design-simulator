@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   applyEdgeChanges,
   applyNodeChanges,
@@ -11,6 +11,7 @@ import { newNode, type NodeParams } from './catalog'
 import type { SimFlowNode } from './SimNode'
 import { arrowMarker } from './edgeStyle'
 import { canConnect } from './graph'
+import { commit, createHistory, redo, replace, undo, type History, type Step } from './history'
 import type { RpsFlowEdge } from './RpsEdge'
 
 const TOPOLOGY_VERSION = 1
@@ -21,21 +22,45 @@ const EDGE_DEFAULTS = { weight: 1, callsPerRequest: 1, latencyMs: 1 }
 export type NodePatch = { name?: string; params?: Partial<NodeParams> }
 export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>>
 
+type CanvasState = { nodes: SimFlowNode[]; edges: RpsFlowEdge[] }
+
 // 畫布上的 React Flow nodes／edges 是唯一的狀態來源（含位置和選取），
-// 送給後端的 Topology 從它們推導，位置寫回 ui 欄位
+// 送給後端的 Topology 從它們推導，位置寫回 ui 欄位。
+// 每次修改連同當時的選取記成一步，可以復原和重做；選取、量尺寸不算一步
 export function useTopologyEditor(initial: Topology) {
-  const [nodes, setNodes] = useState<SimFlowNode[]>(() => initial.nodes.map(toFlowNode))
-  const [edges, setEdges] = useState<RpsFlowEdge[]>(() => initial.edges.map(toFlowEdge))
-  // 用過的節點和邊 id（含已刪除的），新建時不沿用，見 newNode。只在事件中修改，不影響畫面
+  const [history, setHistory] = useState<History<CanvasState>>(() => createHistory(toCanvasState(initial)))
+  const { nodes, edges } = history.present
+  // 用過的節點和邊 id（含已刪除的），新建時不沿用，見 newNode。只在事件中修改，不影響畫面。
+  // 復原回來的節點和邊因此不會和別的元素同 id，畫布上的結果（以 id 對應）不會套錯
   const [usedIds] = useState(() => new Set([...initial.nodes, ...initial.edges].map((item) => item.id)))
+  const removeGroup = useRemoveGroup()
+
+  // 修改畫布，記成一步
+  const edit = useCallback((update: (state: CanvasState) => CanvasState, group: string | null = null) => {
+    const at = Date.now()
+    setHistory((h) => commit(h, update(h.present), { group, at }))
+  }, [])
 
   const onNodesChange = useCallback(
-    (changes: NodeChange<SimFlowNode>[]) => setNodes((ns) => applyNodeChanges(changes, ns)),
-    [],
+    (changes: NodeChange<SimFlowNode>[]) => {
+      const step: Step = { group: changes.some(isRemove) ? removeGroup() : moveGroup(changes), at: Date.now() }
+      setHistory((h) => {
+        const next = { ...h.present, nodes: applyNodeChanges(changes, h.present.nodes) }
+        return isNodeEdit(changes, h.present.nodes) ? commit(h, next, step) : replace(h, next)
+      })
+    },
+    [removeGroup],
   )
   const onEdgesChange = useCallback(
-    (changes: EdgeChange<RpsFlowEdge>[]) => setEdges((es) => applyEdgeChanges(changes, es)),
-    [],
+    (changes: EdgeChange<RpsFlowEdge>[]) => {
+      const removed = changes.some(isRemove)
+      const step: Step = { group: removed ? removeGroup() : null, at: Date.now() }
+      setHistory((h) => {
+        const next = { ...h.present, edges: applyEdgeChanges(changes, h.present.edges) }
+        return removed ? commit(h, next, step) : replace(h, next)
+      })
+    },
+    [removeGroup],
   )
 
   const isValidConnection = useCallback(
@@ -48,14 +73,15 @@ export function useTopologyEditor(initial: Topology) {
       // 刪掉再重連同一對節點時不能沿用舊的 id，理由同 newNode
       const id = unusedId(`e-${c.source}-${c.target}`, usedIds)
       usedIds.add(id)
-      setEdges((es) => {
-        if (!canConnect(es, c.source, c.target)) {
-          return es
+      edit((state) => {
+        if (!canConnect(state.edges, c.source, c.target)) {
+          return state
         }
-        return [...es, toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS })]
+        const edge = toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS })
+        return { ...state, edges: [...state.edges, edge] }
       })
     },
-    [usedIds],
+    [usedIds, edit],
   )
 
   // 新節點取代原本的選取，屬性面板直接切到它
@@ -63,57 +89,74 @@ export function useTopologyEditor(initial: Topology) {
     (type: NodeType, position: { x: number; y: number }) => {
       const node = newNode(type, usedIds, position)
       usedIds.add(node.id)
-      setNodes((ns) => [
-        ...ns.map((n) => (n.selected ? { ...n, selected: false } : n)),
-        { ...toFlowNode(node), selected: true },
-      ])
+      edit((state) => ({
+        ...state,
+        nodes: [...state.nodes.map((n) => withSelected(n, false)), { ...toFlowNode(node), selected: true }],
+      }))
     },
-    [usedIds],
+    [usedIds, edit],
   )
 
-  // 整份換成另一個拓撲（匯入、載入範例）。它的 id 也算用過，之後新建的節點和邊不會撞到
+  // 整份換成另一個拓撲（匯入、載入範例），復原紀錄清空。它的 id 也算用過，之後新建的節點和邊不會撞到
   const load = useCallback(
     (topology: Topology) => {
       for (const item of [...topology.nodes, ...topology.edges]) {
         usedIds.add(item.id)
       }
-      setNodes(topology.nodes.map(toFlowNode))
-      setEdges(topology.edges.map(toFlowEdge))
+      setHistory(createHistory(toCanvasState(topology)))
     },
     [usedIds],
   )
 
   // 只選取這個節點或邊（另一個傳 null），屬性面板會切到它
   const select = useCallback((target: { nodeId: string | null; edgeId: string | null }) => {
-    setNodes((ns) => ns.map((n) => withSelected(n, n.id === target.nodeId)))
-    setEdges((es) => es.map((e) => withSelected(e, e.id === target.edgeId)))
+    setHistory((h) =>
+      replace(h, {
+        nodes: h.present.nodes.map((n) => withSelected(n, n.id === target.nodeId)),
+        edges: h.present.edges.map((e) => withSelected(e, e.id === target.edgeId)),
+      }),
+    )
   }, [])
 
+  // 連續修改同一個欄位（打字、拖 slider）併成一步
   const updateNode = useCallback(
     (id: string, patch: NodePatch) =>
-      setNodes((ns) =>
-        ns.map((n) => {
-          if (n.id !== id) {
-            return n
-          }
-          const node = n.data.node
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              node: { ...node, name: patch.name ?? node.name, params: { ...node.params, ...patch.params } },
-            },
-          }
+      edit(
+        (state) => ({
+          ...state,
+          nodes: state.nodes.map((n) => {
+            if (n.id !== id) {
+              return n
+            }
+            const node = n.data.node
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                node: { ...node, name: patch.name ?? node.name, params: { ...node.params, ...patch.params } },
+              },
+            }
+          }),
         }),
+        fieldGroup(`node:${id}`, { name: patch.name, ...patch.params }),
       ),
-    [],
+    [edit],
   )
 
   const updateEdge = useCallback(
     (id: string, patch: EdgePatch) =>
-      setEdges((es) => es.map((e) => (e.id === id ? { ...e, data: { ...e.data, edge: { ...e.data.edge, ...patch } } } : e))),
-    [],
+      edit(
+        (state) => ({
+          ...state,
+          edges: state.edges.map((e) => (e.id === id ? { ...e, data: { ...e.data, edge: { ...e.data.edge, ...patch } } } : e)),
+        }),
+        fieldGroup(`edge:${id}`, patch),
+      ),
+    [edit],
   )
+
+  const undoEdit = useCallback(() => setHistory(undo), [])
+  const redoEdit = useCallback(() => setHistory(redo), [])
 
   // 只看 data（參數、名稱、連線），拖動和選取只換掉 React Flow 節點本身、data 不變，
   // 所以這份拓撲在拖動時維持同一個參考，Auto-run 不用每一幀都重新比對
@@ -147,7 +190,58 @@ export function useTopologyEditor(initial: Topology) {
     select,
     updateNode,
     updateEdge,
+    undo: undoEdit,
+    redo: redoEdit,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
   }
+}
+
+// 同一個 task 裡的刪除算同一步：React Flow 刪 Node 時先送相連 Edge 的 remove、再送 Node 的 remove，是兩次呼叫
+function useRemoveGroup() {
+  const batch = useRef({ id: 0, open: false })
+  return useCallback(() => {
+    const current = batch.current
+    if (!current.open) {
+      current.open = true
+      current.id++
+      queueMicrotask(() => {
+        current.open = false
+      })
+    }
+    return `remove:${current.id}`
+  }, [])
+}
+
+function isRemove(change: NodeChange | EdgeChange): boolean {
+  return change.type === 'remove'
+}
+
+// 新增、刪除、移動節點算一步；選取和量尺寸不算。
+// 拖動時 React Flow 每一幀都送 dragging 的位置，只在開始拖（節點還沒在拖）時記一步，中途和放開都不算
+function isNodeEdit(changes: NodeChange<SimFlowNode>[], nodes: SimFlowNode[]): boolean {
+  return changes.some((change) => {
+    if (change.type !== 'position') {
+      return change.type === 'remove' || change.type === 'add' || change.type === 'replace'
+    }
+    return change.position != null && !nodes.find((n) => n.id === change.id)?.dragging
+  })
+}
+
+// 用方向鍵移動（不是拖動）時，按住不放併成一步
+function moveGroup(changes: NodeChange<SimFlowNode>[]): string | null {
+  const moved = changes.flatMap((change) => (change.type === 'position' && !change.dragging ? [change.id] : []))
+  return moved.length > 0 ? `move:${moved.join(',')}` : null
+}
+
+// 同一個元素的同一組欄位才併成一步
+function fieldGroup(target: string, patch: object): string {
+  const fields = Object.entries(patch).flatMap(([field, value]) => (value === undefined ? [] : [field]))
+  return `${target}:${fields.sort().join(',')}`
+}
+
+function toCanvasState(topology: Topology): CanvasState {
+  return { nodes: topology.nodes.map(toFlowNode), edges: topology.edges.map(toFlowEdge) }
 }
 
 // 元素逐一相同時沿用上一次的陣列（在 render 中更新 state，React 文件的「儲存前一次 render 的資訊」寫法）
