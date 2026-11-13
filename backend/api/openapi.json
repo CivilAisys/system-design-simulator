@@ -172,6 +172,18 @@
         },
         "required" : [ "edges", "nodes", "version" ]
       },
+      "ClassLatencies" : {
+        "type" : "object",
+        "properties" : {
+          "read" : {
+            "$ref" : "#/components/schemas/EndToEndLatency"
+          },
+          "write" : {
+            "$ref" : "#/components/schemas/EndToEndLatency"
+          }
+        },
+        "required" : [ "read", "write" ]
+      },
       "ClassRates" : {
         "type" : "object",
         "properties" : {
@@ -195,6 +207,33 @@
         },
         "required" : [ "rps" ]
       },
+      "EndToEndLatency" : {
+        "type" : "object",
+        "description" : "一個 request class 的端到端延遲（spec 4.3）",
+        "properties" : {
+          "ms" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "無定義時為 null，原因見 undefinedReason"
+          },
+          "approximate" : {
+            "type" : "boolean",
+            "description" : "路徑上有平行呼叫多個下游，會低估真實延遲；ms 為 null 時一定是 false"
+          },
+          "overloadedNodeIds" : {
+            "type" : "array",
+            "description" : "這個 class 實際會走到、而且過載的節點",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "undefinedReason" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "OVERLOADED", "NO_DOWNSTREAM", "NO_TRAFFIC" ]
+          }
+        },
+        "required" : [ "approximate", "ms", "overloadedNodeIds", "undefinedReason" ]
+      },
       "NodeResult" : {
         "type" : "object",
         "properties" : {
@@ -208,6 +247,14 @@
           "droppedRps" : {
             "type" : "number",
             "format" : "double"
+          },
+          "endToEndMs" : {
+            "description" : "只有 Client 有",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/ClassLatencies"
+            }, {
+              "type" : "null"
+            } ]
           },
           "capacityRps" : {
             "type" : [ "number", "null" ],
@@ -230,7 +277,7 @@
             "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED" ]
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "status", "throughputRps", "utilization" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "status", "throughputRps", "utilization" ]
       },
       "SimulationResult" : {
         "type" : "object",
@@ -269,11 +316,14 @@
             "type" : "number",
             "format" : "double"
           },
+          "avgEndToEndMs" : {
+            "$ref" : "#/components/schemas/ClassLatencies"
+          },
           "bottleneckNodeId" : {
             "type" : [ "string", "null" ]
           }
         },
-        "required" : [ "bottleneckNodeId", "offeredRps" ]
+        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "offeredRps" ]
       },
       "ValidationError" : {
         "type" : "object",

@@ -1,11 +1,15 @@
 package simulator.engine;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** v1 的穩態計算：每個節點視為 M/M/c，依拓撲排序由上游往下游計算流量。 */
+/**
+ * v1 的穩態計算：每個節點視為 M/M/c，依拓撲排序由上游往下游計算流量，
+ * 再由下游往上游計算端到端延遲。
+ */
 public final class SteadyStateSimulator implements Simulator {
 
     @Override
@@ -16,13 +20,16 @@ public final class SteadyStateSimulator implements Simulator {
 
         Map<String, NodeResult> nodeResults = new HashMap<>();
         Map<String, EdgeResult> edgeResults = new HashMap<>();
-        for (Node node : graph.topologicalOrder()) {
+        // Client 的結果要等端到端延遲算完才能建立
+        Map<String, ClassRates> sentByClient = new HashMap<>();
+        List<Node> order = graph.topologicalOrder();
+        for (Node node : order) {
             ClassRates arrival = arrivals.get(node.id());
             ClassRates processed = switch (node) {
                 case ClientNode client -> {
                     double read = client.rps() * client.readRatio();
                     var sent = new ClassRates(read, client.rps() - read);
-                    nodeResults.put(node.id(), NodeResult.client(sent));
+                    sentByClient.put(node.id(), sent);
                     yield sent;
                 }
                 case LoadBalancerNode lb -> process(lb.capacityParams(), arrival, node.id(), nodeResults);
@@ -31,23 +38,19 @@ public final class SteadyStateSimulator implements Simulator {
                 case DatabaseNode database -> process(database.capacityParams(), arrival, node.id(), nodeResults);
             };
 
-            List<Edge> edges = graph.outgoing(node.id());
-            double totalWeight = edges.stream().mapToDouble(Edge::weight).sum();
-            for (Edge edge : edges) {
-                ClassRates rps = switch (node) {
-                    case ClientNode client -> processed.times(edge.weight() / totalWeight);
-                    case LoadBalancerNode lb -> processed.times(edge.weight() / totalWeight);
-                    case ServiceNode service -> processed.times(edge.callsPerRequest());
-                    case CacheNode cache -> new ClassRates(processed.read() * (1 - cache.hitRatio()), processed.write());
-                    case DatabaseNode database -> ClassRates.ZERO;
-                };
+            for (Edge edge : graph.outgoing(node.id())) {
+                var rps = new ClassRates(processed.read() * graph.visits(edge, true),
+                        processed.write() * graph.visits(edge, false));
                 edgeResults.put(edge.id(), new EdgeResult(rps));
                 arrivals.merge(edge.target(), rps, ClassRates::plus);
             }
         }
 
+        var endToEnd = new EndToEndLatencies(topology, graph, order, nodeResults);
+        sentByClient.forEach((id, sent) -> nodeResults.put(id, NodeResult.client(sent, endToEnd.client(id, sent))));
+
         return new SimulationResult(true, List.of(), inNodeOrder(topology, nodeResults),
-                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults));
+                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd));
     }
 
     private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
@@ -57,13 +60,16 @@ public final class SteadyStateSimulator implements Simulator {
         return outcome.processed();
     }
 
-    private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults) {
+    private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults,
+            EndToEndLatencies endToEnd) {
         double offered = 0;
+        List<NodeResult> clients = new ArrayList<>();
         String bottleneck = null;
         double highest = Double.NEGATIVE_INFINITY;
         for (Node node : topology.nodes()) {
             if (node instanceof ClientNode client) {
                 offered += client.rps();
+                clients.add(nodeResults.get(node.id()));
             }
             Double utilization = nodeResults.get(node.id()).utilization();
             if (utilization != null && utilization > highest) {
@@ -71,7 +77,7 @@ public final class SteadyStateSimulator implements Simulator {
                 bottleneck = node.id();
             }
         }
-        return new Summary(offered, bottleneck);
+        return new Summary(offered, endToEnd.average(clients), bottleneck);
     }
 
     private static Map<String, NodeResult> inNodeOrder(Topology topology, Map<String, NodeResult> results) {

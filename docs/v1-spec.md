@@ -182,7 +182,19 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 | Cache（read） | `W(n) + (1 − hitRatio) × (edge.latencyMs×2 + L(child))` |
 | Cache（write） | `W(n) + edge.latencyMs×2 + L(child)` |
 
-Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該 class 的端到端延遲記為 `null`，因為系統不在穩態。前端要在 `null` 旁邊顯示原因（例如「DB 過載，穩態延遲無定義」），並搭配 `successRps`（4.3.1）讓使用者看到還有多少請求成功。
+Client 本身沒有 W（記為 0）。
+
+**「路徑」只算這個 class 實際會走到的下游**：一個請求平均往某條邊送的次數（Client／LB 的 `weight_i / Σweight`、Service 的 `callsPerRequest`、Cache read 的 `1 − hitRatio`）為 0 時，那個下游不在這個 class 的路徑上，公式裡也略過它（避免 `0 × null`）。例如 `hitRatio = 1` 時 read 不會到 DB，DB 被 write 壓到過載只讓 write 變成 `null`。
+
+端到端延遲在下列情況記為 `null`，回應的 `undefinedReason` 說明原因：
+
+| `undefinedReason` | 情況 |
+|---|---|
+| `OVERLOADED` | 路徑上有節點過載，系統不在穩態。`overloadedNodeIds` 列出這些節點 |
+| `NO_DOWNSTREAM` | 路徑上有 Client 或 LB 沒有下游，請求沒有地方送（驗證規則 `NO_DOWNSTREAM` 會把這種拓撲擋下，這裡是驗證前的保底，不能算成 0 ms 拉低平均） |
+| `NO_TRAFFIC` | 沒有這個 class 的請求，沒有平均可言 |
+
+同時有過載和沒有下游時記為 `OVERLOADED`。前端要在 `null` 旁邊顯示原因（例如「DB 過載，穩態延遲無定義」），並搭配 `successRps`（4.3.1）讓使用者看到還有多少請求成功。原因和過載節點由後端判斷，前端只負責顯示。
 
 **多個 Client**：每個 Client 各自的端到端延遲 `L(client, class)` 放在回應 `nodes` 中該 Client 的 `endToEndMs`。`summary.avgEndToEndMs` 用各 Client 該 class 的請求數加權平均：
 
@@ -190,11 +202,11 @@ Client 本身沒有 W（記為 0）。路徑上只要有任何節點過載，該
 avgEndToEndMs[class] = Σ_client (client.rps × classRatio × L(client, class)) / Σ_client (client.rps × classRatio)
 ```
 
-其中 `classRatio` 是 read 的 `readRatio` 或 write 的 `1 − readRatio`。任一 Client 的該 class 為 `null` 時，summary 的該 class 也是 `null`；分母為 0（沒有該 class 的流量）時也記為 `null`。只有一個 Client 時，結果就等於該 Client 的延遲。
+其中 `classRatio` 是 read 的 `readRatio` 或 write 的 `1 − readRatio`。沒有該 class 請求的 Client 權重為 0，不參與平均；其餘任一 Client 的該 class 為 `null` 時，summary 的該 class 也是 `null`（`overloadedNodeIds` 為各 Client 的聯集）；分母為 0（沒有該 class 的流量）時記為 `null`、原因 `NO_TRAFFIC`。只有一個 Client 時，結果就等於該 Client 的延遲。
 
 > v1 只算**平均值**。p99 不能沿路徑相加，需要分佈或模擬，留到 v2。
 >
-> ⚠️ **`PARALLEL` 是近似值**：「各下游平均值的最大值」會低估真實延遲（真實的是「每個請求各自取最大值」再平均）。前端要標示「近似」，v2 用 DES 算出正確值。
+> ⚠️ **`PARALLEL` 是近似值**：「各下游平均值的最大值」會低估真實延遲（真實的是「每個請求各自取最大值」再平均）。回應以 `approximate: true` 標示，前端顯示「近似」；路徑上的 `PARALLEL` Service 只呼叫一個下游時取最大值就是它本身，不算近似；`ms` 為 `null` 時 `approximate` 一定是 `false`。summary 只要有一個參與平均的 Client 是近似，就是近似。v2 用 DES 算出正確值。
 
 ### 4.3.1 成功率
 
@@ -299,7 +311,10 @@ Client 的 `pass` 記為 1。彙總：
       "throughputRps": 1000,
       "droppedRps": 0,
       "successRps": 1000,
-      "endToEndMs": { "read": 52.0, "write": 52.0 },
+      "endToEndMs": {
+        "read":  { "ms": 52.0, "approximate": false, "overloadedNodeIds": [], "undefinedReason": null },
+        "write": { "ms": 52.0, "approximate": false, "overloadedNodeIds": [], "undefinedReason": null }
+      },
       "capacityRps": null,
       "utilization": null,
       "avgQueueMs": null,
@@ -324,7 +339,10 @@ Client 的 `pass` 記為 1。彙總：
     "offeredRps": 1000,
     "successRps": 1000,
     "dropRate": 0.0,
-    "avgEndToEndMs": { "read": 52.0, "write": 52.0 },
+    "avgEndToEndMs": {
+      "read":  { "ms": 52.0, "approximate": false, "overloadedNodeIds": [], "undefinedReason": null },
+      "write": { "ms": 52.0, "approximate": false, "overloadedNodeIds": [], "undefinedReason": null }
+    },
     "bottleneckNodeId": "svc-1"
   }
 }
@@ -332,7 +350,7 @@ Client 的 `pass` 記為 1。彙總：
 
 驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
 
-**Client 節點**：`arrivalRps` 是它送出的流量；`successRps` 和 `endToEndMs` 只有 Client 才有，代表這個 Client 的請求有多少成功、平均要等多久。其餘描述伺服器的欄位（容量、使用率、排隊、延遲、狀態）都是 `null`。
+**Client 節點**：`arrivalRps` 是它送出的流量；`successRps` 和 `endToEndMs` 只有 Client 才有，代表這個 Client 的請求有多少成功、平均要等多久。其餘描述伺服器的欄位（容量、使用率、排隊、延遲、狀態）都是 `null`；非 Client 節點的 `endToEndMs` 也是 `null`。
 
 **`null` 和 `0` 的語意不同**：
 

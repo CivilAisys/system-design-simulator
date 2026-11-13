@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import type { SimulationResult, Topology } from '@/api/client'
 import { DASH, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
 import { STATUS_BADGE } from '@/canvas/status'
+import { EndToEndLatencyText } from './EndToEndLatencyText'
 
 type MetricsTableProps = {
   topology: Topology
@@ -22,6 +23,7 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
           <TableHead className="text-right">容量</TableHead>
           <TableHead className="text-right">ρ</TableHead>
           <TableHead className="text-right">延遲</TableHead>
+          <TableHead title="只有 Client 有：請求從送出到整條呼叫路徑完成的平均時間">端到端延遲</TableHead>
           <TableHead className="text-right">丟棄</TableHead>
           <TableHead>狀態</TableHead>
         </TableRow>
@@ -52,6 +54,9 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
               <TableCell className="text-right tabular-nums" title={latencyReason}>
                 {formatMs(metrics.avgLatencyMs)}
                 {latencyReason && <span className="ml-1 text-xs text-muted-foreground">（過載）</span>}
+              </TableCell>
+              <TableCell>
+                {metrics.endToEndMs ? <EndToEndLatencyText latencies={metrics.endToEndMs} topology={topology} /> : DASH}
               </TableCell>
               <TableCell className={cn('text-right tabular-nums', metrics.droppedRps > 0 && 'text-destructive')}>
                 {formatRps(metrics.droppedRps)}
