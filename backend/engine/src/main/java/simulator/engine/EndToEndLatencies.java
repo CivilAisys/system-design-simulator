@@ -1,7 +1,6 @@
 package simulator.engine;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -20,25 +19,21 @@ final class EndToEndLatencies {
     private final Topology topology;
     private final TopologyGraph graph;
     private final Map<String, NodeResult> nodeResults;
-    private final Map<String, Path> readPaths = new HashMap<>();
-    private final Map<String, Path> writePaths = new HashMap<>();
+    private final UpstreamPass<Path> paths;
 
     /** {@code order} 是拓撲排序，{@code nodeResults} 要已經有所有伺服器類節點的 W。 */
     EndToEndLatencies(Topology topology, TopologyGraph graph, List<Node> order, Map<String, NodeResult> nodeResults) {
         this.topology = topology;
         this.graph = graph;
         this.nodeResults = nodeResults;
-        for (Node node : order.reversed()) {
-            readPaths.put(node.id(), path(node, true));
-            writePaths.put(node.id(), path(node, false));
-        }
+        this.paths = new UpstreamPass<>(order, this::path);
     }
 
     /** Client 的端到端延遲；沒有這個 class 的請求時為 NO_TRAFFIC。 */
     ClassLatencies client(String clientId, ClassRates sent) {
         return new ClassLatencies(
-                sent.read() > 0 ? latency(readPaths.get(clientId)) : noTraffic(),
-                sent.write() > 0 ? latency(writePaths.get(clientId)) : noTraffic());
+                sent.read() > 0 ? latency(paths.get(clientId, true)) : noTraffic(),
+                sent.write() > 0 ? latency(paths.get(clientId, false)) : noTraffic());
     }
 
     /** summary：各 Client 依該 class 的請求數加權平均。{@code clients} 的 endToEndMs 要已經算好。 */
@@ -74,7 +69,7 @@ final class EndToEndLatencies {
         return requests > 0 ? EndToEndLatency.of(weighted / requests, approximate) : noTraffic();
     }
 
-    private Path path(Node node, boolean read) {
+    private Path path(Node node, boolean read, Map<String, Path> children) {
         Set<String> overloaded = new HashSet<>();
         double own = 0;
         // Client 本身沒有 W；其他節點過載時 W 為 null
@@ -98,7 +93,7 @@ final class EndToEndLatencies {
                 continue;
             }
             called++;
-            Path child = (read ? readPaths : writePaths).get(edge.target());
+            Path child = children.get(edge.target());
             overloaded.addAll(child.overloaded());
             dangling |= child.dangling();
             if (child.ms() == null) {

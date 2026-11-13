@@ -18,3 +18,7 @@ export function formatOptionalRps(rps: number | null | undefined): string {
 export function formatMs(ms: number | null | undefined): string {
   return ms == null ? DASH : `${ms.toFixed(1)} ms`
 }
+
+export function formatPercent(ratio: number): string {
+  return `${(ratio * 100).toFixed(1)}%`
+}

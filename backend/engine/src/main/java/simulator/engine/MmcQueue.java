@@ -16,13 +16,13 @@ final class MmcQueue {
 
         if (rho >= 1.0) {
             ClassRates processed = arrival.times(cap / lambda);
-            var result = new NodeResult(arrival, cap, lambda - cap, null, cap, rho, null, null, Status.OVERLOADED);
+            var result = new NodeResult(arrival, cap, lambda - cap, null, null, cap, rho, null, null, Status.OVERLOADED);
             return new Outcome(result, processed);
         }
 
         double waitSec = erlangC(c, lambda / mu) / (cap - lambda);
         double queueMs = waitSec * 1000.0;
-        var result = new NodeResult(arrival, lambda, 0, null, cap, rho, queueMs, queueMs + params.serviceTimeMs(),
+        var result = new NodeResult(arrival, lambda, 0, null, null, cap, rho, queueMs, queueMs + params.serviceTimeMs(),
                 Status.of(rho));
         return new Outcome(result, arrival);
     }

@@ -248,6 +248,11 @@
             "type" : "number",
             "format" : "double"
           },
+          "successRps" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "只有 Client 有：這個 Client 的請求每秒有幾個完整成功（spec 4.3.1）"
+          },
           "endToEndMs" : {
             "description" : "只有 Client 有",
             "oneOf" : [ {
@@ -277,7 +282,7 @@
             "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED" ]
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "status", "throughputRps", "utilization" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "status", "successRps", "throughputRps", "utilization" ]
       },
       "SimulationResult" : {
         "type" : "object",
@@ -316,6 +321,16 @@
             "type" : "number",
             "format" : "double"
           },
+          "successRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "各 Client 完整成功的請求數總和"
+          },
+          "dropRate" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "1 − successRps / offeredRps，限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0"
+          },
           "avgEndToEndMs" : {
             "$ref" : "#/components/schemas/ClassLatencies"
           },
@@ -323,7 +338,7 @@
             "type" : [ "string", "null" ]
           }
         },
-        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "offeredRps" ]
+        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "dropRate", "offeredRps", "successRps" ]
       },
       "ValidationError" : {
         "type" : "object",

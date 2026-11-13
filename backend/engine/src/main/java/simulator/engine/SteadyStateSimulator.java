@@ -8,9 +8,11 @@ import java.util.Map;
 
 /**
  * v1 的穩態計算：每個節點視為 M/M/c，依拓撲排序由上游往下游計算流量，
- * 再由下游往上游計算端到端延遲。
+ * 再由下游往上游計算端到端延遲與成功率。
  */
 public final class SteadyStateSimulator implements Simulator {
+
+    private static final double RATIO_TOLERANCE = 1e-9;
 
     @Override
     public SimulationResult simulate(Topology topology) {
@@ -20,7 +22,7 @@ public final class SteadyStateSimulator implements Simulator {
 
         Map<String, NodeResult> nodeResults = new HashMap<>();
         Map<String, EdgeResult> edgeResults = new HashMap<>();
-        // Client 的結果要等端到端延遲算完才能建立
+        // Client 的結果要等端到端延遲與成功率算完才能建立
         Map<String, ClassRates> sentByClient = new HashMap<>();
         List<Node> order = graph.topologicalOrder();
         for (Node node : order) {
@@ -47,7 +49,9 @@ public final class SteadyStateSimulator implements Simulator {
         }
 
         var endToEnd = new EndToEndLatencies(topology, graph, order, nodeResults);
-        sentByClient.forEach((id, sent) -> nodeResults.put(id, NodeResult.client(sent, endToEnd.client(id, sent))));
+        var success = new SuccessRates(graph, order, nodeResults);
+        sentByClient.forEach((id, sent) -> nodeResults.put(id,
+                NodeResult.client(sent, success.client(id, sent), endToEnd.client(id, sent))));
 
         return new SimulationResult(true, List.of(), inNodeOrder(topology, nodeResults),
                 inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd));
@@ -63,13 +67,16 @@ public final class SteadyStateSimulator implements Simulator {
     private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults,
             EndToEndLatencies endToEnd) {
         double offered = 0;
+        double succeeded = 0;
         List<NodeResult> clients = new ArrayList<>();
         String bottleneck = null;
         double highest = Double.NEGATIVE_INFINITY;
         for (Node node : topology.nodes()) {
             if (node instanceof ClientNode client) {
+                NodeResult result = nodeResults.get(node.id());
                 offered += client.rps();
-                clients.add(nodeResults.get(node.id()));
+                succeeded += result.successRps();
+                clients.add(result);
             }
             Double utilization = nodeResults.get(node.id()).utilization();
             if (utilization != null && utilization > highest) {
@@ -77,7 +84,17 @@ public final class SteadyStateSimulator implements Simulator {
                 bottleneck = node.id();
             }
         }
-        return new Summary(offered, endToEnd.average(clients), bottleneck);
+        // 沒有流量時沒有東西被丟
+        double dropRate = offered > 0 ? cleanRatio(1 - succeeded / offered) : 0;
+        return new Summary(offered, succeeded, dropRate, endToEnd.average(clients), bottleneck);
+    }
+
+    /**
+     * 浮點誤差會讓健康的拓撲有極小的 drop rate（例如 7 條同權重的邊，比例加起來是 0.9999999999999998），
+     * 前端會把它顯示成紅字的 0.0% 或 -0.0%。接近 0 的值歸零，並限制在 [0, 1]。
+     */
+    private static double cleanRatio(double ratio) {
+        return Math.abs(ratio) < RATIO_TOLERANCE ? 0 : Math.clamp(ratio, 0, 1);
     }
 
     private static Map<String, NodeResult> inNodeOrder(Topology topology, Map<String, NodeResult> results) {

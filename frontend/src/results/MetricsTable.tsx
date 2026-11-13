@@ -25,6 +25,9 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
           <TableHead className="text-right">延遲</TableHead>
           <TableHead title="只有 Client 有：請求從送出到整條呼叫路徑完成的平均時間">端到端延遲</TableHead>
           <TableHead className="text-right">丟棄</TableHead>
+          <TableHead className="text-right" title="只有 Client 有：請求整條呼叫路徑都成功的每秒請求數">
+            成功
+          </TableHead>
           <TableHead>狀態</TableHead>
         </TableRow>
       </TableHeader>
@@ -61,6 +64,7 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
               <TableCell className={cn('text-right tabular-nums', metrics.droppedRps > 0 && 'text-destructive')}>
                 {formatRps(metrics.droppedRps)}
               </TableCell>
+              <TableCell className="text-right tabular-nums">{formatOptionalRps(metrics.successRps)}</TableCell>
               <TableCell>
                 {status ? <Badge className={STATUS_BADGE[status]}>{status}</Badge> : DASH}
               </TableCell>

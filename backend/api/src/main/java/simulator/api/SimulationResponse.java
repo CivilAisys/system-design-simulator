@@ -101,6 +101,8 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
             @Schema(requiredMode = REQUIRED) double throughputRps,
             @Schema(requiredMode = REQUIRED) double droppedRps,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有：這個 Client 的請求每秒有幾個完整成功（spec 4.3.1）")
+            Double successRps,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有")
             ClassLatenciesDto endToEndMs,
             @Schema(requiredMode = REQUIRED, nullable = true) Double capacityRps,
@@ -111,8 +113,8 @@ public record SimulationResponse(
 
         static NodeResultDto from(NodeResult node) {
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
-                    node.droppedRps(), ClassLatenciesDto.from(node.endToEndMs()), node.capacityRps(), node.utilization(), node.avgQueueMs(),
-                    node.avgLatencyMs(), node.status());
+                    node.droppedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()), node.capacityRps(),
+                    node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status());
         }
     }
 
@@ -127,12 +129,14 @@ public record SimulationResponse(
     @Schema(name = "Summary")
     public record SummaryDto(
             @Schema(requiredMode = REQUIRED) double offeredRps,
+            @Schema(requiredMode = REQUIRED, description = "各 Client 完整成功的請求數總和") double successRps,
+            @Schema(requiredMode = REQUIRED, description = "1 − successRps / offeredRps，限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0") double dropRate,
             @Schema(requiredMode = REQUIRED) ClassLatenciesDto avgEndToEndMs,
             @Schema(requiredMode = REQUIRED, nullable = true) String bottleneckNodeId) {
 
         static SummaryDto from(Summary summary) {
-            return new SummaryDto(summary.offeredRps(), ClassLatenciesDto.from(summary.avgEndToEndMs()),
-                    summary.bottleneckNodeId());
+            return new SummaryDto(summary.offeredRps(), summary.successRps(), summary.dropRate(),
+                    ClassLatenciesDto.from(summary.avgEndToEndMs()), summary.bottleneckNodeId());
         }
     }
 }
