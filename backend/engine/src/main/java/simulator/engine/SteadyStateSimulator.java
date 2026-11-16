@@ -42,9 +42,9 @@ public final class SteadyStateSimulator implements Simulator {
                 case ServiceNode service -> process(service.capacityParams(), arrival, node.id(), nodeResults);
                 case CachingNode cache -> process(cache.capacityParams(), arrival, node.id(), nodeResults);
                 case StorageNode storage -> process(storage.capacityParams(), arrival, node.id(), nodeResults);
-                case RateLimiterNode limiter -> admit(limiter, limiter.limitRps(), 0, Status.LIMITING,
+                case RateLimiterNode limiter -> admit(node.id(), limiter.limitRps(), 0, Status.LIMITING,
                         Status.NOT_LIMITING, arrival, nodeResults);
-                case ExternalApiNode api -> admit(api, api.quotaRps(), api.latencyMs(), Status.OVER_QUOTA,
+                case ExternalApiNode api -> admit(node.id(), api.quotaRps(), api.latencyMs(), Status.OVER_QUOTA,
                         Status.WITHIN_QUOTA, arrival, nodeResults);
             };
 
@@ -76,12 +76,12 @@ public final class SteadyStateSimulator implements Simulator {
      * 放行 min(λ, limit)，read／write 依比例放行，其餘拒絕（spec 4.2.1）。Rate Limiter 和 External API 共用。
      * 沒有 M/M/c：沒有容量和 ρ，節點延遲固定是 {@code latencyMs}。
      */
-    private static ClassRates admit(Node node, double limit, double latencyMs, Status over, Status within,
+    private static ClassRates admit(String nodeId, double limit, double latencyMs, Status over, Status within,
             ClassRates arrival, Map<String, NodeResult> nodeResults) {
         double lambda = arrival.total();
         boolean exceeded = lambda > limit;
         ClassRates passed = exceeded ? arrival.times(limit / lambda) : arrival;
-        nodeResults.put(node.id(), new NodeResult(arrival, passed.total(), 0, lambda - passed.total(), null, null,
+        nodeResults.put(nodeId, new NodeResult(arrival, passed.total(), 0, lambda - passed.total(), null, null,
                 null, null, 0.0, latencyMs, exceeded ? over : within));
         return passed;
     }

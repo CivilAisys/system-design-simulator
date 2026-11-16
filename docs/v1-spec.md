@@ -214,7 +214,7 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 兩者都沒有 M/M/c，只有一個上限：Rate Limiter 是 `limitRps`，External API 是 `quotaRps`。
 
 - 放行量 = `min(λ, 上限)`，read／write 依比例放行；**拒絕量** = `λ − 放行量`，不往下送（External API 沒有下游，放行量就是它處理完的請求）。
-- 拒絕量和過載造成的丟棄量是不同的指標（回應的 `rejectedRps`、`droppedRps`），但都算進失敗率：`pass(n) = 放行量 / λ`（4.3.1），`summary.rejectedRps` 是所有節點拒絕量的總和。拒絕量和丟棄量一樣是到達這個節點的請求數：limiter 放在 fan-out 的 Service 後面時算的是子呼叫，不是使用者請求數，成功率仍以 4.3.1 計算。
+- 拒絕量和過載造成的丟棄量是不同的指標（回應的 `rejectedRps`、`droppedRps`），但都算進失敗率：`pass(n) = 放行量 / λ`（4.3.1），`summary.rejectedRps` 是所有節點拒絕量的總和。拒絕量和丟棄量一樣是到達這個節點的請求數：Rate Limiter／External API 放在 fan-out 的 Service 後面時算的是子呼叫，不是使用者請求數，成功率仍以 4.3.1 計算。
 - 不排隊，`avgQueueMs` 為 0。Rate Limiter 的節點延遲 `W` 記為 0（**簡化假設**：limiter 本身不會成為瓶頸）；External API 的 `W = latencyMs`。端到端延遲只算被放行的請求，超過上限不會讓延遲變成無定義。
 - 沒有容量和 ρ（`capacityRps`、`utilization` 為 `null`），不列入瓶頸候選。狀態不套用 4.4 的 ρ 分級，只看 `λ` 是否超過上限（剛好等於上限不拒絕）：
 
