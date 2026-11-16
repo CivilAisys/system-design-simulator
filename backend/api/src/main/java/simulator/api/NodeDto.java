@@ -18,6 +18,7 @@ import simulator.engine.RateLimiterNode;
 import simulator.engine.ReadReplicaNode;
 import simulator.engine.ServiceNode;
 import simulator.engine.ShardLayout;
+import simulator.engine.StorageSizing;
 
 /** {@code state} 省略時為 HEALTHY；{@code ui} 只給前端用，後端忽略。 */
 @Schema(name = "Node")
@@ -37,15 +38,19 @@ public record NodeDto(
         NodeHealth health = state == null ? NodeHealth.HEALTHY : state;
         return switch (Required.of(type, where + " type")) {
             case CLIENT -> new ClientNode(id, name, health,
-                    require(params.rps(), "rps"), require(params.readRatio(), "readRatio"));
+                    require(params.rps(), "rps"), require(params.readRatio(), "readRatio"),
+                    orDefault(params.readResponseBytes(), ClientNode.DEFAULT_READ_RESPONSE_BYTES),
+                    orDefault(params.writeRequestBytes(), ClientNode.DEFAULT_WRITE_REQUEST_BYTES));
             case LOAD_BALANCER -> new LoadBalancerNode(id, name, health, capacityParams());
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
             case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"),
                     shardLayout());
             case CDN -> new CdnNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
-            case DATABASE -> new DatabaseNode(id, name, health, capacityParams(), shardLayout());
-            case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams());
+            case DATABASE -> new DatabaseNode(id, name, health, capacityParams(), shardLayout(),
+                    sizing(DatabaseNode.DEFAULT_SIZING));
+            case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams(),
+                    sizing(ObjectStorageNode.DEFAULT_SIZING));
             case RATE_LIMITER -> new RateLimiterNode(id, name, health, require(params.limitRps(), "limitRps"));
             case READ_REPLICA -> new ReadReplicaNode(id, name, health, capacityParams());
             case MESSAGE_QUEUE -> new MessageQueueNode(id, name, health, capacityParams());
@@ -64,6 +69,16 @@ public record NodeDto(
     /** {@code shards} 省略時為 1（不分片），{@code hotShardShare} 省略時平均分配。 */
     private ShardLayout shardLayout() {
         return new ShardLayout(params.shards() == null ? 1 : params.shards(), params.hotShardShare());
+    }
+
+    /** 省略的欄位用該 type 的預設值；{@code diskGbPerShard} 省略時不估算磁碟幾天後會滿。 */
+    private StorageSizing sizing(StorageSizing defaults) {
+        return new StorageSizing(orDefault(params.bytesPerWrite(), defaults.bytesPerWrite()),
+                orDefault(params.retentionDays(), defaults.retentionDays()), params.diskGbPerShard());
+    }
+
+    private static double orDefault(Double value, double fallback) {
+        return value == null ? fallback : value;
     }
 
     private <T> T require(T value, String param) {

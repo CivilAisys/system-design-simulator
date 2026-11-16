@@ -114,6 +114,16 @@
             "format" : "double",
             "description" : "CLIENT"
           },
+          "readResponseBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CLIENT：每個 read 回應的大小（bytes），只用來估算頻寬，省略時為 10000"
+          },
+          "writeRequestBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CLIENT：每個 write 上傳的大小（bytes），只用來估算頻寬，省略時為 1000"
+          },
           "instances" : {
             "type" : "integer",
             "format" : "int32",
@@ -163,6 +173,21 @@
             "type" : "number",
             "format" : "double",
             "description" : "CACHE, DATABASE：最熱的 shard 分到的流量比例，省略時平均分配（1/shards）"
+          },
+          "bytesPerWrite" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "DATABASE, OBJECT_STORAGE：每次 write 平均新增的資料量（bytes），只用來估算儲存量，省略時 DATABASE 為 1000、OBJECT_STORAGE 為 1000000"
+          },
+          "retentionDays" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "DATABASE, OBJECT_STORAGE：資料保留天數，只用來估算儲存量，省略時為 365"
+          },
+          "diskGbPerShard" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "DATABASE, OBJECT_STORAGE：每個 shard 的磁碟容量（GB），省略時不估算磁碟幾天後會滿"
           }
         }
       },
@@ -203,6 +228,23 @@
         },
         "required" : [ "edges", "nodes", "version" ]
       },
+      "Bandwidth" : {
+        "type" : "object",
+        "description" : "使用者端頻寬，單位 bytes/s（spec 4.7）",
+        "properties" : {
+          "egressBytesPerSec" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "read 回應送給使用者：read rps × readResponseBytes"
+          },
+          "ingressBytesPerSec" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "write 從使用者上傳：write rps × writeRequestBytes"
+          }
+        },
+        "required" : [ "egressBytesPerSec", "ingressBytesPerSec" ]
+      },
       "ClassLatencies" : {
         "type" : "object",
         "properties" : {
@@ -239,9 +281,17 @@
             "type" : "number",
             "format" : "double",
             "description" : "Message Queue 的下游邊：consumer 處理不完，queue 每秒增加的訊息數；其他邊為 0"
+          },
+          "bandwidth" : {
+            "description" : "只有 Client 的邊有：這條邊的使用者端頻寬（spec 4.7）",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/Bandwidth"
+            }, {
+              "type" : "null"
+            } ]
           }
         },
-        "required" : [ "backlogRps", "rps" ]
+        "required" : [ "backlogRps", "bandwidth", "rps" ]
       },
       "EndToEndLatency" : {
         "type" : "object",
@@ -403,9 +453,67 @@
             }, {
               "type" : "null"
             } ]
+          },
+          "storage" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/StorageEstimate"
+            },
+            "description" : "Database、Object Storage 的儲存量估算（spec 4.8），以節點 id 為 key；驗證失敗時為 {}"
           }
         },
-        "required" : [ "edges", "errors", "nodes", "summary", "valid" ]
+        "required" : [ "edges", "errors", "nodes", "storage", "summary", "valid" ]
+      },
+      "StorageEstimate" : {
+        "type" : "object",
+        "description" : "一個儲存節點的儲存量估算，單位 bytes（spec 4.8）",
+        "properties" : {
+          "dailyBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "成功處理的 write × bytesPerWrite × 86400"
+          },
+          "totalBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "dailyBytes × retentionDays"
+          },
+          "replicas" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "連到這個 Database 的 Read Replica 數"
+          },
+          "totalWithReplicasBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "totalBytes × (1 + replicas)"
+          },
+          "perShardBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "totalBytes ÷ shards（資料平均分布）"
+          },
+          "daysUntilFull" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard、沒有寫入或寫入量小到天數超出範圍時為 null"
+          },
+          "fillsDisk" : {
+            "type" : "boolean",
+            "description" : "磁碟在保留期內就會滿（daysUntilFull < retentionDays）"
+          },
+          "retentionDays" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "計算時用的 retentionDays"
+          },
+          "diskGbPerShard" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "計算時用的 diskGbPerShard，沒有設定時為 null"
+          }
+        },
+        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerShard", "fillsDisk", "perShardBytes", "replicas", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
       },
       "Summary" : {
         "type" : "object",
@@ -434,9 +542,18 @@
           },
           "bottleneckNodeId" : {
             "type" : [ "string", "null" ]
+          },
+          "bandwidth" : {
+            "$ref" : "#/components/schemas/Bandwidth",
+            "description" : "各 Client 的使用者端頻寬總和"
+          },
+          "cdnOffloadBytesPerSec" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "egressBytesPerSec 裡由 CDN 命中送出、不必從 origin 送出的部分"
           }
         },
-        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "dropRate", "offeredRps", "rejectedRps", "successRps" ]
+        "required" : [ "avgEndToEndMs", "bandwidth", "bottleneckNodeId", "cdnOffloadBytesPerSec", "dropRate", "offeredRps", "rejectedRps", "successRps" ]
       },
       "ValidationError" : {
         "type" : "object",

@@ -2,7 +2,7 @@
   "version": 1,
   "nodes": [
     { "id": "client-1", "type": "CLIENT", "name": "Users",
-      "params": { "rps": 20000, "readRatio": 0.95 },
+      "params": { "rps": 20000, "readRatio": 0.95, "readResponseBytes": 100000, "writeRequestBytes": 2000 },
       "ui": { "x": 0, "y": 0 } },
     { "id": "cdn-1", "type": "CDN", "name": "CDN",
       "params": { "instances": 10, "concurrency": 1000, "serviceTimeMs": 1, "hitRatio": 0.95 },

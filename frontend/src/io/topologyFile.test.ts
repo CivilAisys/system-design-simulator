@@ -9,7 +9,13 @@ function validFile() {
   return {
     version: 1,
     nodes: [
-      { id: 'client', type: 'CLIENT', name: 'Users', params: { rps: 1000, readRatio: 0.9 }, ui: { x: 0, y: 0 } },
+      {
+        id: 'client',
+        type: 'CLIENT',
+        name: 'Users',
+        params: { rps: 1000, readRatio: 0.9, readResponseBytes: 50_000, writeRequestBytes: 2_000 },
+        ui: { x: 0, y: 0 },
+      },
       {
         id: 'lb',
         type: 'LOAD_BALANCER',
@@ -36,7 +42,15 @@ function validFile() {
         id: 'db',
         type: 'DATABASE',
         name: 'DB',
-        params: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
+        params: {
+          instances: 1,
+          concurrency: 100,
+          serviceTimeMs: 10,
+          shards: 1,
+          bytesPerWrite: 2_000,
+          retentionDays: 30,
+          diskGbPerShard: 500,
+        },
         ui: { x: 900, y: 100 },
       },
     ],
@@ -119,10 +133,13 @@ describe('合法的檔案', () => {
       const file = validFile()
       delete (file.nodes[2].params as { callMode?: string }).callMode
       remove(file.nodes[3].params, 'shards')
+      remove(file.nodes[0].params, 'readResponseBytes')
+      remove(file.nodes[0].params, 'writeRequestBytes')
 
-      const [, , svc, cache] = topologyOf(file).nodes
+      const [client, , svc, cache] = topologyOf(file).nodes
       expect(svc.params.callMode).toBe('SEQUENTIAL')
       expect(cache.params.shards).toBe(1)
+      expect(client.params).toMatchObject({ readResponseBytes: 10_000, writeRequestBytes: 1_000 })
     })
 
     it('hotShardShare 省略時不補，代表平均分配', () => {
@@ -130,6 +147,24 @@ describe('合法的檔案', () => {
       remove(file.nodes[3].params, 'hotShardShare')
 
       expect(topologyOf(file).nodes[3].params).not.toHaveProperty('hotShardShare')
+    })
+
+    it('儲存量參數省略時用預設值，diskGbPerShard 不補，代表不估算磁碟', () => {
+      const file = validFile()
+      for (const param of ['bytesPerWrite', 'retentionDays', 'diskGbPerShard']) {
+        remove(file.nodes[4].params, param)
+      }
+
+      const { params } = topologyOf(file).nodes[4]
+      expect(params).toMatchObject({ bytesPerWrite: 1_000, retentionDays: 365 })
+      expect(params).not.toHaveProperty('diskGbPerShard')
+    })
+
+    it('不估算儲存量的 type 丟掉 diskGbPerShard', () => {
+      const file = validFile()
+      Object.assign(file.nodes[3].params, { diskGbPerShard: 100 })
+
+      expect(topologyOf(file).nodes[3].params).not.toHaveProperty('diskGbPerShard')
     })
 
     it('不能分片的 type 丟掉 shards 和 hotShardShare', () => {
@@ -145,6 +180,9 @@ describe('合法的檔案', () => {
       ])
       expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { hotShardShare: null }))).toEqual([
         'nodes[3]（id "cache"）：params.hotShardShare 必須是數字（或數值太大）',
+      ])
+      expect(errorsOf((f) => void Object.assign(f.nodes[4].params, { diskGbPerShard: '1' }))).toEqual([
+        'nodes[4]（id "db"）：params.diskGbPerShard 必須是數字（或數值太大）',
       ])
     })
   })

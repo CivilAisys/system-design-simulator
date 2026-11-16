@@ -27,6 +27,11 @@ final class TopologyValidator {
     static final int MAX_CALLS_PER_REQUEST = 10_000;
     static final double MAX_WEIGHT = 1e6;
     static final int MAX_SHARDS = 64;
+    // 每個請求的回應、上傳大小或每次 write 新增的資料量（bytes），1 TB
+    static final double MAX_BYTES = 1e12;
+    static final double MAX_RETENTION_DAYS = 100_000;
+    // 每個 shard 的磁碟容量（GB），1 EB
+    static final double MAX_DISK_GB = 1e9;
     // hotShardShare 的下限 1/N 容許浮點誤差，前端 params.ts 用同一個值
     static final double SHARE_TOLERANCE = 1e-12;
 
@@ -149,6 +154,8 @@ final class TopologyValidator {
             case ClientNode client -> {
                 requireBetween(client.rps(), 0, MAX_RPS, where, "rps", report);
                 requireBetween(client.readRatio(), 0, 1, where, "readRatio", report);
+                requireBetween(client.readResponseBytes(), 0, MAX_BYTES, where, "readResponseBytes", report);
+                requireBetween(client.writeRequestBytes(), 0, MAX_BYTES, where, "writeRequestBytes", report);
             }
             case LoadBalancerNode lb -> checkCapacityParams(lb.capacityParams(), where, report);
             case ServiceNode service -> checkCapacityParams(service.capacityParams(), where, report);
@@ -160,6 +167,7 @@ final class TopologyValidator {
             case StorageNode storage -> {
                 checkCapacityParams(storage.capacityParams(), where, report);
                 checkShards(storage.shards(), where, report);
+                checkSizing(storage.sizing(), where, report);
             }
             case ReadReplicaNode replica -> checkCapacityParams(replica.capacityParams(), where, report);
             case MessageQueueNode queue -> checkCapacityParams(queue.capacityParams(), where, report);
@@ -180,6 +188,15 @@ final class TopologyValidator {
         }
         requireBetween(params.serviceTimeMs(), MIN_SERVICE_TIME_MS, MAX_SERVICE_TIME_MS, where, "serviceTimeMs",
                 report);
+    }
+
+    private static void checkSizing(StorageSizing sizing, String where, Consumer<String> report) {
+        requireBetween(sizing.bytesPerWrite(), 0, MAX_BYTES, where, "bytesPerWrite", report);
+        requireBetween(sizing.retentionDays(), 0, MAX_RETENTION_DAYS, where, "retentionDays", report);
+        Double disk = sizing.diskGbPerShard();
+        if (disk != null && !(disk > 0 && disk <= MAX_DISK_GB)) {
+            report.accept(invalid(where, "diskGbPerShard", "> 0 且 ≤ " + bound(MAX_DISK_GB), disk));
+        }
     }
 
     /** instances × concurrency 的上限是對每個 shard 的限制，已經在 checkCapacityParams 檢查。 */

@@ -53,7 +53,10 @@ class ParamRangeTest {
 
     static Stream<ClientNode> invalidClients() {
         return Stream.of(client(-1, 0.9), client(Double.NaN, 0.9), client(Double.POSITIVE_INFINITY, 0.9),
-                client(1.1e12, 0.9), client(100, -0.1), client(100, 1.1), client(100, Double.NaN));
+                client(1.1e12, 0.9), client(100, -0.1), client(100, 1.1), client(100, Double.NaN),
+                new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9, -1, 1000),
+                new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9, 1000, 1.1e12),
+                new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9, Double.NaN, 1000));
     }
 
     static Stream<CapacityParams> invalidCapacityParams() {
@@ -155,6 +158,21 @@ class ParamRangeTest {
                 List.of(new Edge("e1", "c", "db", 1, 1, 1))));
     }
 
+    static Stream<StorageSizing> invalidSizings() {
+        return Stream.of(new StorageSizing(-1, 30, null), new StorageSizing(1.1e12, 30, null),
+                new StorageSizing(Double.NaN, 30, null), new StorageSizing(1000, -1, null),
+                new StorageSizing(1000, 100_001, null), new StorageSizing(1000, 30, 0.0),
+                new StorageSizing(1000, 30, 1.1e9), new StorageSizing(1000, 30, Double.NaN));
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidSizings")
+    void invalidStorageSizingIsRejected(StorageSizing sizing) {
+        var storage = new ObjectStorageNode("s3", "S3", NodeHealth.HEALTHY, CAPACITY, sizing);
+        assertInvalidParam(simulator.simulate(new Topology(List.of(client(100, 0.9), storage),
+                List.of(new Edge("e1", "c", "s3", 1, 1, 1)))), "s3", null, "「S3」");
+    }
+
     @ParameterizedTest
     @ValueSource(doubles = {0, 1.1e12, Double.NaN})
     void invalidExternalApiQuotaIsRejected(double quotaRps) {
@@ -228,17 +246,18 @@ class ParamRangeTest {
 
     @Test
     void extremeValuesWithinTheLimitsRunFastAndStayFinite() {
-        // 每個上限都踩到：最多 worker、使用率接近 1、最短處理時間、最大 rps／calls／weight／latency
+        // 每個上限都踩到：最多 worker、使用率接近 1、最短處理時間、最大 rps／calls／weight／latency／bytes
         var maxed = new CapacityParams(1000, 1000, 1e-6);
         // 最多 worker 且使用率接近 1 時 Erlang C 算最久；容量 1e12 剛好是 rps 上限
         var busiest = new CapacityParams(1000, 1000, 0.001);
         List<Node> nodes = List.of(
-                new ClientNode("c1", "A", NodeHealth.HEALTHY, 1e12, 0.5),
-                new ClientNode("c2", "B", NodeHealth.HEALTHY, 1e12, 0.5),
+                new ClientNode("c1", "A", NodeHealth.HEALTHY, 1e12, 0.5, 1e12, 1e12),
+                new ClientNode("c2", "B", NodeHealth.HEALTHY, 1e12, 0.5, 1e12, 1e12),
                 new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, maxed),
                 new ServiceNode("s", "API", NodeHealth.HEALTHY, maxed, CallMode.PARALLEL),
                 new CacheNode("cache", "Redis", NodeHealth.HEALTHY, maxed, 0),
-                new DatabaseNode("db", "DB", NodeHealth.HEALTHY, new CapacityParams(1, 1, 1e7)));
+                new DatabaseNode("db", "DB", NodeHealth.HEALTHY, new CapacityParams(1, 1, 1e7),
+                        new ShardLayout(1, null), new StorageSizing(1e12, 100_000, 1e-9)));
         List<Edge> edges = List.of(
                 new Edge("e1", "c1", "lb", 1e6, 1, 1e7), new Edge("e2", "c2", "lb", 1e6, 1, 1e7),
                 new Edge("e3", "lb", "s", 1e6, 1, 1e7), new Edge("e4", "s", "cache", 1, 10_000, 1e7),

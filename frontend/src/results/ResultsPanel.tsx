@@ -1,12 +1,21 @@
 import { lazy, Suspense } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { isComputed, totalRps, type SimulationResult, type Topology, type ValidationError } from '@/api/client'
+import {
+  isComputed,
+  totalRps,
+  type ComputedResult,
+  type SimulationResult,
+  type Summary,
+  type Topology,
+  type ValidationError,
+} from '@/api/client'
 import type { Theme } from '@/theme'
 import { cn } from '@/lib/utils'
-import { formatPercent, formatRps } from '@/canvas/format'
+import { formatBitsPerSec, formatBytesPerSec, formatDays, formatPercent, formatRps } from '@/canvas/format'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 import { ErrorList } from './ErrorList'
 import { MetricsTable } from './MetricsTable'
+import { StorageTable } from './StorageTable'
 
 // ECharts 很大，切到 Sankey Tab 才載入
 const FlowSankey = lazy(() => import('./FlowSankey').then((module) => ({ default: module.FlowSankey })))
@@ -34,6 +43,7 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
         <TabsList>
           <TabsTrigger value="metrics">指標表</TabsTrigger>
           <TabsTrigger value="sankey">流量 Sankey</TabsTrigger>
+          <TabsTrigger value="storage">容量估算</TabsTrigger>
           <TabsTrigger value="errors">錯誤 ({errorCount})</TabsTrigger>
         </TabsList>
         {computed && (
@@ -57,6 +67,8 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
               <span className="mr-2 text-muted-foreground">平均端到端延遲</span>
               <EndToEndLatencyText latencies={computed.summary.avgEndToEndMs} topology={topology} />
             </p>
+            <BandwidthText summary={computed.summary} />
+            <DiskFullText topology={topology} result={computed} />
           </>
         )}
       </div>
@@ -74,6 +86,9 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
           empty
         )}
       </TabsContent>
+      <TabsContent value="storage" className="min-h-0 overflow-auto">
+        {computed ? <StorageTable topology={topology} result={computed} /> : empty}
+      </TabsContent>
       <TabsContent value="errors" className="min-h-0 overflow-auto">
         {result ? (
           <ErrorList errors={result.errors} canFocus={canFocusError} onFocus={onFocusError} />
@@ -82,6 +97,50 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
         )}
       </TabsContent>
     </Tabs>
+  )
+}
+
+// 使用者端頻寬（spec 4.7）：出口是 read 回應，入口是 write 上傳；有 CDN 擋掉流量時另外列出 origin 要送出的部分
+function BandwidthText({ summary }: { summary: Summary }) {
+  const { egressBytesPerSec: egress, ingressBytesPerSec: ingress } = summary.bandwidth
+  const offload = summary.cdnOffloadBytesPerSec
+  return (
+    <p className="text-sm tabular-nums">
+      <span className="mr-2 text-muted-foreground">頻寬 出口</span>
+      <Rate bytesPerSec={egress} />
+      <span className="mx-2 text-muted-foreground">入口</span>
+      <Rate bytesPerSec={ingress} />
+      {offload > 0 && (
+        <>
+          <span className="mx-2 text-muted-foreground">origin 出口</span>
+          <Rate bytesPerSec={egress - offload} />
+          <span className="ml-1 text-muted-foreground">（CDN 擋掉 {formatPercent(offload / egress)}）</span>
+        </>
+      )}
+    </p>
+  )
+}
+
+// 磁碟會滿是另一種瓶頸（spec 4.8），和 ρ 最高的瓶頸分開列出
+function DiskFullText({ topology, result }: { topology: Topology; result: ComputedResult }) {
+  const full = topology.nodes.filter((node) => result.storage[node.id]?.fillsDisk)
+  if (full.length === 0) return null
+  return (
+    <p className="text-sm text-destructive">
+      <span className="mr-2">磁碟會滿</span>
+      {full
+        .map((node) => `${node.name}（${formatDays(result.storage[node.id].daysUntilFull ?? 0)}）`)
+        .join('、')}
+    </p>
+  )
+}
+
+function Rate({ bytesPerSec }: { bytesPerSec: number }) {
+  return (
+    <>
+      {formatBytesPerSec(bytesPerSec)}
+      <span className="ml-1 text-muted-foreground">({formatBitsPerSec(bytesPerSec)})</span>
+    </>
   )
 }
 

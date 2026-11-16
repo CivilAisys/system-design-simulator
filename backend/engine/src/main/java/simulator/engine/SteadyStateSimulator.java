@@ -13,6 +13,9 @@ import java.util.Map;
 public final class SteadyStateSimulator implements Simulator {
 
     private static final double RATIO_TOLERANCE = 1e-9;
+    private static final double SECONDS_PER_DAY = 86_400;
+    // 磁碟容量用十進位的 GB
+    private static final double BYTES_PER_GB = 1e9;
 
     @Override
     public SimulationResult simulate(Topology topology) {
@@ -30,6 +33,10 @@ public final class SteadyStateSimulator implements Simulator {
         Map<String, ClassRates> sentByClient = new HashMap<>();
         // consumer → Message Queue 送給它的邊
         Map<String, List<Edge>> queuedByConsumer = new HashMap<>();
+        // 每個節點收到的 read 對應的回應大小總和（bytes/s），用來算 CDN 擋掉多少 origin 頻寬（spec 4.7）
+        Map<String, Double> readBytesPerSec = new HashMap<>();
+        var bandwidth = Bandwidth.ZERO;
+        double cdnOffload = 0;
         List<Node> order = graph.topologicalOrder();
         for (Node node : order) {
             ClassRates arrival = arrivals.get(node.id());
@@ -53,6 +60,12 @@ public final class SteadyStateSimulator implements Simulator {
                 case ExternalApiNode api -> admit(node.id(), api.quotaRps(), api.latencyMs(), Status.OVER_QUOTA,
                         Status.WITHIN_QUOTA, arrival, nodeResults);
             };
+            double bytesPerRead = node instanceof ClientNode client
+                    ? client.readResponseBytes()
+                    : arrival.read() > 0 ? readBytesPerSec.getOrDefault(node.id(), 0.0) / arrival.read() : 0;
+            if (node instanceof CdnNode cdn) {
+                cdnOffload += processed.read() * cdn.hitRatio() * bytesPerRead;
+            }
             List<Edge> queued = queuedByConsumer.getOrDefault(node.id(), List.of());
             if (!queued.isEmpty()) {
                 keepInQueue(node.id(), queued, nodeResults, edgeResults);
@@ -61,7 +74,15 @@ public final class SteadyStateSimulator implements Simulator {
             for (Edge edge : graph.outgoing(node.id())) {
                 var rps = new ClassRates(processed.read() * graph.visits(edge, true),
                         processed.write() * graph.visits(edge, false));
-                edgeResults.put(edge.id(), new EdgeResult(rps));
+                if (node instanceof ClientNode client) {
+                    var edgeBandwidth = new Bandwidth(rps.read() * client.readResponseBytes(),
+                            rps.write() * client.writeRequestBytes());
+                    bandwidth = bandwidth.plus(edgeBandwidth);
+                    edgeResults.put(edge.id(), new EdgeResult(rps, 0, edgeBandwidth));
+                } else {
+                    edgeResults.put(edge.id(), new EdgeResult(rps));
+                }
+                readBytesPerSec.merge(edge.target(), rps.read() * bytesPerRead, Double::sum);
                 arrivals.merge(edge.target(), rps, ClassRates::plus);
                 if (graph.feedsConsumer(edge)) {
                     queuedByConsumer.computeIfAbsent(edge.target(), id -> new ArrayList<>()).add(edge);
@@ -75,7 +96,9 @@ public final class SteadyStateSimulator implements Simulator {
                 NodeResult.client(sent, success.client(id, sent), endToEnd.client(id, sent))));
 
         return new SimulationResult(true, List.of(), inNodeOrder(topology, nodeResults),
-                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd));
+                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd, bandwidth,
+                        Math.min(cdnOffload, bandwidth.egressBytesPerSec())),
+                estimateStorage(topology, graph, nodeResults));
     }
 
     private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
@@ -122,7 +145,7 @@ public final class SteadyStateSimulator implements Simulator {
         for (Edge edge : queued) {
             EdgeResult edgeResult = edgeResults.get(edge.id());
             double edgeBacklog = edgeResult.rps().total() * excessShare;
-            edgeResults.put(edge.id(), new EdgeResult(edgeResult.rps(), edgeBacklog));
+            edgeResults.put(edge.id(), edgeResult.withBacklog(edgeBacklog));
             backlog += edgeBacklog;
         }
         nodeResults.put(nodeId, result.withDropped(result.droppedRps() - backlog).withWarning(NodeWarning.BACKLOG));
@@ -162,6 +185,44 @@ public final class SteadyStateSimulator implements Simulator {
         return outcome.processed();
     }
 
+    /**
+     * 儲存量估算（spec 4.8）：每日增量 = 處理完的 write × bytesPerWrite × 86,400，總量 = 每日增量 × retentionDays，
+     * 含副本 = 總量 × (1 + Read Replica 數)，每 shard = 總量 ÷ shards（資料平均分布，熱點是流量不是資料）。
+     */
+    private static Map<String, StorageEstimate> estimateStorage(Topology topology, TopologyGraph graph,
+            Map<String, NodeResult> nodeResults) {
+        Map<String, Integer> replicas = new HashMap<>();
+        for (Node node : topology.nodes()) {
+            if (node instanceof ReadReplicaNode) {
+                replicas.merge(graph.primaryOf(node.id()).id(), 1, Integer::sum);
+            }
+        }
+        Map<String, StorageEstimate> estimates = new LinkedHashMap<>();
+        for (Node node : topology.nodes()) {
+            if (!(node instanceof StorageNode storage)) {
+                continue;
+            }
+            NodeResult result = nodeResults.get(node.id());
+            StorageSizing sizing = storage.sizing();
+            int shards = storage.shards().count();
+            double daily = processedWrites(result.arrivalRps(), result.throughputRps()) * sizing.bytesPerWrite()
+                    * SECONDS_PER_DAY;
+            double total = daily * sizing.retentionDays();
+            int replicaCount = replicas.getOrDefault(node.id(), 0);
+            Double daysUntilFull = sizing.diskGbPerShard() == null ? null
+                    : finiteOrNull(sizing.diskGbPerShard() * BYTES_PER_GB / (daily / shards));
+            boolean fillsDisk = daysUntilFull != null && daysUntilFull < sizing.retentionDays();
+            estimates.put(node.id(), new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
+                    total / shards, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerShard()));
+        }
+        return estimates;
+    }
+
+    /** 沒有寫入（除以 0）或寫入量極小時天數不是有限值，JSON 放不下，當成不會滿。 */
+    private static Double finiteOrNull(double days) {
+        return Double.isFinite(days) ? days : null;
+    }
+
     /** 處理完的 write：丟棄依 read／write 比例發生（spec 4.2）。 */
     private static double processedWrites(ClassRates arrival, double throughput) {
         double total = arrival.total();
@@ -169,7 +230,7 @@ public final class SteadyStateSimulator implements Simulator {
     }
 
     private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults,
-            EndToEndLatencies endToEnd) {
+            EndToEndLatencies endToEnd, Bandwidth bandwidth, double cdnOffload) {
         double offered = 0;
         double succeeded = 0;
         double rejected = 0;
@@ -192,7 +253,8 @@ public final class SteadyStateSimulator implements Simulator {
         }
         // 沒有流量時沒有東西被丟
         double dropRate = offered > 0 ? cleanRatio(1 - succeeded / offered) : 0;
-        return new Summary(offered, succeeded, rejected, dropRate, endToEnd.average(clients), bottleneck);
+        return new Summary(offered, succeeded, rejected, dropRate, endToEnd.average(clients), bottleneck,
+                bandwidth, cdnOffload);
     }
 
     /**

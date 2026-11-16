@@ -8,7 +8,7 @@ export const initialTopology: Topology = {
       id: 'client-1',
       type: 'CLIENT',
       name: 'Users',
-      params: { rps: 1000, readRatio: 0.9 },
+      params: { rps: 1000, readRatio: 0.9, readResponseBytes: 10_000, writeRequestBytes: 1_000 },
       ui: { x: 0, y: 0 },
     },
     {
@@ -23,7 +23,7 @@ export const initialTopology: Topology = {
       id: 'db-1',
       type: 'DATABASE',
       name: 'DB',
-      params: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
+      params: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1, bytesPerWrite: 1_000, retentionDays: 365 },
       state: 'HEALTHY',
       ui: { x: 600, y: 0 },
     },
