@@ -3,8 +3,10 @@ import type { NodeParams } from './catalog'
 import {
   checkNodeParam,
   checkNumber,
+  EDGE_CHOICE_SPECS,
   EDGE_PARAM_SPECS,
   fromSlider,
+  NODE_CHOICE_SPECS,
   NODE_PARAM_SPECS,
   parseDraft,
   sliderRange,
@@ -14,6 +16,16 @@ import {
 
 const { rps, readRatio, instances, concurrency, serviceTimeMs, limitRps, quotaRps } = NODE_PARAM_SPECS
 const { weight, callsPerRequest, latencyMs } = EDGE_PARAM_SPECS
+
+describe('labelEn', () => {
+  it('is the API field name of every param', () => {
+    for (const specs of [NODE_PARAM_SPECS, EDGE_PARAM_SPECS, NODE_CHOICE_SPECS, EDGE_CHOICE_SPECS]) {
+      for (const [param, spec] of Object.entries(specs)) {
+        expect(spec.labelEn).toBe(param)
+      }
+    }
+  })
+})
 
 describe('checkNumber', () => {
   it.each([

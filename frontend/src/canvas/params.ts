@@ -22,8 +22,10 @@ export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
 export type EdgeChoiceParam = 'requestClass'
 
+// 屬性面板顯示「中文（英文）」，英文用較淡的顏色，所以分成兩個欄位；英文就是 API 的欄位名稱
 export type NumberSpec = {
   label: string
+  labelEn: string
   unit?: string
   integer?: boolean
   // 0.3.0 起新增的參數都是選填：匯入的檔案省略時用該類型的預設值，舊檔照樣讀得進來（spec 3.6）
@@ -38,7 +40,9 @@ export type NumberSpec = {
 }
 
 export type ChoiceSpec<V extends string> = {
+  // 同 NumberSpec
   label: string
+  labelEn: string
   // 規則同 NumberSpec.optional
   optional?: boolean
   options: { value: V; label: string }[]
@@ -49,14 +53,23 @@ export const MAX_WORKERS = 1_000_000
 
 // Rate Limiter 的 limitRps、External API 的 quotaRps：0 等於全部拒絕，要停用就刪掉節點（spec 4.5），
 // 所以要 > 0；上限同 rps
-function upperLimitSpec(label: string): NumberSpec {
-  return { label, unit: 'rps', min: 0, minExclusive: true, max: 1e12, slider: { min: 1, max: 1_000_000, scale: 'log' } }
+function upperLimitSpec(label: string, labelEn: string): NumberSpec {
+  return {
+    label,
+    labelEn,
+    unit: 'rps',
+    min: 0,
+    minExclusive: true,
+    max: 1e12,
+    slider: { min: 1, max: 1_000_000, scale: 'log' },
+  }
 }
 
 // Client 的回應、上傳大小（頻寬，spec 4.7）和儲存節點每次 write 的大小（儲存量，spec 4.8），舊檔沒有這些欄位；上限 1 TB
-function bytesSpec(label: string): NumberSpec {
+function bytesSpec(label: string, labelEn: string): NumberSpec {
   return {
     label,
+    labelEn,
     unit: 'bytes',
     optional: true,
     min: 0,
@@ -67,46 +80,70 @@ function bytesSpec(label: string): NumberSpec {
 
 // 合法範圍要和 spec 4.5 的 INVALID_PARAM 一致
 export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
-  rps: { label: 'rps', unit: 'rps', min: 0, max: 1e12, slider: { min: 1, max: 1_000_000, scale: 'log' } },
-  readRatio: { label: 'readRatio', min: 0, max: 1, slider: { min: 0, max: 1, scale: 'linear', step: 0.01 } },
-  readResponseBytes: bytesSpec('readResponseBytes'),
-  writeRequestBytes: bytesSpec('writeRequestBytes'),
+  rps: {
+    label: '每秒請求數',
+    labelEn: 'rps',
+    unit: 'rps',
+    min: 0,
+    max: 1e12,
+    slider: { min: 1, max: 1_000_000, scale: 'log' },
+  },
+  readRatio: {
+    label: '讀取比例',
+    labelEn: 'readRatio',
+    min: 0,
+    max: 1,
+    slider: { min: 0, max: 1, scale: 'linear', step: 0.01 },
+  },
+  readResponseBytes: bytesSpec('讀取回應大小', 'readResponseBytes'),
+  writeRequestBytes: bytesSpec('寫入請求大小', 'writeRequestBytes'),
   instances: {
-    label: 'instances',
+    label: '機器數',
+    labelEn: 'instances',
     integer: true,
     min: 1,
     max: MAX_WORKERS,
     slider: { min: 1, max: 50, scale: 'linear', step: 1 },
   },
   concurrency: {
-    label: 'concurrency',
+    label: '每台並行數',
+    labelEn: 'concurrency',
     integer: true,
     min: 1,
     max: MAX_WORKERS,
     slider: { min: 1, max: 10_000, scale: 'log' },
   },
   serviceTimeMs: {
-    label: 'serviceTimeMs',
+    label: '處理時間',
+    labelEn: 'serviceTimeMs',
     unit: 'ms',
     min: 1e-6,
     max: 1e7,
     slider: { min: 0.01, max: 10_000, scale: 'log' },
   },
-  hitRatio: { label: 'hitRatio', min: 0, max: 1, slider: { min: 0, max: 1, scale: 'linear', step: 0.01 } },
-  limitRps: upperLimitSpec('limitRps'),
+  hitRatio: {
+    label: '命中率',
+    labelEn: 'hitRatio',
+    min: 0,
+    max: 1,
+    slider: { min: 0, max: 1, scale: 'linear', step: 0.01 },
+  },
+  limitRps: upperLimitSpec('限流上限', 'limitRps'),
 
   // External API 的固定回應時間，範圍同邊的 latencyMs
   latencyMs: {
-    label: 'latencyMs',
+    label: '回應延遲',
+    labelEn: 'latencyMs',
     unit: 'ms',
     min: 0,
     max: 1e7,
     slider: { min: 0, max: 2000, scale: 'linear', step: 10 },
   },
-  quotaRps: upperLimitSpec('quotaRps'),
+  quotaRps: upperLimitSpec('配額', 'quotaRps'),
   // Cache、Database 的分片（spec 4.2.2），舊檔沒有這個欄位
   shards: {
-    label: 'shards',
+    label: '分片數',
+    labelEn: 'shards',
     integer: true,
     optional: true,
     min: 1,
@@ -115,16 +152,18 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
   },
   // 省略時平均分配（1/shards），所以不在 NODE_KINDS 的 defaults 裡；實際下限是 1/shards，見 checkNodeParam
   hotShardShare: {
-    label: 'hotShardShare',
+    label: '最熱分片占比',
+    labelEn: 'hotShardShare',
     optional: true,
     min: 0,
     max: 1,
     slider: { min: 0, max: 1, scale: 'linear', step: 0.01 },
   },
   // Database、Object Storage 的儲存量估算（spec 4.8），舊檔沒有這些欄位
-  bytesPerWrite: bytesSpec('bytesPerWrite'),
+  bytesPerWrite: bytesSpec('每次寫入大小', 'bytesPerWrite'),
   retentionDays: {
-    label: 'retentionDays',
+    label: '保留天數',
+    labelEn: 'retentionDays',
     unit: '天',
     optional: true,
     min: 0,
@@ -133,7 +172,8 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
   },
   // 省略時不估算磁碟幾天後會滿，所以不在 NODE_KINDS 的 defaults 裡，在 PropertiesPanel 另外顯示
   diskGbPerShard: {
-    label: 'diskGbPerShard',
+    label: '每個分片的磁碟容量',
+    labelEn: 'diskGbPerShard',
     unit: 'GB',
     optional: true,
     min: 0,
@@ -146,21 +186,24 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
 export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {
   // weight 為 0 的下游收不到流量，等於沒有接（spec 4.5），所以要 > 0
   weight: {
-    label: 'weight',
+    label: '權重',
+    labelEn: 'weight',
     min: 0,
     minExclusive: true,
     max: 1e6,
     slider: { min: 0.1, max: 10, scale: 'linear', step: 0.1 },
   },
   callsPerRequest: {
-    label: 'callsPerRequest',
+    label: '每個請求的呼叫次數',
+    labelEn: 'callsPerRequest',
     integer: true,
     min: 1,
     max: 10_000,
     slider: { min: 1, max: 10, scale: 'linear', step: 1 },
   },
   latencyMs: {
-    label: 'latencyMs',
+    label: '網路延遲',
+    labelEn: 'latencyMs',
     unit: 'ms',
     min: 0,
     max: 1e7,
@@ -171,10 +214,11 @@ export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {
 // 下拉選單的參數，選項的 value 就是 API 的 enum 值
 export const NODE_CHOICE_SPECS: { [P in NodeChoiceParam]: ChoiceSpec<NonNullable<NodeParams[P]>> } = {
   callMode: {
-    label: 'callMode',
+    label: '呼叫模式',
+    labelEn: 'callMode',
     options: [
-      { value: 'SEQUENTIAL', label: 'SEQUENTIAL（依序）' },
-      { value: 'PARALLEL', label: 'PARALLEL（平行）' },
+      { value: 'SEQUENTIAL', label: '依序（SEQUENTIAL）' },
+      { value: 'PARALLEL', label: '平行（PARALLEL）' },
     ],
   },
 }
@@ -182,11 +226,12 @@ export const NODE_CHOICE_SPECS: { [P in NodeChoiceParam]: ChoiceSpec<NonNullable
 // 邊的欄位一律選填，省略時的預設值在 topologyFile.ts 的 toEdge 補（spec 3.6）
 export const EDGE_CHOICE_SPECS: { [P in EdgeChoiceParam]: ChoiceSpec<Edge[P]> } = {
   requestClass: {
-    label: 'requestClass',
+    label: '請求類別',
+    labelEn: 'requestClass',
     options: [
-      { value: 'ALL', label: 'ALL（read 和 write）' },
-      { value: 'READ', label: 'READ（只有 read）' },
-      { value: 'WRITE', label: 'WRITE（只有 write）' },
+      { value: 'ALL', label: '全部（ALL）' },
+      { value: 'READ', label: '只有讀取（READ）' },
+      { value: 'WRITE', label: '只有寫入（WRITE）' },
     ],
   },
 }
