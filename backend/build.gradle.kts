@@ -1,6 +1,6 @@
 subprojects {
     group = "simulator"
-    version = "0.4.1"
+    version = "0.5.0"
 
     plugins.withType<JavaPlugin> {
         extensions.configure<JavaPluginExtension> {
