@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import type { Topology } from '@/api/client'
 import { DASH, formatMs } from '@/canvas/format'
-import { REQUEST_CLASSES, undefinedReasonText, type ClassLatencies, type RequestClass } from './latency'
+import { APPROXIMATE_TITLE, REQUEST_CLASSES, undefinedReasonText, type ClassLatencies, type RequestClass } from './latency'
 
 type EndToEndLatencyTextProps = {
   latencies: ClassLatencies
@@ -47,7 +47,7 @@ function LatencyValueText({
     <>
       {formatMs(latency.ms)}
       {latency.approximate && (
-        <Badge variant="outline" className="ml-1" title="平行呼叫取各下游平均值的最大值，會低估真實延遲">
+        <Badge variant="outline" className="ml-1" title={APPROXIMATE_TITLE}>
           近似
         </Badge>
       )}

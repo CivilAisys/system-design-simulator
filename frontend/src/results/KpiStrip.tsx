@@ -1,40 +1,45 @@
 import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
-import type { ComputedResult, Status, Topology } from '@/api/client'
-import { DASH, formatMs, formatPercent, formatRps, formatUtilization } from '@/canvas/format'
+import type { ComputedResult, Topology } from '@/api/client'
+import { DASH, formatMs, formatRps, formatRpsNumber, formatSuccessRate, formatUtilization } from '@/canvas/format'
+import { isAlerting } from '@/canvas/status'
 import { cn } from '@/lib/utils'
-import { REQUEST_CLASSES, undefinedReasonText } from './latency'
+import { APPROXIMATE_TITLE, REQUEST_CLASSES, undefinedReasonText, type ClassLatencies } from './latency'
 
 type KpiStripProps = {
   topology: Topology
   result: ComputedResult
 }
 
-// 瓶頸到這幾級才強調顯示，和「發現瓶頸」通知的門檻一致（第 4.4 節，ρ ≥ 0.7）
-const EMPHASIZED: ReadonlySet<Status> = new Set(['WARN', 'CRITICAL', 'OVERLOADED'])
-
 // 結果面板上方的重點數字（spec 第 6 節），數值都直接取自 summary，不另外計算
 export function KpiStrip({ topology, result }: KpiStripProps) {
   const { summary } = result
-  // 丟棄率已經包含拒絕，乘回 offeredRps 就是沒有完整成功的請求數
+  // 丟棄率已經包含拒絕，乘回 offeredRps 就是沒有完整成功的使用者請求數
   const failedRps = summary.dropRate * summary.offeredRps
 
   return (
     <div className="grid shrink-0 grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5">
       <KpiCard label="成功率">
         <KpiValue className={summary.dropRate > 0 ? 'text-over-ink' : 'text-ok-ink'}>
-          {formatPercent(1 - summary.dropRate)}
+          {formatSuccessRate(summary.dropRate)}
         </KpiValue>
+        <KpiNote>成功 {formatRps(summary.successRps)}</KpiNote>
       </KpiCard>
       <KpiCard label="端到端延遲">
-        <LatencyLines topology={topology} result={result} />
+        <LatencyValue latencies={summary.avgEndToEndMs} topology={topology} />
       </KpiCard>
       <KpiCard label="丟棄">
         <KpiValue className={cn(failedRps > 0 && 'text-over-ink')}>
-          <RpsValue rps={failedRps} />
+          {formatRpsNumber(failedRps)}
+          <KpiUnit>rps</KpiUnit>
         </KpiValue>
-        {/* 有 Rate Limiter 或 External API 拒絕請求時才列出，上面的數字已經包含它 */}
-        {summary.rejectedRps > 0 && <KpiNote>含拒絕 {formatRps(summary.rejectedRps)}</KpiNote>}
+        {/* 有 Rate Limiter 或 External API 拒絕請求時才列出。它是節點拒絕量的總和，
+            fan-out 後算的是子呼叫數，可能比上面的數字還大，所以不寫成「其中」 */}
+        {summary.rejectedRps > 0 && (
+          <KpiNote title="各 Rate Limiter、External API 拒絕量的總和；在 fan-out 之後算的是子呼叫數">
+            拒絕 {formatRps(summary.rejectedRps)}
+          </KpiNote>
+        )}
       </KpiCard>
       <BottleneckCard topology={topology} result={result} />
     </div>
@@ -51,7 +56,7 @@ type KpiCardProps = {
 
 function KpiCard({ label, className, labelClassName, children }: KpiCardProps) {
   return (
-    <div className={cn('rounded-card border bg-muted px-4 py-3', className)}>
+    <div className={cn('min-w-0 rounded-card border bg-muted px-4 py-3', className)}>
       <KpiNote className={labelClassName}>{label}</KpiNote>
       {children}
     </div>
@@ -66,48 +71,54 @@ function KpiValue({ className, children }: { className?: string; children: React
   )
 }
 
-function KpiNote({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('text-xs font-medium text-muted-foreground', className)}>{children}</div>
+// 數值旁的單位、class 名稱用小字，數字才是重點
+function KpiUnit({ className, children }: { className?: string; children: ReactNode }) {
+  return <span className={cn('ml-1 text-[13px] font-normal text-muted-foreground', className)}>{children}</span>
 }
 
-// 「64 rps」的單位用小字，數字才是重點
-function RpsValue({ rps }: { rps: number }) {
+function KpiNote({ className, title, children }: { className?: string; title?: string; children: ReactNode }) {
   return (
-    <>
-      {formatRps(rps).replace(/ rps$/, '')}
-      <span className="ml-1 text-[13px] font-normal text-muted-foreground">rps</span>
-    </>
+    <div className={cn('text-xs font-medium text-muted-foreground', className)} title={title}>
+      {children}
+    </div>
   )
 }
 
-// read、write 各一行；null 時顯示「—」和原因（和指標表同樣的說明文字），近似值加上「近似」
-function LatencyLines({ topology, result }: KpiStripProps) {
-  const latencies = result.summary.avgEndToEndMs
-  return REQUEST_CLASSES.map((c) => {
+// read、write 排在同一行，卡片才不會太高；null 時顯示「—」，原因（和指標表同樣的說明文字）列在下面，
+// 兩個 class 原因相同（例如同一個節點過載）時只列一次
+function LatencyValue({ latencies, topology }: { latencies: ClassLatencies; topology: Topology }) {
+  const reasons = REQUEST_CLASSES.flatMap((c) => {
     const latency = latencies[c]
-    return (
-      <div key={c}>
-        <KpiValue className="flex items-baseline gap-2">
-          <span className="text-[13px] font-normal text-muted-foreground">{c}</span>
-          {latency.ms == null ? DASH : formatMs(latency.ms)}
-          {latency.approximate && (
-            <Badge
-              variant="outline"
-              className="self-center"
-              title="平行呼叫取各下游平均值的最大值，會低估真實延遲"
-            >
-              近似
-            </Badge>
-          )}
-        </KpiValue>
-        {latency.ms == null && (
-          <KpiNote className={cn(latency.undefinedReason === 'OVERLOADED' && 'text-over-ink')}>
-            {undefinedReasonText(latency, c, topology)}
-          </KpiNote>
-        )}
-      </div>
-    )
-  })
+    return latency.ms == null
+      ? [{ text: undefinedReasonText(latency, c, topology), overloaded: latency.undefinedReason === 'OVERLOADED' }]
+      : []
+  }).filter((reason, i, all) => all.findIndex((other) => other.text === reason.text) === i)
+
+  return (
+    <>
+      <KpiValue className="flex flex-wrap items-baseline gap-x-3">
+        {REQUEST_CLASSES.map((c) => {
+          const latency = latencies[c]
+          return (
+            <span key={c} className="whitespace-nowrap">
+              <KpiUnit className="mr-1 ml-0">{c}</KpiUnit>
+              {latency.ms == null ? DASH : formatMs(latency.ms)}
+              {latency.approximate && (
+                <Badge variant="outline" className="ml-1 align-middle" title={APPROXIMATE_TITLE}>
+                  近似
+                </Badge>
+              )}
+            </span>
+          )
+        })}
+      </KpiValue>
+      {reasons.map((reason) => (
+        <KpiNote key={reason.text} className={cn(reason.overloaded && 'text-over-ink')}>
+          {reason.text}
+        </KpiNote>
+      ))}
+    </>
+  )
 }
 
 function BottleneckCard({ topology, result }: KpiStripProps) {
@@ -124,20 +135,20 @@ function BottleneckCard({ topology, result }: KpiStripProps) {
   }
   // 結果可能比目前畫布舊一點（Auto-run 還在 debounce），節點被刪掉時退回顯示 id
   const name = topology.nodes.find((node) => node.id === id)?.name ?? id
-  const emphasized = metrics.status != null && EMPHASIZED.has(metrics.status)
+  const alerting = isAlerting(metrics.status)
   return (
     <KpiCard
       label="瓶頸"
-      className={cn(emphasized && 'border-strong-bg bg-strong-bg')}
-      labelClassName={cn(emphasized && 'text-strong-muted')}
+      className={cn(alerting && 'border-strong-bg bg-strong-bg')}
+      labelClassName={cn(alerting && 'text-strong-muted')}
     >
-      <KpiValue className={cn('flex items-baseline gap-2', emphasized && 'text-strong-ink')}>
+      <KpiValue className={cn('flex items-baseline', alerting && 'text-strong-ink')}>
         <span className="truncate" title={name}>
           {name}
         </span>
-        <span className={cn('text-[13px] font-normal', emphasized ? 'text-strong-accent' : 'text-muted-foreground')}>
+        <KpiUnit className={cn('ml-2 shrink-0', alerting && 'text-strong-accent')}>
           ρ {formatUtilization(metrics.utilization)}
-        </span>
+        </KpiUnit>
       </KpiValue>
     </KpiCard>
   )

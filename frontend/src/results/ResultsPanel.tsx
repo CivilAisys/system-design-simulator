@@ -52,32 +52,35 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
           </>
         )}
       </div>
-      {/* 重點數字在每個分頁都看得到；驗證錯誤時沒有數字可顯示 */}
-      {computed && <KpiStrip topology={topology} result={computed} />}
-      <TabsContent value="metrics" className="min-h-0 overflow-auto">
-        {computed ? <MetricsTable topology={topology} result={computed} /> : empty}
-      </TabsContent>
-      <TabsContent value="sankey" className="min-h-0">
-        {computed && hasFlow ? (
-          <Suspense>
-            <FlowSankey topology={topology} result={computed} theme={theme} />
-          </Suspense>
-        ) : computed ? (
-          <p className="p-4 text-sm text-muted-foreground">所有連線的流量都是 0</p>
-        ) : (
-          empty
-        )}
-      </TabsContent>
-      <TabsContent value="storage" className="min-h-0 overflow-auto">
-        {computed ? <StorageTable topology={topology} result={computed} /> : empty}
-      </TabsContent>
-      <TabsContent value="errors" className="min-h-0 overflow-auto">
-        {result ? (
-          <ErrorList errors={result.errors} canFocus={canFocusError} onFocus={onFocusError} />
-        ) : (
-          empty
-        )}
-      </TabsContent>
+      {/* 重點數字在每個分頁都看得到；驗證錯誤時沒有數字可顯示。
+          面板夠高時只有分頁內容自己捲動；面板太矮或卡片換成多行時，分頁內容至少保留 160px，整個區域一起捲動 */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+        {computed && <KpiStrip topology={topology} result={computed} />}
+        <TabsContent value="metrics" className="min-h-40 overflow-auto">
+          {computed ? <MetricsTable topology={topology} result={computed} /> : empty}
+        </TabsContent>
+        <TabsContent value="sankey" className="min-h-40">
+          {computed && hasFlow ? (
+            <Suspense>
+              <FlowSankey topology={topology} result={computed} theme={theme} />
+            </Suspense>
+          ) : computed ? (
+            <p className="p-4 text-sm text-muted-foreground">所有連線的流量都是 0</p>
+          ) : (
+            empty
+          )}
+        </TabsContent>
+        <TabsContent value="storage" className="min-h-40 overflow-auto">
+          {computed ? <StorageTable topology={topology} result={computed} /> : empty}
+        </TabsContent>
+        <TabsContent value="errors" className="min-h-40 overflow-auto">
+          {result ? (
+            <ErrorList errors={result.errors} canFocus={canFocusError} onFocus={onFocusError} />
+          ) : (
+            empty
+          )}
+        </TabsContent>
+      </div>
     </Tabs>
   )
 }
