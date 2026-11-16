@@ -18,6 +18,13 @@ export const STATUS_GLOW: Record<Status, string> = {
   WITHIN_QUOTA: '',
 }
 
+// 瓶頸到這幾級（ρ ≥ 0.7，第 4.4 節）才值得提醒：「發現瓶頸」通知和結果面板強調的瓶頸卡片用同一個門檻
+const ALERTING: ReadonlySet<Status> = new Set(['WARN', 'CRITICAL', 'OVERLOADED'])
+
+export function isAlerting(status: Status | null | undefined): boolean {
+  return status != null && ALERTING.has(status)
+}
+
 export const STATUS_TEXT: Record<Status, string> = {
   OK: 'text-ok-ink',
   WARN: 'text-warn-ink',

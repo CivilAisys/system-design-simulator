@@ -23,6 +23,7 @@ import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
 import { findFreePosition } from '@/canvas/placement'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
+import { isAlerting } from '@/canvas/status'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
 import { EXAMPLES } from '@/examples'
 import { restoreTopology, saveTopology, type Restored } from '@/io/autosave'
@@ -396,7 +397,7 @@ function useBottleneckToast() {
     const id = isComputed(result) ? result.summary.bottleneckNodeId : null
     const metrics = id == null ? undefined : result.nodes[id]
     // 驗證錯誤或沒有瓶頸時，上一次的通知會和這次的結果互相矛盾
-    if (id == null || !metrics?.status || metrics.status === 'OK') {
+    if (id == null || !metrics || !isAlerting(metrics.status)) {
       clear()
       return
     }
