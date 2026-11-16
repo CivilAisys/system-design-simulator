@@ -75,9 +75,9 @@ final class TopologyValidator {
             errors.add(new ValidationError("NO_CLIENT", "拓撲至少要有一個 Client", null, null));
         }
         Set<String> onCycles = graph.nodesOnCycles();
-        Set<String> written = reachedByWrites();
+        Set<String> receivingWrites = reachedByWrites();
         for (Node node : topology.nodes()) {
-            checkNode(node, onCycles.contains(node.id()), written.contains(node.id()));
+            checkNode(node, onCycles.contains(node.id()), receivingWrites.contains(node.id()));
         }
         var pairs = new HashSet<String>();
         for (Edge edge : topology.edges()) {

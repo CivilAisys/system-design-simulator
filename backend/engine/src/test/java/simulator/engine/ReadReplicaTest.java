@@ -174,6 +174,15 @@ class ReadReplicaTest {
                         edge("e3", "s", "r", requestClass), edge("e4", "db", "r")));
     }
 
+    /** Client → Service ─(requestClass)→ LB → 兩個 replica，primary 都是 db。 */
+    private SimulationResult serviceToReplicasThroughLb(RequestClass requestClass) {
+        return validate(
+                List.of(client(), service("s"), database("db"), loadBalancer("lb"), replica("r1"), replica("r2")),
+                List.of(edge("e1", "c", "s"), edge("e2", "s", "db", RequestClass.WRITE),
+                        edge("e3", "s", "lb", requestClass), edge("e4", "lb", "r1"), edge("e5", "lb", "r2"),
+                        edge("e6", "db", "r1"), edge("e7", "db", "r2")));
+    }
+
     private static List<String> receivesWrites(SimulationResult result) {
         return result.errors().stream().filter(error -> error.code().equals("REPLICA_RECEIVES_WRITES"))
                 .map(ValidationError::nodeId).toList();
@@ -186,18 +195,8 @@ class ReadReplicaTest {
         assertThat(serviceToReplica(RequestClass.READ).errors()).isEmpty();
 
         // LB 原樣往下傳：上游 Service 的邊有 write 就報錯，只有 READ 就合法
-        for (RequestClass requestClass : List.of(RequestClass.ALL, RequestClass.READ)) {
-            SimulationResult throughLb = validate(
-                    List.of(client(), service("s"), database("db"), loadBalancer("lb"), replica("r1"), replica("r2")),
-                    List.of(edge("e1", "c", "s"), edge("e2", "s", "db", RequestClass.WRITE),
-                            edge("e3", "s", "lb", requestClass), edge("e4", "lb", "r1"), edge("e5", "lb", "r2"),
-                            edge("e6", "db", "r1"), edge("e7", "db", "r2")));
-            assertThat(receivesWrites(throughLb))
-                    .isEqualTo(requestClass == RequestClass.ALL ? List.of("r1", "r2") : List.of());
-            if (requestClass == RequestClass.READ) {
-                assertThat(throughLb.errors()).isEmpty();
-            }
-        }
+        assertThat(receivesWrites(serviceToReplicasThroughLb(RequestClass.ALL))).containsExactly("r1", "r2");
+        assertThat(serviceToReplicasThroughLb(RequestClass.READ).errors()).isEmpty();
     }
 
     @Test
