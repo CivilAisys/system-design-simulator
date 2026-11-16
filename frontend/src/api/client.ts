@@ -8,6 +8,7 @@ export type Edge = components['schemas']['Edge']
 export type NodeResult = components['schemas']['NodeResult']
 export type EdgeResult = components['schemas']['EdgeResult']
 export type ClassRates = components['schemas']['ClassRates']
+export type ShardResult = components['schemas']['ShardResult']
 export type Status = NonNullable<NodeResult['status']>
 export type SimulationResult = components['schemas']['SimulationResult']
 export type Summary = NonNullable<SimulationResult['summary']>

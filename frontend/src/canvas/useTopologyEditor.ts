@@ -6,8 +6,8 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
-import type { Edge, Node, NodeType, Topology } from '@/api/client'
-import { newEdgeId, newNode, type NodeParams } from './catalog'
+import type { Edge, Node, Topology } from '@/api/client'
+import { newEdgeId, newNode, type NodeParams, type PaletteItem } from './catalog'
 import type { SimFlowNode } from './SimNode'
 import { arrowMarker } from './edgeStyle'
 import { copyNodes, pasteClip, type Clip } from './clipboard'
@@ -106,8 +106,8 @@ export function useTopologyEditor(initial: Topology) {
 
   // 新節點取代原本的選取，屬性面板直接切到它
   const addNode = useCallback(
-    (type: NodeType, position: { x: number; y: number }) => {
-      const node = newNode(type, usedIds, position)
+    (item: PaletteItem, position: { x: number; y: number }) => {
+      const node = newNode(item, usedIds, position)
       usedIds.add(node.id)
       edit((state) => ({
         ...state,

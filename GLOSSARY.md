@@ -53,6 +53,9 @@ _Avoid_: blob storage、S3（具體產品名）
 Cache 或 Database 依 key 切出來的一份資料和承擔它的機器，每個 shard 都套用節點的處理能力參數。
 _Avoid_: partition、分區
 
+**Redis Cluster**:
+元件面板上的 preset，就是 shards = 3 的 Cache，匯出的 JSON 裡 type 仍是 CACHE。
+
 **Hot shard（熱點 shard）**:
 因為熱門 key 而分到最多流量的 shard，它的 ρ 決定整個節點的 ρ 和狀態。
 _Avoid_: hot key（hot key 是原因，hot shard 是結果）

@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
 import { formatRps, formatUtilization } from './format'
+import { ShardGrid } from './ShardGrid'
 import { STATUS_GLOW, STATUS_LABEL, STATUS_TEXT } from './status'
 import { errorsTitle } from './validation'
 
@@ -59,6 +60,9 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
           </span>
           {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
         </div>
+      )}
+      {(node.params.shards ?? 1) > 1 && (
+        <ShardGrid count={node.params.shards ?? 1} shards={result?.shards} stale={stale} />
       )}
       {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>

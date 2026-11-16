@@ -11,7 +11,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { totalRps, type Edge, type NodeType, type SimulationResult } from '@/api/client'
-import { NODE_KINDS } from './catalog'
+import { NODE_KINDS, PALETTE, type PaletteItem } from './catalog'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { arrowMarker, edgeColor } from './edgeStyle'
 import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
@@ -21,7 +21,7 @@ import { groupErrors } from './validation'
 const nodeTypes = { sim: SimNode }
 const edgeTypes = { rps: RpsEdge }
 
-// 元件面板拖出來的 dataTransfer 格式，值是 NodeType
+// 元件面板拖出來的 dataTransfer 格式，值是 PaletteItem 的 id
 export const NODE_TYPE_MIME = 'application/x-sim-node-type'
 
 type CanvasProps = {
@@ -35,7 +35,7 @@ type CanvasProps = {
   onEdgesChange: (changes: EdgeChange<RpsFlowEdge>[]) => void
   onConnect: (connection: Connection) => void
   isValidConnection: (connection: Connection | RpsFlowEdge) => boolean
-  onAddNode: (type: NodeType, position: { x: number; y: number }) => void
+  onAddNode: (item: PaletteItem, position: { x: number; y: number }) => void
 }
 
 export function Canvas({
@@ -101,12 +101,13 @@ export function Canvas({
   }
 
   function onDrop(event: DragEvent) {
-    const type = event.dataTransfer.getData(NODE_TYPE_MIME)
-    if (!Object.hasOwn(NODE_KINDS, type)) {
+    const id = event.dataTransfer.getData(NODE_TYPE_MIME)
+    const item = PALETTE.find((candidate) => candidate.id === id)
+    if (!item) {
       return
     }
     event.preventDefault()
-    onAddNode(type as NodeType, screenToFlowPosition({ x: event.clientX, y: event.clientY }))
+    onAddNode(item, screenToFlowPosition({ x: event.clientX, y: event.clientY }))
   }
 
   return (

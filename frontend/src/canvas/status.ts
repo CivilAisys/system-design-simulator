@@ -38,6 +38,18 @@ export const STATUS_BADGE: Record<Status, string> = {
   WITHIN_QUOTA: 'bg-muted text-muted-foreground',
 }
 
+// 分片節點裡每個 shard 的格子（spec 第 6 節）：實心填色，過載的格子發光。Rate Limiter、External API 不會分片
+export const STATUS_CELL: Record<Status, string> = {
+  OK: 'bg-emerald-500',
+  WARN: 'bg-yellow-500',
+  CRITICAL: 'bg-orange-500',
+  OVERLOADED: 'bg-red-500 shadow-md shadow-red-500/80',
+  LIMITING: 'bg-muted-foreground/40',
+  NOT_LIMITING: 'bg-muted-foreground/40',
+  OVER_QUOTA: 'bg-muted-foreground/40',
+  WITHIN_QUOTA: 'bg-muted-foreground/40',
+}
+
 // 中性灰：Client（沒有狀態）、Rate Limiter 和配額內的 External API 的 Sankey 節點
 export const NEUTRAL_HEX = '#a3a3a3'
 

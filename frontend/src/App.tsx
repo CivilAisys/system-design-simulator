@@ -15,8 +15,9 @@ import { Label } from '@/components/ui/label'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
 import { Switch } from '@/components/ui/switch'
-import { isComputed, type NodeType, type SimulationResult, type Topology, type ValidationError } from '@/api/client'
+import { isComputed, type SimulationResult, type Topology, type ValidationError } from '@/api/client'
 import { Canvas } from '@/canvas/Canvas'
+import type { PaletteItem } from '@/canvas/catalog'
 import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
@@ -135,12 +136,12 @@ function Simulator() {
   }
 
   // 點擊元件面板時放在目前畫面的中央
-  function addAtCenter(type: NodeType) {
+  function addAtCenter(item: PaletteItem) {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) {
       return
     }
-    editor.addNode(type, screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }))
+    editor.addNode(item, screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }))
   }
 
   // 錯誤指到的節點：節點錯誤是它本身，邊錯誤是邊的兩端。
