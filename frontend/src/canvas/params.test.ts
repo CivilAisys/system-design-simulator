@@ -12,7 +12,7 @@ import {
   toSlider,
 } from './params'
 
-const { rps, readRatio, instances, concurrency, serviceTimeMs } = NODE_PARAM_SPECS
+const { rps, readRatio, instances, concurrency, serviceTimeMs, limitRps, quotaRps } = NODE_PARAM_SPECS
 const { weight, callsPerRequest, latencyMs } = EDGE_PARAM_SPECS
 
 describe('checkNumber', () => {
@@ -27,6 +27,7 @@ describe('checkNumber', () => {
     [latencyMs, 0],
     [rps, 1e12],
     [weight, 1e6],
+    [limitRps, 1e12],
   ])('%#: 範圍內的值合法', (spec, value) => {
     expect(checkNumber(spec, value)).toBeNull()
   })
@@ -48,6 +49,8 @@ describe('checkNumber', () => {
 
   it('下限不含本身時，等於下限也不合法', () => {
     expect(checkNumber(weight, 0)).toBe('超出範圍（> 0 且 ≤ 1,000,000）')
+    expect(checkNumber(limitRps, 0)).toBe('超出範圍（> 0 且 ≤ 1,000,000,000,000）')
+    expect(checkNumber(quotaRps, 0)).toBe('超出範圍（> 0 且 ≤ 1,000,000,000,000）')
   })
 
   it('大於上限', () => {
@@ -80,6 +83,20 @@ describe('checkNodeParam', () => {
 
   it('其他參數只看自己的範圍', () => {
     expect(checkNodeParam(params, 'serviceTimeMs', 1e7)).toBeNull()
+  })
+
+  it('最熱 shard 的占比不能小於平均 1/shards', () => {
+    const sharded: NodeParams = { shards: 4 }
+    expect(checkNodeParam(sharded, 'hotShardShare', 0.25)).toBeNull()
+    expect(checkNodeParam(sharded, 'hotShardShare', 0.2)).toBe('hotShardShare 不能小於平均 1/4（0.25）')
+  })
+
+  it('減少 shard 數時，已設定的占比不能小於新的平均', () => {
+    const hot: NodeParams = { shards: 4, hotShardShare: 0.4 }
+    expect(checkNodeParam(hot, 'shards', 3)).toBeNull()
+    expect(checkNodeParam(hot, 'shards', 2)).toBe('hotShardShare 不能小於平均 1/2（0.5）')
+    // 沒設定時平均分配，shard 數怎麼改都合法
+    expect(checkNodeParam({ shards: 4 }, 'shards', 2)).toBeNull()
   })
 })
 

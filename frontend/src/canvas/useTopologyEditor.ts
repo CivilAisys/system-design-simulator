@@ -6,8 +6,8 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
-import type { Edge, Node, NodeType, Topology } from '@/api/client'
-import { newEdgeId, newNode, type NodeParams } from './catalog'
+import type { Edge, Node, Topology } from '@/api/client'
+import { canFeed, newEdgeId, newNode, type NodeParams, type PaletteItem } from './catalog'
 import type { SimFlowNode } from './SimNode'
 import { arrowMarker } from './edgeStyle'
 import { copyNodes, pasteClip, type Clip } from './clipboard'
@@ -18,10 +18,16 @@ import type { RpsFlowEdge } from './RpsEdge'
 const TOPOLOGY_VERSION = 1
 
 // spec 3.4 的預設值
-const EDGE_DEFAULTS = { weight: 1, callsPerRequest: 1, latencyMs: 1 }
+const EDGE_DEFAULTS: Omit<Edge, 'id' | 'source' | 'target'> = {
+  weight: 1,
+  callsPerRequest: 1,
+  latencyMs: 1,
+  requestClass: 'ALL',
+}
 
-export type NodePatch = { name?: string; params?: Partial<NodeParams> }
-export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>>
+// clearParams：拿掉的選填參數（例如 hotShardShare 改回平均分配）。params 裡的 undefined 代表「沒有改」，不能用來刪除
+export type NodePatch = { name?: string; params?: Partial<NodeParams>; clearParams?: (keyof NodeParams)[] }
+export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs' | 'requestClass'>>
 
 type CanvasState = {
   nodes: SimFlowNode[]
@@ -79,8 +85,8 @@ export function useTopologyEditor(initial: Topology) {
   )
 
   const isValidConnection = useCallback(
-    (c: Connection | RpsFlowEdge) => canConnect(edges, c.source, c.target),
-    [edges],
+    (c: Connection | RpsFlowEdge) => canConnect(edges, c.source, c.target) && typesFit(nodes, c.source, c.target),
+    [nodes, edges],
   )
 
   const onConnect = useCallback(
@@ -88,7 +94,7 @@ export function useTopologyEditor(initial: Topology) {
       const id = newEdgeId(c.source, c.target, usedIds)
       usedIds.add(id)
       edit((state) => {
-        if (!canConnect(state.edges, c.source, c.target)) {
+        if (!canConnect(state.edges, c.source, c.target) || !typesFit(state.nodes, c.source, c.target)) {
           return state
         }
         const edge = toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS })
@@ -100,8 +106,8 @@ export function useTopologyEditor(initial: Topology) {
 
   // 新節點取代原本的選取，屬性面板直接切到它
   const addNode = useCallback(
-    (type: NodeType, position: { x: number; y: number }) => {
-      const node = newNode(type, usedIds, position)
+    (item: PaletteItem, position: { x: number; y: number }) => {
+      const node = newNode(item, usedIds, position)
       usedIds.add(node.id)
       edit((state) => ({
         ...state,
@@ -184,20 +190,27 @@ export function useTopologyEditor(initial: Topology) {
           ...state,
           nodes: state.nodes.map((n) => {
             const node = n.data.node
-            const unchanged = sameValues(node, { name: patch.name }) && sameValues(node.params, patch.params ?? {})
+            const cleared = (patch.clearParams ?? []).filter((param) => node.params[param] !== undefined)
+            const unchanged =
+              sameValues(node, { name: patch.name }) && sameValues(node.params, patch.params ?? {}) && !cleared.length
             if (n.id !== id || unchanged) {
               return n
             }
+            const params = { ...node.params, ...patch.params }
+            for (const param of cleared) {
+              delete params[param]
+            }
             return {
               ...n,
-              data: {
-                ...n.data,
-                node: { ...node, name: patch.name ?? node.name, params: { ...node.params, ...patch.params } },
-              },
+              data: { ...n.data, node: { ...node, name: patch.name ?? node.name, params } },
             }
           }),
         }),
-        fieldGroup(`node:${id}`, { name: patch.name, ...patch.params }),
+        fieldGroup(`node:${id}`, {
+          name: patch.name,
+          ...patch.params,
+          ...Object.fromEntries((patch.clearParams ?? []).map((param) => [param, null])),
+        }),
       ),
     [edit],
   )
@@ -366,4 +379,12 @@ function toFlowEdge(edge: Edge): RpsFlowEdge {
     markerEnd: arrowMarker(),
     data: { edge },
   }
+}
+
+// type 的連線限制（canFeed），例如 Database 只能連到 Read Replica
+function typesFit(nodes: SimFlowNode[], source: string, target: string): boolean {
+  const type = (id: string) => nodes.find((n) => n.id === id)?.data.node.type
+  const sourceType = type(source)
+  const targetType = type(target)
+  return sourceType == null || targetType == null || canFeed(sourceType, targetType)
 }

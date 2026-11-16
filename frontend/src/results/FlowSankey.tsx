@@ -3,18 +3,25 @@ import { SankeyChart, type SankeySeriesOption } from 'echarts/charts'
 import { TooltipComponent, type TooltipComponentOption } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { totalRps, type SimulationResult, type Topology } from '@/api/client'
+import { totalRps, type NodeResult, type SimulationResult, type Topology } from '@/api/client'
 import type { Theme } from '@/theme'
 import { formatRps } from '@/canvas/format'
-import { STATUS_HEX } from '@/canvas/status'
+import { isReplicationSource } from '@/canvas/catalog'
+import { NEUTRAL_HEX, STATUS_HEX } from '@/canvas/status'
 
 // 只載入用到的部分，避免把整個 ECharts 打包進來
 echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
 
 type SankeyOption = echarts.ComposeOption<SankeySeriesOption | TooltipComponentOption>
 
-// Client 沒有狀態，用中性灰
-const NEUTRAL_HEX = '#a3a3a3'
+// 沒被送往下游的流量各自流進一個終點：過載的丟棄和 Rate Limiter／External API 的拒絕分開顯示。
+// id 用 \u0000 開頭，不會和使用者的節點 id 撞在一起
+// consumer 處理不完、留在 queue 裡的訊息（spec 4.2.4）也是一個終點，數值是送給它的邊的 backlog 加總
+const SINKS = [
+  { id: '\u0000dropped', name: '丟棄', color: STATUS_HEX.OVERLOADED, rps: (node: NodeResult) => node.droppedRps },
+  { id: '\u0000rejected', name: '拒絕', color: NEUTRAL_HEX, rps: (node: NodeResult) => node.rejectedRps },
+  { id: '\u0000backlog', name: '積壓', color: STATUS_HEX.CRITICAL, rps: (_: NodeResult, backlog: number) => backlog },
+]
 
 type FlowSankeyProps = {
   topology: Topology
@@ -52,21 +59,62 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
   const dark = theme === 'dark'
   const textColor = dark ? '#e5e5e5' : '#171717'
   // 流量和邊上的 label 用同一個數字：read + write
-  const links = topology.edges.flatMap((edge) => {
+  const types = new Map(topology.nodes.map((node) => [node.id, node.type]))
+  const edgeLinks = topology.edges.flatMap((edge) => {
     const rps = result.edges[edge.id]?.rps
     // 0 流量的邊在 Sankey 上沒有寬度，只會留下孤立的節點
     if (!rps || totalRps(rps) <= 0) return []
+    // 複製不是請求的流向：畫出來會讓 primary 看起來處理了好幾倍的流量。
+    // Message Queue 送給 consumer 的訊息是真的要處理的流量，照畫
+    const sourceType = types.get(edge.source)
+    if (sourceType && isReplicationSource(sourceType)) return []
     return [{ source: edge.source, target: edge.target, value: totalRps(rps), read: rps.read, write: rps.write }]
   })
-  const linked = new Set(links.flatMap((link) => [link.source, link.target]))
-  const nodes = topology.nodes
-    .filter((node) => linked.has(node.id))
-    .map((node) => {
-      const status = result.nodes[node.id]?.status
-      // 用 id 對應連線，名稱重複也不會混在一起
-      return { id: node.id, name: node.name, itemStyle: { color: status ? STATUS_HEX[status] : NEUTRAL_HEX } }
+  const backlog = new Map<string, number>()
+  for (const edge of topology.edges) {
+    const queued = result.edges[edge.id]?.backlogRps ?? 0
+    if (queued > 0) backlog.set(edge.target, (backlog.get(edge.target) ?? 0) + queued)
+  }
+  // 丟棄、拒絕和積壓都是依 read／write 的比例發生（spec 4.2），用到達率的比例拆開
+  const sinkLinks = topology.nodes.flatMap((node) => {
+    const metrics = result.nodes[node.id]
+    if (!metrics) return []
+    const arrival = totalRps(metrics.arrivalRps)
+    return SINKS.flatMap((sink) => {
+      const value = sink.rps(metrics, backlog.get(node.id) ?? 0)
+      if (value <= 0 || arrival <= 0) return []
+      const share = value / arrival
+      return [
+        {
+          source: node.id,
+          target: sink.id,
+          value,
+          read: metrics.arrivalRps.read * share,
+          write: metrics.arrivalRps.write * share,
+        },
+      ]
     })
-  const names = new Map(topology.nodes.map((node) => [node.id, node.name]))
+  })
+  const links = [...edgeLinks, ...sinkLinks]
+  const linked = new Set(links.flatMap((link) => [link.source, link.target]))
+  const nodes = [
+    ...topology.nodes
+      .filter((node) => linked.has(node.id))
+      .map((node) => {
+        const status = result.nodes[node.id]?.status
+        // 用 id 對應連線，名稱重複也不會混在一起
+        return { id: node.id, name: node.name, itemStyle: { color: status ? STATUS_HEX[status] : NEUTRAL_HEX } }
+      }),
+    ...SINKS.filter((sink) => linked.has(sink.id)).map((sink) => ({
+      id: sink.id,
+      name: sink.name,
+      itemStyle: { color: sink.color },
+    })),
+  ]
+  const names = new Map([
+    ...topology.nodes.map((node) => [node.id, node.name] as const),
+    ...SINKS.map((sink) => [sink.id, sink.name] as const),
+  ])
 
   return {
     tooltip: {

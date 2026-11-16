@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { totalRps, type ComputedResult, type Topology } from '@/api/client'
 import { DASH, formatClassRates, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
-import { STATUS_BADGE } from '@/canvas/status'
+import { STATUS_BADGE, STATUS_LABEL, WARNING_LABEL, WARNING_TITLE } from '@/canvas/status'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 
 type MetricsTableProps = {
@@ -24,7 +24,15 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
           <TableHead className="text-right">ρ</TableHead>
           <TableHead className="text-right">延遲</TableHead>
           <TableHead title="只有 Client 有：請求從送出到整條呼叫路徑完成的平均時間">端到端延遲</TableHead>
-          <TableHead className="text-right">丟棄</TableHead>
+          <TableHead className="text-right" title="超過容量、沒被處理的請求">
+            丟棄
+          </TableHead>
+          <TableHead
+            className="text-right"
+            title="Rate Limiter 超過 limitRps、External API 超過 quotaRps 拒絕的請求，和丟棄一樣算進丟棄率"
+          >
+            拒絕
+          </TableHead>
           <TableHead className="text-right" title="只有 Client 有：請求整條呼叫路徑都成功的每秒請求數">
             成功
           </TableHead>
@@ -45,6 +53,10 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
             <TableRow key={node.id}>
               <TableCell className="font-medium">
                 {node.name}
+                {/* 分片的節點：ρ 和狀態是最熱的 shard，容量是所有 shard 的加總 */}
+                {metrics.shards && (
+                  <span className="ml-2 text-xs text-muted-foreground">{metrics.shards.length} shards</span>
+                )}
                 {node.id === bottleneckId && (
                   <Badge variant="outline" className="ml-2">
                     瓶頸
@@ -69,9 +81,21 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
               <TableCell className={cn('text-right tabular-nums', metrics.droppedRps > 0 && 'text-destructive')}>
                 {formatRps(metrics.droppedRps)}
               </TableCell>
+              {/* 限流是設計上預期的行為，不用紅字 */}
+              <TableCell className="text-right tabular-nums">{formatRps(metrics.rejectedRps)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatOptionalRps(metrics.successRps)}</TableCell>
               <TableCell>
-                {status ? <Badge className={STATUS_BADGE[status]}>{status}</Badge> : DASH}
+                {status ? <Badge className={STATUS_BADGE[status]}>{STATUS_LABEL[status]}</Badge> : DASH}
+                {metrics.warnings.map((warning) => (
+                  <Badge
+                    key={warning}
+                    variant="outline"
+                    className="ml-1 text-orange-600 dark:text-orange-400"
+                    title={WARNING_TITLE[warning]}
+                  >
+                    {WARNING_LABEL[warning]}
+                  </Badge>
+                ))}
               </TableCell>
             </TableRow>
           )

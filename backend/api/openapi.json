@@ -65,6 +65,12 @@
             "type" : "number",
             "format" : "double",
             "default" : 1
+          },
+          "requestClass" : {
+            "type" : "string",
+            "default" : "ALL",
+            "description" : "只用在 Service 的邊：哪個 class 的請求會呼叫這個下游",
+            "enum" : [ "ALL", "READ", "WRITE" ]
           }
         },
         "required" : [ "id", "source", "target" ]
@@ -77,7 +83,7 @@
           },
           "type" : {
             "type" : "string",
-            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "DATABASE" ]
+            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE", "OBJECT_STORAGE", "RATE_LIMITER", "EXTERNAL_API", "READ_REPLICA", "MESSAGE_QUEUE" ]
           },
           "name" : {
             "type" : "string"
@@ -111,17 +117,17 @@
           "instances" : {
             "type" : "integer",
             "format" : "int32",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, DATABASE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA, MESSAGE_QUEUE"
           },
           "concurrency" : {
             "type" : "integer",
             "format" : "int32",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, DATABASE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA, MESSAGE_QUEUE"
           },
           "serviceTimeMs" : {
             "type" : "number",
             "format" : "double",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, DATABASE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA, MESSAGE_QUEUE"
           },
           "callMode" : {
             "type" : "string",
@@ -131,7 +137,32 @@
           "hitRatio" : {
             "type" : "number",
             "format" : "double",
-            "description" : "CACHE"
+            "description" : "CACHE, CDN"
+          },
+          "limitRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "RATE_LIMITER"
+          },
+          "latencyMs" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "EXTERNAL_API：固定的回應時間"
+          },
+          "quotaRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "EXTERNAL_API：對方給的配額"
+          },
+          "shards" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "CACHE, DATABASE：shard 數，省略時為 1（不分片）"
+          },
+          "hotShardShare" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CACHE, DATABASE：最熱的 shard 分到的流量比例，省略時平均分配（1/shards）"
           }
         }
       },
@@ -203,9 +234,14 @@
         "properties" : {
           "rps" : {
             "$ref" : "#/components/schemas/ClassRates"
+          },
+          "backlogRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "Message Queue 的下游邊：consumer 處理不完，queue 每秒增加的訊息數；其他邊為 0"
           }
         },
-        "required" : [ "rps" ]
+        "required" : [ "backlogRps", "rps" ]
       },
       "EndToEndLatency" : {
         "type" : "object",
@@ -246,7 +282,13 @@
           },
           "droppedRps" : {
             "type" : "number",
-            "format" : "double"
+            "format" : "double",
+            "description" : "超過容量、沒被處理的請求數"
+          },
+          "rejectedRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "Rate Limiter 超過 limitRps、External API 超過 quotaRps 拒絕的請求數，其他節點為 0"
           },
           "successRps" : {
             "type" : [ "number", "null" ],
@@ -279,10 +321,56 @@
           },
           "status" : {
             "type" : [ "string", "null" ],
-            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED" ]
+            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED", "LIMITING", "NOT_LIMITING", "OVER_QUOTA", "WITHIN_QUOTA" ]
+          },
+          "shards" : {
+            "type" : [ "array", "null" ],
+            "description" : "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）",
+            "items" : {
+              "$ref" : "#/components/schemas/ShardResult"
+            }
+          },
+          "warnings" : {
+            "type" : "array",
+            "description" : "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）；BACKLOG：consumer 處理不完 Message Queue 的訊息（spec 4.2.4）",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "REPLICATION_LAG", "BACKLOG" ]
+            }
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "status", "successRps", "throughputRps", "utilization" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "rejectedRps", "shards", "status", "successRps", "throughputRps", "utilization", "warnings" ]
+      },
+      "ShardResult" : {
+        "type" : "object",
+        "description" : "一個 shard 的結果，欄位意義同 NodeResult",
+        "properties" : {
+          "arrivalRps" : {
+            "$ref" : "#/components/schemas/ClassRates"
+          },
+          "throughputRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "droppedRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "utilization" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "avgLatencyMs" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "過載時為 null"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED", "LIMITING", "NOT_LIMITING", "OVER_QUOTA", "WITHIN_QUOTA" ]
+          }
+        },
+        "required" : [ "arrivalRps", "avgLatencyMs", "droppedRps", "status", "throughputRps", "utilization" ]
       },
       "SimulationResult" : {
         "type" : "object",
@@ -331,10 +419,15 @@
             "format" : "double",
             "description" : "各 Client 完整成功的請求數總和"
           },
+          "rejectedRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "各節點拒絕量的總和"
+          },
           "dropRate" : {
             "type" : "number",
             "format" : "double",
-            "description" : "1 − successRps / offeredRps，限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0"
+            "description" : "1 − successRps / offeredRps（丟棄和拒絕都算），限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0"
           },
           "avgEndToEndMs" : {
             "$ref" : "#/components/schemas/ClassLatencies"
@@ -343,7 +436,7 @@
             "type" : [ "string", "null" ]
           }
         },
-        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "dropRate", "offeredRps", "successRps" ]
+        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "dropRate", "offeredRps", "rejectedRps", "successRps" ]
       },
       "ValidationError" : {
         "type" : "object",

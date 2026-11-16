@@ -10,8 +10,8 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { totalRps, type NodeType, type SimulationResult } from '@/api/client'
-import { NODE_KINDS } from './catalog'
+import { totalRps, type Edge, type NodeType, type SimulationResult } from '@/api/client'
+import { NODE_KINDS, PALETTE, type PaletteItem } from './catalog'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { arrowMarker, edgeColor } from './edgeStyle'
 import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
@@ -21,8 +21,8 @@ import { groupErrors } from './validation'
 const nodeTypes = { sim: SimNode }
 const edgeTypes = { rps: RpsEdge }
 
-// 元件面板拖出來的 dataTransfer 格式，值是 NodeType
-export const NODE_TYPE_MIME = 'application/x-sim-node-type'
+// 元件面板拖出來的 dataTransfer 格式，值是 PaletteItem 的 id
+export const PALETTE_ITEM_MIME = 'application/x-sim-palette-item'
 
 type CanvasProps = {
   nodes: SimFlowNode[]
@@ -35,7 +35,7 @@ type CanvasProps = {
   onEdgesChange: (changes: EdgeChange<RpsFlowEdge>[]) => void
   onConnect: (connection: Connection) => void
   isValidConnection: (connection: Connection | RpsFlowEdge) => boolean
-  onAddNode: (type: NodeType, position: { x: number; y: number }) => void
+  onAddNode: (item: PaletteItem, position: { x: number; y: number }) => void
 }
 
 export function Canvas({
@@ -59,17 +59,28 @@ export function Canvas({
     () => Math.max(0, ...edges.map((e) => result?.edges[e.id]).map((r) => (r ? totalRps(r.rps) : 0))),
     [edges, result],
   )
+  const mirrored = useMemo(() => mirroredShards(nodes, edges), [nodes, edges])
   const shownNodes = useMemo<SimFlowNode[]>(
     () =>
       nodes.map((n) => ({
         ...n,
-        data: { ...n.data, result: result?.nodes[n.id], errors: errors.nodes.get(n.id), stale },
+        data: {
+          ...n.data,
+          result: result?.nodes[n.id],
+          errors: errors.nodes.get(n.id),
+          stale,
+          mirroredShards: mirrored.get(n.id),
+        },
       })),
-    [nodes, result, errors, stale],
+    [nodes, result, errors, stale, mirrored],
   )
+  // 邊的種類看 source 的 type。拖動節點時 nodes 每一幀都在變，只在 id 或 type 變了才重算，邊不用跟著重畫
+  const typeKey = JSON.stringify(nodes.map((n) => [n.id, n.data.node.type]))
+  const typeById = useMemo(() => new Map<string, NodeType>(JSON.parse(typeKey)), [typeKey])
   const shownEdges = useMemo<RpsFlowEdge[]>(
     () =>
       edges.map((e) => {
+        const sourceType = typeById.get(e.source)
         const edgeResult = result?.edges[e.id]
         const edgeErrors = errors.edges.get(e.id)
         return {
@@ -77,6 +88,8 @@ export function Canvas({
           markerEnd: arrowMarker(edgeColor(e.selected, edgeErrors != null)),
           data: {
             ...e.data,
+            kind: sourceType && NODE_KINDS[sourceType].outputEdgeKind,
+            classTag: sourceType && classTag(sourceType, e.data.edge),
             result: edgeResult,
             flow: edgeResult && flowRatio(totalRps(edgeResult.rps), maxRps),
             errors: edgeErrors,
@@ -84,23 +97,24 @@ export function Canvas({
           },
         }
       }),
-    [edges, result, maxRps, errors, stale],
+    [edges, typeById, result, maxRps, errors, stale],
   )
 
   function onDragOver(event: DragEvent) {
-    if (event.dataTransfer.types.includes(NODE_TYPE_MIME)) {
+    if (event.dataTransfer.types.includes(PALETTE_ITEM_MIME)) {
       event.preventDefault()
       event.dataTransfer.dropEffect = 'copy'
     }
   }
 
   function onDrop(event: DragEvent) {
-    const type = event.dataTransfer.getData(NODE_TYPE_MIME)
-    if (!Object.hasOwn(NODE_KINDS, type)) {
+    const id = event.dataTransfer.getData(PALETTE_ITEM_MIME)
+    const item = PALETTE.find((candidate) => candidate.id === id)
+    if (!item) {
       return
     }
     event.preventDefault()
-    onAddNode(type as NodeType, screenToFlowPosition({ x: event.clientX, y: event.clientY }))
+    onAddNode(item, screenToFlowPosition({ x: event.clientX, y: event.clientY }))
   }
 
   return (
@@ -124,4 +138,23 @@ export function Canvas({
       <Controls />
     </ReactFlow>
   )
+}
+
+// requestClass 只對 Service 的出邊有作用（spec 3.4），其他邊上的值計算時忽略，不顯示
+function classTag(sourceType: NodeType, edge: Edge): 'R' | 'W' | undefined {
+  if (!NODE_KINDS[sourceType].edgeChoiceParams.includes('requestClass')) return undefined
+  return edge.requestClass === 'READ' ? 'R' : edge.requestClass === 'WRITE' ? 'W' : undefined
+}
+
+// Read Replica 沿用 primary（連過來的 Database）的 shards，Run 之前就畫成 cluster（spec 4.2.3）
+function mirroredShards(nodes: SimFlowNode[], edges: RpsFlowEdge[]): Map<string, number> {
+  const byId = new Map(nodes.map((n) => [n.id, n.data.node]))
+  const mirrored = new Map<string, number>()
+  for (const e of edges) {
+    const source = byId.get(e.source)
+    if (source?.type === 'DATABASE' && byId.get(e.target)?.type === 'READ_REPLICA') {
+      mirrored.set(e.target, source.params.shards ?? 1)
+    }
+  }
+  return mirrored
 }

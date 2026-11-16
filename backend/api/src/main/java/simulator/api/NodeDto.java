@@ -5,12 +5,19 @@ import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 import io.swagger.v3.oas.annotations.media.Schema;
 import simulator.engine.CacheNode;
 import simulator.engine.CapacityParams;
+import simulator.engine.CdnNode;
 import simulator.engine.ClientNode;
 import simulator.engine.DatabaseNode;
+import simulator.engine.ExternalApiNode;
 import simulator.engine.LoadBalancerNode;
+import simulator.engine.MessageQueueNode;
 import simulator.engine.Node;
 import simulator.engine.NodeHealth;
+import simulator.engine.ObjectStorageNode;
+import simulator.engine.RateLimiterNode;
+import simulator.engine.ReadReplicaNode;
 import simulator.engine.ServiceNode;
+import simulator.engine.ShardLayout;
 
 /** {@code state} 省略時為 HEALTHY；{@code ui} 只給前端用，後端忽略。 */
 @Schema(name = "Node")
@@ -34,8 +41,16 @@ public record NodeDto(
             case LOAD_BALANCER -> new LoadBalancerNode(id, name, health, capacityParams());
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
-            case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
-            case DATABASE -> new DatabaseNode(id, name, health, capacityParams());
+            case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"),
+                    shardLayout());
+            case CDN -> new CdnNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
+            case DATABASE -> new DatabaseNode(id, name, health, capacityParams(), shardLayout());
+            case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams());
+            case RATE_LIMITER -> new RateLimiterNode(id, name, health, require(params.limitRps(), "limitRps"));
+            case READ_REPLICA -> new ReadReplicaNode(id, name, health, capacityParams());
+            case MESSAGE_QUEUE -> new MessageQueueNode(id, name, health, capacityParams());
+            case EXTERNAL_API -> new ExternalApiNode(id, name, health,
+                    require(params.latencyMs(), "latencyMs"), require(params.quotaRps(), "quotaRps"));
         };
     }
 
@@ -44,6 +59,11 @@ public record NodeDto(
                 require(params.instances(), "instances"),
                 require(params.concurrency(), "concurrency"),
                 require(params.serviceTimeMs(), "serviceTimeMs"));
+    }
+
+    /** {@code shards} 省略時為 1（不分片），{@code hotShardShare} 省略時平均分配。 */
+    private ShardLayout shardLayout() {
+        return new ShardLayout(params.shards() == null ? 1 : params.shards(), params.hotShardShare());
     }
 
     private <T> T require(T value, String param) {

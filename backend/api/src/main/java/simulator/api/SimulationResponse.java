@@ -12,6 +12,8 @@ import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
 import simulator.engine.EndToEndLatency;
 import simulator.engine.NodeResult;
+import simulator.engine.NodeWarning;
+import simulator.engine.ShardResult;
 import simulator.engine.SimulationResult;
 import simulator.engine.Status;
 import simulator.engine.Summary;
@@ -101,7 +103,9 @@ public record SimulationResponse(
     public record NodeResultDto(
             @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
             @Schema(requiredMode = REQUIRED) double throughputRps,
-            @Schema(requiredMode = REQUIRED) double droppedRps,
+            @Schema(requiredMode = REQUIRED, description = "超過容量、沒被處理的請求數") double droppedRps,
+            @Schema(requiredMode = REQUIRED, description = "Rate Limiter 超過 limitRps、External API 超過 quotaRps 拒絕的請求數，其他節點為 0")
+            double rejectedRps,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有：這個 Client 的請求每秒有幾個完整成功（spec 4.3.1）")
             Double successRps,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有")
@@ -110,20 +114,45 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, nullable = true) Double utilization,
             @Schema(requiredMode = REQUIRED, nullable = true) Double avgQueueMs,
             @Schema(requiredMode = REQUIRED, nullable = true) Double avgLatencyMs,
-            @Schema(requiredMode = REQUIRED, nullable = true) Status status) {
+            @Schema(requiredMode = REQUIRED, nullable = true) Status status,
+            @Schema(requiredMode = REQUIRED, nullable = true,
+                    description = "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）")
+            List<ShardResultDto> shards,
+            @Schema(requiredMode = REQUIRED, description = "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）；BACKLOG：consumer 處理不完 Message Queue 的訊息（spec 4.2.4）")
+            List<NodeWarning> warnings) {
 
         static NodeResultDto from(NodeResult node) {
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
-                    node.droppedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()), node.capacityRps(),
-                    node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status());
+                    node.droppedRps(), node.rejectedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()),
+                    node.capacityRps(), node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status(),
+                    node.shards() == null ? null : node.shards().stream().map(ShardResultDto::from).toList(),
+                    node.warnings());
+        }
+    }
+
+    @Schema(name = "ShardResult", description = "一個 shard 的結果，欄位意義同 NodeResult")
+    public record ShardResultDto(
+            @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
+            @Schema(requiredMode = REQUIRED) double throughputRps,
+            @Schema(requiredMode = REQUIRED) double droppedRps,
+            @Schema(requiredMode = REQUIRED) double utilization,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "過載時為 null") Double avgLatencyMs,
+            @Schema(requiredMode = REQUIRED) Status status) {
+
+        static ShardResultDto from(ShardResult shard) {
+            return new ShardResultDto(ClassRatesDto.from(shard.arrivalRps()), shard.throughputRps(),
+                    shard.droppedRps(), shard.utilization(), shard.avgLatencyMs(), shard.status());
         }
     }
 
     @Schema(name = "EdgeResult")
-    public record EdgeResultDto(@Schema(requiredMode = REQUIRED) ClassRatesDto rps) {
+    public record EdgeResultDto(
+            @Schema(requiredMode = REQUIRED) ClassRatesDto rps,
+            @Schema(requiredMode = REQUIRED, description = "Message Queue 的下游邊：consumer 處理不完，queue 每秒增加的訊息數；其他邊為 0")
+            double backlogRps) {
 
         static EdgeResultDto from(EdgeResult edge) {
-            return new EdgeResultDto(ClassRatesDto.from(edge.rps()));
+            return new EdgeResultDto(ClassRatesDto.from(edge.rps()), edge.backlogRps());
         }
     }
 
@@ -131,12 +160,13 @@ public record SimulationResponse(
     public record SummaryDto(
             @Schema(requiredMode = REQUIRED) double offeredRps,
             @Schema(requiredMode = REQUIRED, description = "各 Client 完整成功的請求數總和") double successRps,
-            @Schema(requiredMode = REQUIRED, description = "1 − successRps / offeredRps，限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0") double dropRate,
+            @Schema(requiredMode = REQUIRED, description = "各節點拒絕量的總和") double rejectedRps,
+            @Schema(requiredMode = REQUIRED, description = "1 − successRps / offeredRps（丟棄和拒絕都算），限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0") double dropRate,
             @Schema(requiredMode = REQUIRED) ClassLatenciesDto avgEndToEndMs,
             @Schema(requiredMode = REQUIRED, nullable = true) String bottleneckNodeId) {
 
         static SummaryDto from(Summary summary) {
-            return new SummaryDto(summary.offeredRps(), summary.successRps(), summary.dropRate(),
+            return new SummaryDto(summary.offeredRps(), summary.successRps(), summary.rejectedRps(), summary.dropRate(),
                     ClassLatenciesDto.from(summary.avgEndToEndMs()), summary.bottleneckNodeId());
         }
     }

@@ -1,6 +1,11 @@
 package simulator.engine;
 
-/** 快取：read 只有沒命中的 {@code 1 - hitRatio} 往下送，write 全部往下送（spec 3.3）。 */
-public record CacheNode(String id, String name, NodeHealth health, CapacityParams capacityParams, double hitRatio)
-        implements Node {
+/** 快取，計算方式見 {@link CachingNode}。可以分片，每個 shard 的 hitRatio 相同。 */
+public record CacheNode(String id, String name, NodeHealth health, CapacityParams capacityParams, double hitRatio,
+        ShardLayout shards) implements CachingNode {
+
+    /** 沒有分片。 */
+    public CacheNode(String id, String name, NodeHealth health, CapacityParams capacityParams, double hitRatio) {
+        this(id, name, health, capacityParams, hitRatio, ShardLayout.SINGLE);
+    }
 }

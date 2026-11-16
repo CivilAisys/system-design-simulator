@@ -5,6 +5,11 @@ public record ClassRates(double read, double write) {
 
     public static final ClassRates ZERO = new ClassRates(0, 0);
 
+    /** read 或 write 的值。 */
+    public double of(boolean read) {
+        return read ? this.read : write;
+    }
+
     public double total() {
         return read + write;
     }

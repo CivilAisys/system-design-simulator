@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Topology } from '@/api/client'
 import { initialTopology } from '@/canvas/initialTopology'
+import { NODE_CHOICE_SPECS } from '@/canvas/params'
 import { parseTopology, serializeTopology, toTopology } from './topologyFile'
 
 // 每種類型各一個節點，邊涵蓋三種出邊參數（weight、callsPerRequest、只有 latencyMs）
@@ -28,28 +29,33 @@ function validFile() {
         id: 'cache',
         type: 'CACHE',
         name: 'Redis',
-        params: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8 },
+        params: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, shards: 3, hotShardShare: 0.5 },
         ui: { x: 900, y: -100 },
       },
       {
         id: 'db',
         type: 'DATABASE',
         name: 'DB',
-        params: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+        params: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
         ui: { x: 900, y: 100 },
       },
     ],
     edges: [
-      { id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 },
-      { id: 'e2', source: 'lb', target: 'svc', weight: 2, callsPerRequest: 1, latencyMs: 0.5 },
-      { id: 'e3', source: 'svc', target: 'cache', weight: 1, callsPerRequest: 3, latencyMs: 1 },
-      { id: 'e4', source: 'svc', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 2 },
-      { id: 'e5', source: 'cache', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+      { id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1, requestClass: 'ALL' },
+      { id: 'e2', source: 'lb', target: 'svc', weight: 2, callsPerRequest: 1, latencyMs: 0.5, requestClass: 'ALL' },
+      { id: 'e3', source: 'svc', target: 'cache', weight: 1, callsPerRequest: 3, latencyMs: 1, requestClass: 'ALL' },
+      { id: 'e4', source: 'svc', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 2, requestClass: 'WRITE' },
+      { id: 'e5', source: 'cache', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1, requestClass: 'ALL' },
     ],
   }
 }
 
 type FileData = ReturnType<typeof validFile>
+
+// 只有 latencyMs 不是預設值的邊
+function edge(id: string, source: string, target: string, latencyMs = 1) {
+  return { id, source, target, weight: 1, callsPerRequest: 1, latencyMs, requestClass: 'ALL' }
+}
 
 // 測試要拿掉必填欄位，型別上不允許 delete，集中在這裡繞過
 function remove(target: object, field: string) {
@@ -90,12 +96,57 @@ describe('合法的檔案', () => {
     expect(topology).toEqual(validFile())
   })
 
-  it('邊省略的數值參數用預設值 1', () => {
+  it('邊省略的數值參數用預設值 1，requestClass 用 ALL', () => {
     const topology = topologyOf({
       ...validFile(),
       edges: [{ id: 'e1', source: 'client', target: 'lb' }],
     })
-    expect(topology.edges).toEqual([{ id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 }])
+    expect(topology.edges).toEqual([
+      { id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1, requestClass: 'ALL' },
+    ])
+  })
+
+  describe('選填的節點參數', () => {
+    // 還沒有真正選填的下拉選單參數，先暫時把 callMode 當成選填來示範
+    beforeEach(() => {
+      NODE_CHOICE_SPECS.callMode.optional = true
+    })
+    afterEach(() => {
+      delete NODE_CHOICE_SPECS.callMode.optional
+    })
+
+    it('省略時用該類型的預設值', () => {
+      const file = validFile()
+      delete (file.nodes[2].params as { callMode?: string }).callMode
+      remove(file.nodes[3].params, 'shards')
+
+      const [, , svc, cache] = topologyOf(file).nodes
+      expect(svc.params.callMode).toBe('SEQUENTIAL')
+      expect(cache.params.shards).toBe(1)
+    })
+
+    it('hotShardShare 省略時不補，代表平均分配', () => {
+      const file = validFile()
+      remove(file.nodes[3].params, 'hotShardShare')
+
+      expect(topologyOf(file).nodes[3].params).not.toHaveProperty('hotShardShare')
+    })
+
+    it('不能分片的 type 丟掉 shards 和 hotShardShare', () => {
+      const file = validFile()
+      Object.assign(file.nodes[2].params, { shards: 4, hotShardShare: 0.5 })
+
+      expect(topologyOf(file).nodes[2].params).toEqual(validFile().nodes[2].params)
+    })
+
+    it('給了錯的型別仍然是格式錯誤', () => {
+      expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { shards: '2' }))).toEqual([
+        'nodes[3]（id "cache"）：缺少數值參數 params.shards（或數值太大）',
+      ])
+      expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { hotShardShare: null }))).toEqual([
+        'nodes[3]（id "cache"）：params.hotShardShare 必須是數字（或數值太大）',
+      ])
+    })
   })
 
   it('超出參數範圍的值照樣讀入，留給 Run 在錯誤分頁回報', () => {
@@ -156,7 +207,7 @@ describe('格式錯誤', () => {
 
     it('type 不是已知的類型', () => {
       expect(errorsOf((f) => void (f.nodes[4].type = 'QUEUE'))).toEqual([
-        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、DATABASE 其中之一',
+        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、READ_REPLICA、OBJECT_STORAGE、RATE_LIMITER、EXTERNAL_API、MESSAGE_QUEUE 其中之一',
       ])
     })
 
@@ -169,6 +220,12 @@ describe('格式錯誤', () => {
     it('數值參數型別不對', () => {
       expect(errorsOf((f) => void Object.assign(f.nodes[0].params, { rps: '1000' }))).toEqual([
         'nodes[0]（id "client"）：缺少數值參數 params.rps（或數值太大）',
+      ])
+    })
+
+    it.each(['BOTH', 'read', 1, null])('requestClass 不是 ALL、READ、WRITE：%s', (value) => {
+      expect(errorsOf((f) => void Object.assign(f.edges[3], { requestClass: value }))).toEqual([
+        'edges[3]（id "e4"）：requestClass 必須是 ALL、READ、WRITE 其中之一',
       ])
     })
 
@@ -307,10 +364,42 @@ describe('畫不出來的邊', () => {
     ])
   })
 
-  it('從 Database 連出', () => {
+  it('Database 連到 Read Replica 以外的節點', () => {
     expect(errorsOf((f) => void Object.assign(f.edges[4], { source: 'db', target: 'cache' }))).toEqual([
-      'edges[4]（id "e5"）：Database 不能有下游（source 是 "db"）',
+      'edges[4]（id "e5"）：Database 只能連到 Read Replica（target 是 "cache"）',
     ])
+  })
+
+  it('Database 可以連到 Read Replica', () => {
+    const file = validFile()
+    const replica = {
+      id: 'replica',
+      type: 'READ_REPLICA',
+      name: 'Replica',
+      params: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+      ui: { x: 1200, y: 100 },
+    }
+    const edges = [...file.edges, edge('e6', 'db', 'replica')]
+    const topology = topologyOf({ ...file, nodes: [...file.nodes, replica], edges })
+    expect(topology.edges.at(-1)).toMatchObject({ source: 'db', target: 'replica' })
+  })
+
+  it('從 External API 連出', () => {
+    const file = withExternalApi()
+    file.edges.push(edge('e7', 'pay', 'db'))
+    expect(toTopology(file)).toEqual({
+      ok: false,
+      errors: ['edges[6]（id "e7"）：External API 不能有下游（source 是 "pay"）'],
+    })
+  })
+
+  it('從 Object Storage 連出', () => {
+    const file = withObjectStorage()
+    file.edges.push(edge('e7', 'storage', 'db'))
+    expect(toTopology(file)).toEqual({
+      ok: false,
+      errors: ['edges[6]（id "e7"）：Object Storage 不能有下游（source 是 "storage"）'],
+    })
   })
 })
 
@@ -348,10 +437,104 @@ describe('沒有座標的節點', () => {
   })
 })
 
+// 合法檔案再加一個 CDN 擋在 Client 和 LB 之間
+function withCdn() {
+  const file = validFile()
+  const cdn = {
+    id: 'cdn',
+    type: 'CDN',
+    name: 'Edge',
+    params: { instances: 10, concurrency: 1000, serviceTimeMs: 1, hitRatio: 0.95 },
+    ui: { x: 0, y: 200 },
+  }
+  return {
+    ...file,
+    nodes: [...file.nodes, cdn],
+    edges: [edge('e1', 'client', 'cdn', 5), ...file.edges.slice(1), edge('e6', 'cdn', 'lb', 30)],
+  }
+}
+
+// 合法檔案再加一個 Service 呼叫的 Object Storage
+function withObjectStorage() {
+  const file = validFile()
+  const storage = {
+    id: 'storage',
+    type: 'OBJECT_STORAGE',
+    name: 'Media',
+    params: { instances: 1, concurrency: 10000, serviceTimeMs: 20 },
+    ui: { x: 900, y: 300 },
+  }
+  return { ...file, nodes: [...file.nodes, storage], edges: [...file.edges, edge('e6', 'svc', 'storage', 5)] }
+}
+
+// 合法檔案再加一個 Rate Limiter 擋在 Client 和 LB 之間
+function withRateLimiter() {
+  const file = validFile()
+  const limiter = {
+    id: 'limiter',
+    type: 'RATE_LIMITER',
+    name: 'Limiter',
+    params: { limitRps: 500 },
+    ui: { x: 0, y: 0 },
+  }
+  return {
+    ...file,
+    nodes: [...file.nodes, limiter],
+    edges: [
+      { id: 'e1', source: 'client', target: 'limiter', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+      ...file.edges.slice(1),
+      { id: 'e6', source: 'limiter', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+    ],
+  }
+}
+
+// 合法檔案再加一個 Service 呼叫的 External API
+function withExternalApi() {
+  const file = validFile()
+  const api = {
+    id: 'pay',
+    type: 'EXTERNAL_API',
+    name: 'Payments',
+    params: { latencyMs: 300, quotaRps: 1000 },
+    ui: { x: 900, y: 300 },
+  }
+  return {
+    ...file,
+    nodes: [...file.nodes, api],
+    edges: [...file.edges, edge('e6', 'svc', 'pay', 20)],
+  }
+}
+
+// 合法檔案再加一個 Service 送訊息的 Message Queue，consumer 是另一個 Service
+function withMessageQueue() {
+  const file = validFile()
+  const mq = {
+    id: 'mq',
+    type: 'MESSAGE_QUEUE',
+    name: 'Queue',
+    params: { instances: 1, concurrency: 1000, serviceTimeMs: 1 },
+    ui: { x: 900, y: 400 },
+  }
+  const worker = {
+    id: 'worker',
+    type: 'SERVICE',
+    name: 'Worker',
+    params: { instances: 1, concurrency: 50, serviceTimeMs: 50, callMode: 'SEQUENTIAL' },
+    ui: { x: 1200, y: 400 },
+  }
+  const edges = [...file.edges, edge('e6', 'svc', 'mq'), edge('e7', 'mq', 'worker')]
+  return { ...file, nodes: [...file.nodes, mq, worker], edges }
+}
+
 describe('匯出再匯入', () => {
   it.each([
     ['合法檔案', topologyOf(validFile())],
     ['開啟時的畫布', initialTopology],
+    ['CDN', topologyOf(withCdn())],
+    ['Object Storage', topologyOf(withObjectStorage())],
+    ['Rate Limiter', topologyOf(withRateLimiter())],
+    ['External API', topologyOf(withExternalApi())],
+    ['Message Queue', topologyOf(withMessageQueue())],
   ])('%s 得到相同的拓撲', (_, topology) => {
     expect(parseTopology(serializeTopology(topology))).toEqual({ ok: true, topology })
   })

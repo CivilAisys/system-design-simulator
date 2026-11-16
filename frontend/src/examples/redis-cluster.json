@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "nodes": [
+    { "id": "client-1", "type": "CLIENT", "name": "Users",
+      "params": { "rps": 250000, "readRatio": 0.99 },
+      "ui": { "x": 0, "y": 0 } },
+    { "id": "svc-1", "type": "SERVICE", "name": "Feed API",
+      "params": { "instances": 4, "concurrency": 500, "serviceTimeMs": 5, "callMode": "SEQUENTIAL" },
+      "state": "HEALTHY",
+      "ui": { "x": 280, "y": 0 } },
+    { "id": "cache-1", "type": "CACHE", "name": "Redis Cluster",
+      "params": { "instances": 1, "concurrency": 1, "serviceTimeMs": 0.01, "hitRatio": 0.99,
+                  "shards": 3, "hotShardShare": 0.5 },
+      "state": "HEALTHY",
+      "ui": { "x": 560, "y": 0 } },
+    { "id": "db-1", "type": "DATABASE", "name": "Posts DB",
+      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 },
+      "state": "HEALTHY",
+      "ui": { "x": 840, "y": 0 } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "client-1", "target": "svc-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e2", "source": "svc-1", "target": "cache-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 },
+    { "id": "e3", "source": "cache-1", "target": "db-1", "weight": 1, "callsPerRequest": 1, "latencyMs": 1 }
+  ]
+}

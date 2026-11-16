@@ -21,6 +21,8 @@ final class TopologyGraph {
     private final Map<String, Node> nodes = new LinkedHashMap<>();
     private final Map<String, List<Edge>> outgoing = new HashMap<>();
     private final Map<String, Integer> inDegree = new HashMap<>();
+    // Read Replica → 它的 primary（從 Database 連過來的邊）；驗證保證剛好一個
+    private final Map<String, DatabaseNode> primaries = new HashMap<>();
 
     private TopologyGraph() {
     }
@@ -42,6 +44,9 @@ final class TopologyGraph {
             if (graph.contains(edge.source()) && graph.contains(edge.target())) {
                 graph.outgoing.get(edge.source()).add(edge);
                 graph.inDegree.merge(edge.target(), 1, Integer::sum);
+                if (graph.node(edge.source()) instanceof DatabaseNode primary) {
+                    graph.primaries.put(edge.target(), primary);
+                }
             }
         }
         return graph;
@@ -60,6 +65,25 @@ final class TopologyGraph {
         return outgoing.get(nodeId);
     }
 
+    /** Read Replica 的 primary；只在通過驗證的拓撲上呼叫。 */
+    DatabaseNode primaryOf(String replicaId) {
+        return primaries.get(replicaId);
+    }
+
+    /**
+     * 非同步的邊，不算進 Client 的端到端延遲和成功率：複製（Database → Read Replica，spec 4.2.3）
+     * 和 Message Queue 送給 consumer group 的訊息（spec 4.2.4）。
+     */
+    boolean isAsync(Edge edge) {
+        Node source = nodes.get(edge.source());
+        return source instanceof DatabaseNode || source instanceof MessageQueueNode;
+    }
+
+    /** Message Queue 送給 consumer group 的邊：consumer 處理不完時訊息留在 queue 裡。 */
+    boolean feedsConsumer(Edge edge) {
+        return nodes.get(edge.source()) instanceof MessageQueueNode;
+    }
+
     /** Client／LB 依 weight 比例分流（spec 3.3）。 */
     static boolean splitsByWeight(Node node) {
         return node instanceof ClientNode || node instanceof LoadBalancerNode;
@@ -67,16 +91,24 @@ final class TopologyGraph {
 
     /**
      * 上游的一個請求平均往這條邊送幾次（spec 3.3、3.4）：Client／LB 依 weight 比例分流，
-     * Service 呼叫 callsPerRequest 次，Cache 的 read 只有沒命中的部分往下送。流量和端到端延遲共用這條規則。
+     * Service 呼叫 callsPerRequest 次（requestClass 不符合的 class 為 0），Cache 的 read 只有沒命中的部分往下送，
+     * Rate Limiter 放行的請求全部送往唯一的下游，Database 處理完的 write 複製到 Read Replica。
+     * 流量和端到端延遲共用這條規則。
      */
     double visits(Edge edge, boolean read) {
         Node source = nodes.get(edge.source());
         return switch (source) {
             case ClientNode client -> edge.weight() / totalWeight(source.id());
             case LoadBalancerNode lb -> edge.weight() / totalWeight(source.id());
-            case ServiceNode service -> edge.callsPerRequest();
-            case CacheNode cache -> read ? 1 - cache.hitRatio() : 1;
-            case DatabaseNode database -> 0;
+            case ServiceNode service -> edge.requestClass().includes(read) ? edge.callsPerRequest() : 0;
+            case CachingNode cache -> read ? 1 - cache.hitRatio() : 1;
+            // Database 只能連到 Read Replica：處理完的 write 全部複製過去，read 不會
+            case StorageNode storage -> read ? 0 : 1;
+            case ReadReplicaNode replica -> 0;
+            // 每個 consumer group 都收到全部訊息
+            case MessageQueueNode queue -> 1;
+            case ExternalApiNode api -> 0;
+            case RateLimiterNode limiter -> 1;
         };
     }
 

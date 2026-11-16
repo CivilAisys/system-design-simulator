@@ -26,12 +26,18 @@ final class TopologyValidator {
     static final double MAX_LATENCY_MS = 1e7;
     static final int MAX_CALLS_PER_REQUEST = 10_000;
     static final double MAX_WEIGHT = 1e6;
+    static final int MAX_SHARDS = 64;
+    // hotShardShare 的下限 1/N 容許浮點誤差，前端 params.ts 用同一個值
+    static final double SHARE_TOLERANCE = 1e-12;
 
     private final Topology topology;
     private final TopologyGraph graph;
     // 上下游數量也算進另一端不存在的邊：畫布上看得到這條邊，那條邊已經報 UNKNOWN_NODE，節點不能再多報一次
     private final Map<String, Integer> downstreams = new HashMap<>();
     private final Map<String, Integer> upstreams = new HashMap<>();
+    // Database 連到 Read Replica 的邊：Database 算「連到 replica 的下游」，replica 算「primary 的數量」
+    private final Map<String, Integer> replicaDownstreams = new HashMap<>();
+    private final Map<String, Set<String>> primaries = new HashMap<>();
     private final List<ValidationError> errors = new ArrayList<>();
 
     private TopologyValidator(Topology topology, TopologyGraph graph) {
@@ -40,6 +46,14 @@ final class TopologyValidator {
         for (Edge edge : topology.edges()) {
             downstreams.merge(edge.source(), 1, Integer::sum);
             upstreams.merge(edge.target(), 1, Integer::sum);
+            boolean fromDatabase = graph.node(edge.source()) instanceof DatabaseNode;
+            if (fromDatabase && graph.node(edge.target()) instanceof ReadReplicaNode) {
+                replicaDownstreams.merge(edge.source(), 1, Integer::sum);
+            }
+            // 重複的邊（DUPLICATE_EDGE）只算一個 primary；不存在的 source 已經報 UNKNOWN_NODE，也算進去，不重複報錯
+            if (fromDatabase || !graph.contains(edge.source())) {
+                primaries.computeIfAbsent(edge.target(), id -> new HashSet<>()).add(edge.source());
+            }
         }
     }
 
@@ -74,15 +88,44 @@ final class TopologyValidator {
         if (node instanceof ClientNode && upstreams.containsKey(node.id())) {
             nodeError(node, "CLIENT_HAS_INPUT", "Client " + name + " 不能有上游連線");
         }
-        if (TopologyGraph.splitsByWeight(node) && downstream == 0) {
+        if ((TopologyGraph.splitsByWeight(node) || node instanceof MessageQueueNode) && downstream == 0) {
             nodeError(node, "NO_DOWNSTREAM", name + " 沒有下游，請求沒有地方送");
         }
-        if (node instanceof CacheNode && downstream != 1) {
-            nodeError(node, "CACHE_DOWNSTREAM_COUNT",
-                    "Cache " + name + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
+        // CDN 沿用 Cache 的錯誤碼，訊息用它自己的 type 名稱
+        if (node instanceof CachingNode && downstream != 1) {
+            nodeError(node, "CACHE_DOWNSTREAM_COUNT", (node instanceof CdnNode ? "CDN " : "Cache ") + name
+                    + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
         }
-        if (node instanceof DatabaseNode && downstream > 0) {
-            nodeError(node, "DATABASE_HAS_OUTPUT", "Database " + name + " 不能有下游連線");
+        if (node instanceof RateLimiterNode && downstream != 1) {
+            nodeError(node, "RATE_LIMITER_DOWNSTREAM_COUNT",
+                    "Rate Limiter " + name + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
+        }
+        if (node instanceof ExternalApiNode && downstream > 0) {
+            nodeError(node, "EXTERNAL_API_HAS_OUTPUT", "External API " + name + " 不能有下游連線");
+        }
+        // Database 只能連到 Read Replica（複製）。Object Storage 沿用同一個錯誤碼，訊息用它自己的 type 名稱
+        if (node instanceof StorageNode && downstream > replicaDownstreams.getOrDefault(node.id(), 0)) {
+            nodeError(node, "DATABASE_HAS_OUTPUT", node instanceof ObjectStorageNode
+                    ? "Object Storage " + name + " 不能有下游連線"
+                    : "Database " + name + " 只能連到 Read Replica");
+        }
+        if (node instanceof MessageQueueNode) {
+            long nonService = graph.outgoing(node.id()).stream()
+                    .filter(edge -> !(graph.node(edge.target()) instanceof ServiceNode)).count();
+            if (nonService > 0) {
+                nodeError(node, "QUEUE_CONSUMER_TYPE",
+                        "Message Queue " + name + " 只能連到 Service（consumer group），目前有 " + nonService + " 個不是");
+            }
+        }
+        if (node instanceof ReadReplicaNode) {
+            int primaryCount = primaries.getOrDefault(node.id(), Set.of()).size();
+            if (primaryCount != 1) {
+                nodeError(node, "REPLICA_PRIMARY_COUNT",
+                        "Read Replica " + name + " 必須剛好有一個 Database 上游（primary），目前有 " + primaryCount + " 個");
+            }
+            if (downstream > 0) {
+                nodeError(node, "REPLICA_HAS_OUTPUT", "Read Replica " + name + " 不能有下游連線");
+            }
         }
     }
 
@@ -109,11 +152,22 @@ final class TopologyValidator {
             }
             case LoadBalancerNode lb -> checkCapacityParams(lb.capacityParams(), where, report);
             case ServiceNode service -> checkCapacityParams(service.capacityParams(), where, report);
-            case CacheNode cache -> {
+            case CachingNode cache -> {
                 checkCapacityParams(cache.capacityParams(), where, report);
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
+                checkShards(cache.shards(), where, report);
             }
-            case DatabaseNode database -> checkCapacityParams(database.capacityParams(), where, report);
+            case StorageNode storage -> {
+                checkCapacityParams(storage.capacityParams(), where, report);
+                checkShards(storage.shards(), where, report);
+            }
+            case ReadReplicaNode replica -> checkCapacityParams(replica.capacityParams(), where, report);
+            case MessageQueueNode queue -> checkCapacityParams(queue.capacityParams(), where, report);
+            case ExternalApiNode api -> {
+                requireBetween(api.latencyMs(), 0, MAX_LATENCY_MS, where, "latencyMs", report);
+                requirePositiveRps(api.quotaRps(), where, "quotaRps", report);
+            }
+            case RateLimiterNode limiter -> requirePositiveRps(limiter.limitRps(), where, "limitRps", report);
         }
     }
 
@@ -126,6 +180,19 @@ final class TopologyValidator {
         }
         requireBetween(params.serviceTimeMs(), MIN_SERVICE_TIME_MS, MAX_SERVICE_TIME_MS, where, "serviceTimeMs",
                 report);
+    }
+
+    /** instances × concurrency 的上限是對每個 shard 的限制，已經在 checkCapacityParams 檢查。 */
+    private static void checkShards(ShardLayout shards, String where, Consumer<String> report) {
+        if (shards.count() < 1 || shards.count() > MAX_SHARDS) {
+            report.accept(invalid(where, "shards", "介於 1 和 " + MAX_SHARDS + " 之間", shards.count()));
+            return;
+        }
+        // 最熱的 shard 至少分到平均值 1/N，否則它就不是最熱的
+        Double hot = shards.hotShare();
+        if (hot != null && !(hot >= 1.0 / shards.count() - SHARE_TOLERANCE && hot <= 1)) {
+            report.accept(invalid(where, "hotShardShare", "介於 1/" + shards.count() + " 和 1 之間", hot));
+        }
     }
 
     /** 只檢查對這個起點有意義的欄位，其他欄位計算時忽略（spec 3.4）。 */
@@ -144,6 +211,13 @@ final class TopologyValidator {
     }
 
     // 以下檢查都把 NaN 和無限大當成不合法
+
+    /** 上限類參數（limitRps、quotaRps）：0 等於全部拒絕，要停用就刪掉節點。 */
+    private static void requirePositiveRps(double value, String where, String param, Consumer<String> report) {
+        if (!(value > 0 && value <= MAX_RPS)) {
+            report.accept(invalid(where, param, "> 0 且 ≤ " + bound(MAX_RPS), value));
+        }
+    }
 
     private static void requireAtLeast(double value, double min, String where, String param,
             Consumer<String> report) {

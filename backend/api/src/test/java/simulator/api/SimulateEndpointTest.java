@@ -33,8 +33,9 @@ import org.springframework.test.web.servlet.ResultActions;
 @AutoConfigureMockMvc
 class SimulateEndpointTest {
 
-    private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps",
-            "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status");
+    private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps", "rejectedRps",
+            "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status",
+            "shards", "warnings");
     private static final List<String> SERVER_FIELDS = List.of("capacityRps", "utilization", "avgQueueMs",
             "avgLatencyMs", "status");
 
@@ -96,8 +97,8 @@ class SimulateEndpointTest {
         assertRates(edges.at("/e4/rps"), 180, 100);
 
         JsonNode summary = body.get("summary");
-        assertThat(fieldNames(summary)).containsExactlyInAnyOrder("offeredRps", "successRps", "dropRate",
-                "avgEndToEndMs", "bottleneckNodeId");
+        assertThat(fieldNames(summary)).containsExactlyInAnyOrder("offeredRps", "successRps", "rejectedRps",
+                "dropRate", "avgEndToEndMs", "bottleneckNodeId");
         assertThat(summary.get("offeredRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("successRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("dropRate").asDouble()).isZero();
@@ -149,6 +150,116 @@ class SimulateEndpointTest {
         JsonNode parallel = simulate(mapper.writeValueAsBytes(example)).at("/summary/avgEndToEndMs/read");
         assertThat(parallel.get("approximate").asBoolean()).isTrue();
         assertThat(parallel.get("ms").asDouble()).isLessThan(sequential);
+    }
+
+    // 「CDN」範例要示範的情境：CDN 擋掉大部分 read，origin 負載低；hitRatio 降到 0 時 origin 過載
+    @Test
+    void cdnExampleShieldsOrigin() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("cdn.json"));
+        JsonNode shielded = simulate(mapper.writeValueAsBytes(example));
+        // read 19000 只有 5% miss 往下送，write 1000 全部穿透；Web API 容量 2 × 200 / 50ms = 8000
+        assertRates(shielded.at("/nodes/svc-1/arrivalRps"), 950, 1000);
+        assertThat(shielded.at("/nodes/svc-1/status").asText()).isEqualTo("OK");
+
+        set(example, "/nodes/1/params/hitRatio", mapper.getNodeFactory().numberNode(0));
+        JsonNode unshielded = simulate(mapper.writeValueAsBytes(example));
+        assertRates(unshielded.at("/nodes/svc-1/arrivalRps"), 19000, 1000);
+        assertThat(unshielded.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
+    }
+
+    // 「Rate Limiter」範例要示範的情境：限流讓原本會過載的 API 回到穩態，拒絕的部分算進丟棄率
+    @Test
+    void rateLimiterExampleProtectsBackend() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("rate-limiter.json"));
+        JsonNode limited = simulate(mapper.writeValueAsBytes(example));
+        assertThat(limited.at("/nodes/limiter-1/status").asText()).isEqualTo("LIMITING");
+        assertThat(limited.at("/nodes/limiter-1/rejectedRps").asDouble()).isCloseTo(6000, within(1e-6));
+        assertThat(limited.at("/nodes/svc-1/status").asText()).isEqualTo("WARN");
+        assertThat(limited.at("/summary/rejectedRps").asDouble()).isCloseTo(6000, within(1e-6));
+        assertThat(limited.at("/summary/dropRate").asDouble()).isCloseTo(0.5, within(1e-9));
+        assertThat(limited.at("/summary/bottleneckNodeId").asText()).isEqualTo("svc-1");
+
+        set(example, "/nodes/1/params/limitRps", mapper.getNodeFactory().numberNode(1e12));
+        JsonNode unlimited = simulate(mapper.writeValueAsBytes(example));
+        assertThat(unlimited.at("/nodes/limiter-1/status").asText()).isEqualTo("NOT_LIMITING");
+        assertThat(unlimited.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
+    }
+
+    // 「External API」範例要示範的情境：第三方的固定延遲拖慢結帳，超過配額的部分被拒絕
+    @Test
+    void externalApiExampleIsSlowAndOverQuota() throws Exception {
+        JsonNode body = simulate(readExample("external-api.json"));
+
+        assertThat(body.at("/nodes/ext-1/status").asText()).isEqualTo("OVER_QUOTA");
+        assertThat(body.at("/nodes/ext-1/rejectedRps").asDouble()).isCloseTo(500, within(1e-6));
+        assertThat(body.at("/summary/dropRate").asDouble()).isCloseTo(1.0 / 3, within(1e-9));
+        // 端到端延遲大半來自 External API：來回 2 × 20ms 加上它的 300ms
+        assertThat(body.at("/summary/avgEndToEndMs/write/ms").asDouble()).isGreaterThan(340);
+        assertThat(body.at("/summary/bottleneckNodeId").asText()).isNotEqualTo("ext-1");
+    }
+
+    // 「分片熱點」範例要示範的情境：4 個 shard 但有熱點，容量撐不到 4 倍；平均分配時撐得住
+    @Test
+    void shardingExampleHotShardOverloads() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("sharding.json"));
+        JsonNode hot = simulate(mapper.writeValueAsBytes(example));
+        // 28,000 × 0.4 = 11,200 > 每個 shard 的 10,000
+        assertThat(hot.at("/nodes/db-1/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(hot.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(40_000, within(1e-6));
+        assertThat(hot.at("/nodes/db-1/shards/0/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(hot.at("/nodes/db-1/shards/1/status").asText()).isEqualTo("OK");
+        assertThat(hot.at("/summary/bottleneckNodeId").asText()).isEqualTo("db-1");
+
+        remove(example, "/nodes/3/params/hotShardShare");
+        JsonNode even = simulate(mapper.writeValueAsBytes(example));
+        assertThat(even.at("/nodes/db-1/utilization").asDouble()).isCloseTo(0.7, within(1e-9));
+        assertThat(even.at("/summary/dropRate").asDouble()).isZero();
+    }
+
+    // 「Redis Cluster 熱點 key」範例要示範的情境：一個 shard 過載，其他 shard 還很閒
+    @Test
+    void redisClusterExampleHasOneHotShard() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("redis-cluster.json"));
+        JsonNode hot = simulate(mapper.writeValueAsBytes(example));
+        // 250,000 × 0.5 = 125,000 > 每個 shard 的 100,000；其他兩個各 62,500
+        assertThat(hot.at("/nodes/cache-1/shards").size()).isEqualTo(3);
+        assertThat(hot.at("/nodes/cache-1/shards/0/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(hot.at("/nodes/cache-1/shards/1/status").asText()).isEqualTo("OK");
+        assertThat(hot.at("/nodes/cache-1/shards/2/status").asText()).isEqualTo("OK");
+        assertThat(hot.at("/summary/bottleneckNodeId").asText()).isEqualTo("cache-1");
+
+        remove(example, "/nodes/2/params/hotShardShare");
+        JsonNode even = simulate(mapper.writeValueAsBytes(example));
+        assertThat(even.at("/summary/dropRate").asDouble()).isZero();
+    }
+
+    // 「Read Replica」範例要示範的情境：replica 分擔 read，但每個 replica 都要套用全部的 write
+    @Test
+    void readReplicaExampleSplitsReadsButEveryReplicaAppliesAllWrites() throws Exception {
+        JsonNode body = simulate(readExample("read-replica.json"));
+
+        assertRates(body.at("/nodes/db-1/arrivalRps"), 0, 1200);
+        for (String replica : List.of("replica-1", "replica-2")) {
+            assertRates(body.at("/nodes/" + replica + "/arrivalRps"), 5400, 1200);
+            assertThat(body.at("/nodes/" + replica + "/utilization").asDouble()).isCloseTo(0.66, within(1e-9));
+            assertThat(body.at("/nodes/" + replica + "/warnings").isEmpty()).isTrue();
+        }
+        assertThat(body.at("/summary/dropRate").asDouble()).isZero();
+    }
+
+    // 「Message Queue 削峰」範例要示範的情境：worker 處理不完時積壓在 queue 裡，使用者的請求照樣成功、延遲很短
+    @Test
+    void messageQueueExampleBuildsBacklogWithoutFailures() throws Exception {
+        JsonNode body = simulate(readExample("message-queue.json"));
+
+        // worker 容量 2 × 50 / 50ms = 2,000，收到 3,000：每秒積壓 1,000，不算丟棄
+        assertThat(body.at("/edges/e3/backlogRps").asDouble()).isCloseTo(1000, within(1e-6));
+        assertThat(body.at("/nodes/svc-2/droppedRps").asDouble()).isCloseTo(0, within(1e-6));
+        assertThat(body.at("/nodes/svc-2/warnings/0").asText()).isEqualTo("BACKLOG");
+        assertThat(body.at("/nodes/db-1/arrivalRps/write").asDouble()).isCloseTo(2000, within(1e-6));
+        assertThat(body.at("/summary/dropRate").asDouble()).isZero();
+        // 使用者只等到 ack：API 50ms 加上 MQ，遠低於 worker 的路徑
+        assertThat(body.at("/summary/avgEndToEndMs/write/ms").asDouble()).isLessThan(60);
     }
 
     static Stream<String> exampleFiles() throws Exception {
@@ -250,10 +361,12 @@ class SimulateEndpointTest {
                 Arguments.of("/edges/0/weight", "\"1\"", "edges[0].weight, expected a number"),
                 Arguments.of("/edges/0/latencyMs", "true", "edges[0].latencyMs, expected a number"),
                 Arguments.of("/edges/1/callsPerRequest", "2.5", "edges[1].callsPerRequest, expected an integer"),
+                Arguments.of("/edges/1/requestClass", "\"BOTH\"",
+                        "edges[1].requestClass, expected one of [ALL, READ, WRITE]"),
                 // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
                 Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
-                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, DATABASE]"),
+                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, RATE_LIMITER, EXTERNAL_API, READ_REPLICA, MESSAGE_QUEUE]"),
                 Arguments.of("/nodes/0/name", "123", "nodes[0].name, expected a string"),
                 Arguments.of("/nodes", "{}", "nodes, expected an array"));
     }
@@ -290,6 +403,49 @@ class SimulateEndpointTest {
         assertThat(body.at("/edges/e1/rps/read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(body.at("/edges/e2/rps/read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(body.at("/nodes/db-1/arrivalRps/read").asDouble()).isCloseTo(900, within(1e-6));
+    }
+
+    @Test
+    void omittedShardsMeanNoSharding() throws Exception {
+        // straight-topology.json 的 Database 沒有 shards、hotShardShare：等於 1 個 shard，回應沒有 shards 陣列
+        JsonNode body = mapper.readTree(postTopology(straightTopology())
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/nodes/db-1/shards").isNull()).isTrue();
+        assertThat(body.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(10_000, within(1e-6));
+    }
+
+    @Test
+    void shardedDatabaseReportsEachShardHottestFirst() throws Exception {
+        ObjectNode topology = straightTopology();
+        set(topology, "/nodes/2/params/shards", mapper.getNodeFactory().numberNode(4));
+        set(topology, "/nodes/2/params/hotShardShare", mapper.getNodeFactory().numberNode(0.4));
+
+        JsonNode body = mapper.readTree(postTopology(topology)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        JsonNode shards = body.at("/nodes/db-1/shards");
+        assertThat(shards.size()).isEqualTo(4);
+        assertThat(fieldNames(shards.get(0))).containsExactlyInAnyOrder("arrivalRps", "throughputRps", "droppedRps",
+                "utilization", "avgLatencyMs", "status");
+        assertThat(shards.get(0).at("/arrivalRps/read").asDouble()).isCloseTo(360, within(1e-6));
+        assertThat(shards.get(1).at("/arrivalRps/read").asDouble()).isCloseTo(180, within(1e-6));
+        assertThat(body.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(40_000, within(1e-6));
+    }
+
+    @Test
+    void writeOnlyServiceEdgeCarriesOnlyWrites() throws Exception {
+        ObjectNode topology = straightTopology();
+        set(topology, "/edges/1/requestClass", mapper.getNodeFactory().textNode("WRITE"));
+
+        JsonNode body = mapper.readTree(postTopology(topology)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/edges/e2/rps/read").asDouble()).isZero();
+        assertThat(body.at("/edges/e2/rps/write").asDouble()).isCloseTo(100, within(1e-6));
     }
 
     @Test

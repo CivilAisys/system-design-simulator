@@ -1,9 +1,8 @@
 import type { Edge, Node, NodeType, Topology } from '@/api/client'
-import { hasInput, hasOutput, NODE_KINDS, NODE_TYPES, type NodeParams } from '@/canvas/catalog'
-import { NODE_NUMBER_PARAMS, NODE_PARAM_SPECS } from '@/canvas/params'
+import { canFeed, NODE_KINDS, NODE_TYPES, type NodeParams } from '@/canvas/catalog'
+import { EDGE_CHOICE_SPECS, NODE_CHOICE_SPECS, NODE_PARAM_SPECS } from '@/canvas/params'
 
 const SUPPORTED_VERSION = 1
-const CALL_MODES = ['SEQUENTIAL', 'PARALLEL']
 // 匯入的檔案沒有 ui 座標時，這些節點排成一列，放在有座標的節點下方
 const FALLBACK_SPACING = 280
 
@@ -11,7 +10,7 @@ export type ParseResult = { ok: true; topology: Topology } | { ok: false; errors
 
 // 匯入檔是第 5 節的 Request 格式。這裡擋三種錯誤：
 // - 後端會回 400 的格式錯誤（缺欄位、型別不對、數值溢位成 Infinity、id 重複）
-// - 畫布畫不出來或選不到的邊（連到不存在的節點、連回自己、重複的邊、連進 Client、從 Database 連出），
+// - 畫布畫不出來或選不到的邊（連到不存在的節點、連回自己、重複的邊、連進 Client、從沒有下游的 type 連出、Database 連到 Read Replica 以外的節點），
 //   編輯器本身也不允許建立這些邊
 // 參數範圍和其他拓撲規則交給後端驗證，匯入後在錯誤分頁顯示，和使用者自己編輯出來的狀態一樣
 export function parseTopology(text: string): ParseResult {
@@ -108,14 +107,16 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     return null
   }
 
+  const kind = NODE_KINDS[type]
   const kept: NodeParams = {}
-  for (const param of NODE_NUMBER_PARAMS[type]) {
-    const value = params[param]
+  for (const param of kind.numberParams) {
+    const spec = NODE_PARAM_SPECS[param]
+    const value = paramOrDefault(params, param, spec.optional, kind.defaults)
     if (!isFiniteNumber(value)) {
       fail(`缺少數值參數 params.${param}（或數值太大）`)
       return null
     }
-    if (NODE_PARAM_SPECS[param].integer) {
+    if (spec.integer) {
       const error = checkInteger(value)
       if (error) {
         fail(`params.${param} ${error}`)
@@ -124,12 +125,23 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     }
     kept[param] = value
   }
-  if (type === 'SERVICE') {
-    if (typeof params.callMode !== 'string' || !CALL_MODES.includes(params.callMode)) {
-      fail(`params.callMode 必須是 ${CALL_MODES.join(' 或 ')}`)
+  // 省略時平均分配，沒有預設值可以補；範圍（1/shards ～ 1）和其他參數一樣留給後端驗證
+  if (kind.numberParams.includes('shards') && params.hotShardShare !== undefined) {
+    if (!isFiniteNumber(params.hotShardShare)) {
+      fail('params.hotShardShare 必須是數字（或數值太大）')
       return null
     }
-    kept.callMode = params.callMode as NodeParams['callMode']
+    kept.hotShardShare = params.hotShardShare
+  }
+  for (const param of kind.choiceParams) {
+    const spec = NODE_CHOICE_SPECS[param]
+    const value = paramOrDefault(params, param, spec.optional, kind.defaults)
+    const option = spec.options.find((o) => o.value === value)
+    if (!option) {
+      fail(`params.${param} 必須是 ${spec.options.map((o) => o.value).join(' 或 ')}`)
+      return null
+    }
+    kept[param] = option.value
   }
 
   let position: Node['ui']
@@ -178,12 +190,17 @@ function toEdge(
   }
   const sourceType = declared.get(source)
   const targetType = declared.get(target)
-  if (sourceType != null && !hasOutput(sourceType)) {
+  if (sourceType != null && !NODE_KINDS[sourceType].hasOutput) {
     fail(`${NODE_KINDS[sourceType].label} 不能有下游（source 是 "${source}"）`)
     return null
   }
-  if (targetType != null && !hasInput(targetType)) {
+  if (targetType != null && !NODE_KINDS[targetType].hasInput) {
     fail(`${NODE_KINDS[targetType].label} 不能有上游（target 是 "${target}"）`)
+    return null
+  }
+  if (sourceType != null && targetType != null && !canFeed(sourceType, targetType)) {
+    const targets = NODE_KINDS[sourceType].outputTargets!.map((t) => NODE_KINDS[t].label).join('、')
+    fail(`${NODE_KINDS[sourceType].label} 只能連到 ${targets}（target 是 "${target}"）`)
     return null
   }
 
@@ -205,7 +222,15 @@ function toEdge(
     }
     numbers[field] = value
   }
-  return { id, source, target, ...numbers }
+  // 省略時為 ALL：每個 class 都會走這條邊。和數值欄位一樣，給了 null 是格式錯誤
+  const requestClass = raw.requestClass === undefined ? 'ALL' : raw.requestClass
+  const classes = EDGE_CHOICE_SPECS.requestClass.options.map((option) => option.value)
+  const known = classes.find((value) => value === requestClass)
+  if (known == null) {
+    fail(`requestClass 必須是 ${classes.join('、')} 其中之一`)
+    return null
+  }
+  return { id, source, target, ...numbers, requestClass: known }
 }
 
 function endpoint(
@@ -224,6 +249,16 @@ function endpoint(
     return null
   }
   return value
+}
+
+// 選填參數省略時換成該類型的預設值，其他情況照原樣交給呼叫端檢查
+function paramOrDefault(
+  params: Record<string, unknown>,
+  param: keyof NodeParams,
+  optional: boolean | undefined,
+  defaults: NodeParams,
+): unknown {
+  return params[param] === undefined && optional ? defaults[param] : params[param]
 }
 
 // 沒有座標的節點排在所有有座標的節點下方一列，不會和它們重疊

@@ -1,5 +1,9 @@
 import { MarkerType, type EdgeMarker } from '@xyflow/react'
+import type { EdgeKind } from './catalog'
 import { edgeWidth } from './flow'
+
+// 非同步邊的虛線，線段和間隔的長度（px）
+const ASYNC_DASH = '8 6'
 
 // 箭頭固定大小，不跟著依流量變粗的線一起放大；顏色和線一致
 export function arrowMarker(color?: string): EdgeMarker {
@@ -11,12 +15,13 @@ export function edgeColor(selected: boolean | undefined, hasErrors: boolean): st
   return hasErrors ? 'var(--destructive)' : selected ? 'var(--primary)' : undefined
 }
 
-// 粗細依流量；過期時畫淡（粗細和 RPS 都是上次 Run 的）
+// 粗細依流量；過期時畫淡（粗細和 RPS 都是上次 Run 的）；非同步的邊畫成虛線
 export function edgeStyle(
   selected: boolean | undefined,
   flow: number | undefined,
   errors: string[] | undefined,
   stale: boolean | undefined,
+  kind: EdgeKind,
 ) {
   const width = flow == null ? 1 : edgeWidth(flow)
   return {
@@ -24,5 +29,6 @@ export function edgeStyle(
     // 選取時至少加粗到 2，細線也看得出選到的是它
     strokeWidth: selected ? Math.max(width + 1, 2) : errors ? Math.max(width, 2) : width,
     strokeOpacity: stale ? 0.3 : 1,
+    strokeDasharray: kind === 'ASYNC' ? ASYNC_DASH : undefined,
   }
 }

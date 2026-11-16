@@ -160,6 +160,17 @@ class TopologyValidationTest {
     }
 
     @Test
+    void objectStorageWithOutgoingEdgeIsRejectedLikeDatabase() {
+        SimulationResult result = run(
+                List.of(client("c"), new ObjectStorageNode("s3", "Media", NodeHealth.HEALTHY, CAPACITY),
+                        database("db")),
+                List.of(edge("e1", "c", "s3"), edge("e2", "s3", "db")));
+
+        assertErrors(result, tuple("DATABASE_HAS_OUTPUT", "s3", null));
+        assertThat(result.errors().getFirst().message()).startsWith("Object Storage 「Media」");
+    }
+
+    @Test
     void cacheWithoutDownstreamIsRejected() {
         assertErrors(run(List.of(client("c"), cache("cache")), List.of(edge("e1", "c", "cache"))),
                 tuple("CACHE_DOWNSTREAM_COUNT", "cache", null));
@@ -172,6 +183,39 @@ class TopologyValidationTest {
 
         assertErrors(result, tuple("CACHE_DOWNSTREAM_COUNT", "cache", null));
         assertThat(result.errors().getFirst().message()).contains("2");
+    }
+
+    @Test
+    void cdnWithTwoDownstreamsIsRejectedLikeCache() {
+        SimulationResult result = run(
+                List.of(client("c"), new CdnNode("cdn", "Edge", NodeHealth.HEALTHY, CAPACITY, 0.95), database("a"),
+                        database("b")),
+                List.of(edge("e1", "c", "cdn"), edge("e2", "cdn", "a"), edge("e3", "cdn", "b")));
+
+        assertErrors(result, tuple("CACHE_DOWNSTREAM_COUNT", "cdn", null));
+        assertThat(result.errors().getFirst().message()).startsWith("CDN 「Edge」");
+    }
+
+    @Test
+    void externalApiWithOutgoingEdgeIsRejected() {
+        SimulationResult result = run(
+                List.of(client("c"), new ExternalApiNode("pay", "Payments", NodeHealth.HEALTHY, 100, 1000),
+                        database("db")),
+                List.of(edge("e1", "c", "pay"), edge("e2", "pay", "db")));
+
+        assertErrors(result, tuple("EXTERNAL_API_HAS_OUTPUT", "pay", null));
+    }
+
+    @Test
+    void rateLimiterWithoutExactlyOneDownstreamIsRejected() {
+        var limiter = new RateLimiterNode("rl", "Limiter", NodeHealth.HEALTHY, 1000);
+        SimulationResult none = run(List.of(client("c"), limiter), List.of(edge("e1", "c", "rl")));
+        SimulationResult two = run(List.of(client("c"), limiter, database("a"), database("b")),
+                List.of(edge("e1", "c", "rl"), edge("e2", "rl", "a"), edge("e3", "rl", "b")));
+
+        assertErrors(none, tuple("RATE_LIMITER_DOWNSTREAM_COUNT", "rl", null));
+        assertErrors(two, tuple("RATE_LIMITER_DOWNSTREAM_COUNT", "rl", null));
+        assertThat(two.errors().getFirst().message()).contains("2");
     }
 
     @Test

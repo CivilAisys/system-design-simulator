@@ -7,12 +7,17 @@ import {
 } from '@xyflow/react'
 import { totalRps, type Edge, type EdgeResult } from '@/api/client'
 import { cn } from '@/lib/utils'
+import type { EdgeKind } from './catalog'
 import { edgeStyle } from './edgeStyle'
 import { particles } from './flow'
 import { formatRps } from './format'
 
 export type RpsEdgeData = {
   edge: Edge
+  // 依 source 的 type 決定，畫的時候才算（Canvas）；沒有時當成同步
+  kind?: EdgeKind
+  // 只給 READ／WRITE 其中一個 class 走的邊顯示「R」／「W」，requestClass 沒有作用的邊沒有（Canvas 算）
+  classTag?: 'R' | 'W'
   result?: EdgeResult
   // 這條邊的 RPS / 整張圖最大的邊 RPS（0..1），有計算結果時才有
   flow?: number
@@ -37,13 +42,13 @@ export function RpsEdge({
   data,
 }: EdgeProps<RpsFlowEdge>) {
   const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
-  const { result, flow, errors, stale } = data
+  const { kind = 'SYNC', classTag, result, flow, errors, stale } = data
   // 過期的結果不播動畫：流量可能已經不是這樣
   const moving = flow != null && !stale ? particles(flow) : null
 
   return (
     <>
-      <BaseEdge path={path} markerEnd={markerEnd} style={edgeStyle(selected, flow, errors, stale)} />
+      <BaseEdge path={path} markerEnd={markerEnd} style={edgeStyle(selected, flow, errors, stale, kind)} />
       {/* begin 為負值讓粒子一開始就平均分布在線上，而不是從起點一個個出發。
           系統設定減少動態效果時隱藏（SVG 動畫不受 CSS animation 控制） */}
       {moving &&
@@ -57,7 +62,7 @@ export function RpsEdge({
             />
           </circle>
         ))}
-      {result && (
+      {(result || classTag) && (
         <EdgeLabelRenderer>
           <div
             className={cn(
@@ -66,7 +71,12 @@ export function RpsEdge({
             )}
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
           >
-            {formatRps(totalRps(result.rps))}
+            {classTag && <span className={cn('font-semibold', result && 'mr-1')}>{classTag}</span>}
+            {result && formatRps(totalRps(result.rps))}
+            {/* consumer 處理不完：queue 每秒增加的訊息數 */}
+            {result && result.backlogRps > 0 && (
+              <span className="ml-1 font-semibold text-orange-500">積壓 +{formatRps(result.backlogRps)}/s</span>
+            )}
           </div>
         </EdgeLabelRenderer>
       )}

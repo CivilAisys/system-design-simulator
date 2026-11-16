@@ -1,9 +1,10 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
-import { hasInput, hasOutput, NODE_KINDS } from './catalog'
-import { formatUtilization } from './format'
-import { STATUS_GLOW, STATUS_TEXT } from './status'
+import { NODE_KINDS } from './catalog'
+import { formatRps, formatUtilization } from './format'
+import { ShardGrid } from './ShardGrid'
+import { STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
 
 export type SimNodeData = {
@@ -13,15 +14,18 @@ export type SimNodeData = {
   errors?: string[]
   // 拓撲在上次 Run 之後改過，結果和錯誤可能已經不準
   stale?: boolean
+  // Read Replica 沒有自己的 shards，沿用 primary 的（spec 4.2.3），Canvas 從連過來的 Database 算
+  mirroredShards?: number
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
-  const { node, result, errors, stale } = data
-  const Icon = NODE_KINDS[node.type].icon
+  const { node, result, errors, stale, mirroredShards } = data
+  const { icon: Icon, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
+  const shards = node.params.shards ?? mirroredShards ?? 1
 
   return (
     <div
@@ -45,18 +49,28 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
           )}
         />
       )}
-      {hasInput(node.type) && <Handle type="target" position={Position.Left} />}
+      {hasInput && <Handle type="target" position={Position.Left} />}
       <div className="flex items-center gap-2">
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         <span className="font-medium">{node.name}</span>
       </div>
       {result && (
         <div className="mt-1 flex items-baseline justify-between gap-3 text-xs">
-          <span className="text-muted-foreground">ρ {formatUtilization(result.utilization)}</span>
-          {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{status}</span>}
+          <span className="text-muted-foreground">
+            {nodeMetric === 'rejected'
+              ? `拒絕 ${formatRps(result.rejectedRps)}`
+              : `ρ ${formatUtilization(result.utilization)}`}
+          </span>
+          {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
         </div>
       )}
-      {hasOutput(node.type) && <Handle type="source" position={Position.Right} />}
+      {result?.warnings.map((warning) => (
+        <p key={warning} className="mt-1 text-xs font-semibold text-orange-500" title={WARNING_TITLE[warning]}>
+          ⚠ {WARNING_LABEL[warning]}
+        </p>
+      ))}
+      {shards > 1 && <ShardGrid count={shards} shards={result?.shards} stale={stale} />}
+      {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>
   )
 }

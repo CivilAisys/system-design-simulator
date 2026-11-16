@@ -11,7 +11,7 @@
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
-拓撲中的一個元件：Client、Load Balancer、Service、Cache 或 Database。
+拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database、Object Storage、Read Replica、Rate Limiter、External API 或 Message Queue。
 _Avoid_: component、box
 
 **Edge（邊）**:
@@ -32,8 +32,51 @@ _Avoid_: server、app、backend
 **Cache**:
 擋在下游前面的快取，read 命中時不往下送，write 一律往下送。
 
+**CDN**:
+放在 Client 和後端（origin）之間的快取，行為和 Cache 相同，只有預設值和名稱不同。
+
+**Read Replica**:
+primary Database 的唯讀副本：分擔 read，但要套用 primary 的所有寫入，所以無法擴展寫入。
+_Avoid_: slave、secondary
+
+**Replication（複製）**:
+primary 把處理完的寫入非同步地套用到 Read Replica。不算進 Client 的延遲和成功率；replica 跟不上時 replication lag 會持續增加。
+
+**Message Queue（MQ）**:
+非同步的佇列：Client 的請求進到 queue（ack）就算成功，下游的 consumer 之後再處理。能削峰、降低使用者延遲，但下游的總負載不變。
+_Avoid_: broker（broker 是 MQ 本身那台機器）
+
+**Consumer group**:
+Message Queue 的一條下游邊。每個 group 都收到全部訊息，group 內的 consumer 數量用下游節點的 instances 表示。
+
+**Backlog（積壓）**:
+consumer 處理不完、留在 queue 裡的訊息。穩態下用「每秒增加幾筆」表示，不算丟棄。
+_Avoid_: lag（lag 留給 replication）
+
+**Rate Limiter**:
+限制每秒放行的請求數（全域上限，不分 Client），超過的部分拒絕，不往下送。
+
+**External API**:
+第三方服務（金流、簡訊、地圖 API 等），固定延遲、不排隊，超過對方配額（quota）的請求被拒絕。
+_Avoid_: third-party service、外部服務
+
 **Database（DB）**:
 資料儲存，是請求的終點，沒有下游。
+
+**Object Storage**:
+存放圖片、影片等大型檔案的儲存服務（例如 S3），行為和 Database 相同，只有預設值和名稱不同。
+_Avoid_: blob storage、S3（具體產品名）
+
+**Shard（分片）**:
+Cache 或 Database 依 key 切出來的一份資料和承擔它的機器，每個 shard 都套用節點的處理能力參數。
+_Avoid_: partition、分區
+
+**Redis Cluster**:
+元件面板上的 preset，就是 shards = 3 的 Cache，匯出的 JSON 裡 type 仍是 CACHE。
+
+**Hot shard（熱點 shard）**:
+因為熱門 key 而分到最多流量的 shard，它的 ρ 決定整個節點的 ρ 和狀態。
+_Avoid_: hot key（hot key 是原因，hot shard 是結果）
 
 ### 流量
 
@@ -49,14 +92,21 @@ _Avoid_: input rps、load
 一個 Node 每秒實際處理完的請求數，過載時等於容量。
 
 **Dropped（丟棄量）**:
-到達但超出容量、沒被處理的請求數。
-_Avoid_: lost、rejected、failed
+到達但超出容量、沒被處理的請求數。Rate Limiter、External API 擋下的是拒絕量，不是丟棄量。
+_Avoid_: lost、failed
+
+**Rejected（拒絕量）**:
+Rate Limiter 超過上限、或 External API 超過配額而擋下的請求數（相當於 HTTP 429）。和丟棄量是不同的指標，但兩者都算進丟棄率。
+_Avoid_: dropped、throttled
 
 **Fan-out**:
 Service 對每個下游各發出 `callsPerRequest` 次呼叫，使下游的流量變成子呼叫，而不是使用者請求。
 
 **Call mode（呼叫模式）**:
 Service 呼叫多個下游的方式：依序（SEQUENTIAL）或平行（PARALLEL）。
+
+**requestClass（邊的請求類別）**:
+Service 的邊只給哪個 Request class 走：ALL、READ 或 WRITE。用來把 read 和 write 送到不同的下游。
 
 **Offered rps**:
 所有 Client 送出的請求總數。

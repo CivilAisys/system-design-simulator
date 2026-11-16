@@ -5,5 +5,11 @@ public enum NodeType {
     LOAD_BALANCER,
     SERVICE,
     CACHE,
-    DATABASE
+    CDN,
+    DATABASE,
+    OBJECT_STORAGE,
+    RATE_LIMITER,
+    EXTERNAL_API,
+    READ_REPLICA,
+    MESSAGE_QUEUE
 }

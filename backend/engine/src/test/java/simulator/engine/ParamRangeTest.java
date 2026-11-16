@@ -118,6 +118,62 @@ class ParamRangeTest {
         assertInvalidParam(result, "cache", null, "hitRatio");
     }
 
+    @ParameterizedTest
+    @ValueSource(doubles = {0, -1, 1.1e12, Double.NaN, Double.POSITIVE_INFINITY})
+    void invalidRateLimiterLimitIsRejected(double limitRps) {
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(client(100, 0.9),
+                        new RateLimiterNode("rl", "Limiter", NodeHealth.HEALTHY, limitRps),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
+                List.of(new Edge("e1", "c", "rl", 1, 1, 1), new Edge("e2", "rl", "db", 1, 1, 1))));
+
+        assertInvalidParam(result, "rl", null, "limitRps");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1, 65})
+    void invalidShardCountIsRejected(int shards) {
+        assertInvalidParam(runShardedDatabase(new ShardLayout(shards, null)), "db", null, "shards");
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {0.2, 1.1, Double.NaN})
+    void hotShardShareOutside1OverNAnd1IsRejected(double hotShare) {
+        // 4 個 shard：最熱的至少要分到 1/4
+        assertInvalidParam(runShardedDatabase(new ShardLayout(4, hotShare)), "db", null, "hotShardShare 必須 介於 1/4 和 1");
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {0.25, 1})
+    void hotShardShareBoundsAreAccepted(double hotShare) {
+        assertThat(runShardedDatabase(new ShardLayout(4, hotShare)).errors()).isEmpty();
+    }
+
+    private SimulationResult runShardedDatabase(ShardLayout shards) {
+        return simulator.simulate(new Topology(
+                List.of(client(100, 0.9), new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY, shards)),
+                List.of(new Edge("e1", "c", "db", 1, 1, 1))));
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {0, 1.1e12, Double.NaN})
+    void invalidExternalApiQuotaIsRejected(double quotaRps) {
+        assertInvalidParam(runExternalApi(100, quotaRps), "pay", null, "quotaRps");
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {-1, 1.1e7, Double.NaN})
+    void invalidExternalApiLatencyIsRejected(double latencyMs) {
+        assertInvalidParam(runExternalApi(latencyMs, 1000), "pay", null, "latencyMs");
+    }
+
+    private SimulationResult runExternalApi(double latencyMs, double quotaRps) {
+        return simulator.simulate(new Topology(
+                List.of(client(100, 0.9),
+                        new ExternalApiNode("pay", "Payments", NodeHealth.HEALTHY, latencyMs, quotaRps)),
+                List.of(new Edge("e1", "c", "pay", 1, 1, 1))));
+    }
+
     @Test
     void serviceEdgeWithLessThanOneCallIsRejected() {
         assertInvalidParam(run(client(100, 0.9),

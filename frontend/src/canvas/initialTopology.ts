@@ -23,13 +23,13 @@ export const initialTopology: Topology = {
       id: 'db-1',
       type: 'DATABASE',
       name: 'DB',
-      params: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+      params: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
       state: 'HEALTHY',
       ui: { x: 600, y: 0 },
     },
   ],
   edges: [
-    { id: 'e1', source: 'client-1', target: 'svc-1', weight: 1, callsPerRequest: 1, latencyMs: 1 },
-    { id: 'e2', source: 'svc-1', target: 'db-1', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+    { id: 'e1', source: 'client-1', target: 'svc-1', weight: 1, callsPerRequest: 1, latencyMs: 1, requestClass: 'ALL' },
+    { id: 'e2', source: 'svc-1', target: 'db-1', weight: 1, callsPerRequest: 1, latencyMs: 1, requestClass: 'ALL' },
   ],
 }

@@ -7,16 +7,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { NODE_KINDS, type NodeParams } from './catalog'
+import { NODE_KINDS } from './catalog'
 import { formatUtilization } from './format'
 import { NumberField } from './NumberField'
 import {
   checkNodeParam,
+  EDGE_CHOICE_SPECS,
   EDGE_PARAM_SPECS,
-  edgeNumberParams,
-  NODE_NUMBER_PARAMS,
+  formatShare,
+  NODE_CHOICE_SPECS,
   NODE_PARAM_SPECS,
   nodeParam,
+  type ChoiceSpec,
 } from './params'
 import type { SimFlowNode } from './SimNode'
 import type { RpsFlowEdge } from './RpsEdge'
@@ -65,7 +67,7 @@ type NodePropertiesProps = {
 function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProps) {
   const nameId = useId()
   const node = flowNode.data.node
-  const { label, icon: Icon } = NODE_KINDS[node.type]
+  const { label, icon: Icon, numberParams, choiceParams } = NODE_KINDS[node.type]
   const utilization = result?.utilization ?? null
 
   return (
@@ -75,7 +77,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
         <Label htmlFor={nameId}>名稱</Label>
         <Input id={nameId} value={node.name} onChange={(event) => onUpdate(node.id, { name: event.target.value })} />
       </div>
-      {NODE_NUMBER_PARAMS[node.type].map((param) => (
+      {numberParams.map((param) => (
         <NumberField
           key={param}
           spec={NODE_PARAM_SPECS[param]}
@@ -84,26 +86,41 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
         />
       ))}
-      {node.type === 'SERVICE' && (
-        <div className="grid gap-1.5">
-          <Label>callMode</Label>
-          <Select
-            value={node.params.callMode}
-            // 選項只有下面兩個 SelectItem
-            onValueChange={(value) =>
-              onUpdate(node.id, { params: { callMode: value as NonNullable<NodeParams['callMode']> } })
-            }
-          >
-            <SelectTrigger className="w-full" aria-label="callMode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="SEQUENTIAL">SEQUENTIAL（依序）</SelectItem>
-              <SelectItem value="PARALLEL">PARALLEL（平行）</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* 分片時才有熱點：省略時平均分配，顯示平均值；改了之後就是明確的占比 */}
+      {numberParams.includes('shards') && (node.params.shards ?? 1) > 1 && (
+        <div className="grid gap-1">
+          <NumberField
+            spec={NODE_PARAM_SPECS.hotShardShare}
+            value={node.params.hotShardShare ?? 1 / (node.params.shards ?? 1)}
+            check={(value) => checkNodeParam(node.params, 'hotShardShare', value)}
+            onChange={(value) => onUpdate(node.id, { params: { hotShardShare: value } })}
+          />
+          <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+            <span>
+              最熱的 shard 分到的流量比例，平均是 1/{node.params.shards}（{formatShare(1 / (node.params.shards ?? 1))}）
+            </span>
+            {/* 設定過占比之後，shard 數改了也不會跟著變；改回平均就會跟著 1/N 走 */}
+            {node.params.hotShardShare !== undefined && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto shrink-0 p-0 text-xs"
+                onClick={() => onUpdate(node.id, { clearParams: ['hotShardShare'] })}
+              >
+                改回平均
+              </Button>
+            )}
+          </div>
         </div>
       )}
+      {choiceParams.map((param) => (
+        <ChoiceField
+          key={param}
+          spec={NODE_CHOICE_SPECS[param]}
+          value={node.params[param]}
+          onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
+        />
+      ))}
       {/* Client 沒有容量，ρ 不適用；Run 之前也還沒有值 */}
       {utilization !== null && (
         <div className="grid gap-1.5">
@@ -114,6 +131,37 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           <Progress value={Math.min(utilization, 1) * 100} aria-label="ρ" />
         </div>
       )}
+    </div>
+  )
+}
+
+type ChoiceFieldProps<V extends string> = {
+  spec: ChoiceSpec<V>
+  value: V | undefined
+  onChange: (value: V) => void
+}
+
+function ChoiceField<V extends string>({ spec, value, onChange }: ChoiceFieldProps<V>) {
+  const { label, options } = spec
+  return (
+    <div className="grid gap-1.5">
+      <Label>{label}</Label>
+      <Select
+        value={value}
+        // 選項只有 options 裡的值
+        onValueChange={(selected) => onChange(selected as V)}
+      >
+        <SelectTrigger className="w-full" aria-label={label}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }
@@ -135,10 +183,18 @@ function EdgeProperties({ edge: flowEdge, nodes, onUpdate }: EdgePropertiesProps
   return (
     <div className="grid gap-4">
       <PanelHeader title={`${source.name} → ${target.name}`} edgeId={edge.id} />
-      {edgeNumberParams(source.type).map((param) => (
+      {NODE_KINDS[source.type].edgeParams.map((param) => (
         <NumberField
           key={param}
           spec={EDGE_PARAM_SPECS[param]}
+          value={edge[param]}
+          onChange={(value) => onUpdate(edge.id, { [param]: value })}
+        />
+      ))}
+      {NODE_KINDS[source.type].edgeChoiceParams.map((param) => (
+        <ChoiceField
+          key={param}
+          spec={EDGE_CHOICE_SPECS[param]}
           value={edge[param]}
           onChange={(value) => onUpdate(edge.id, { [param]: value })}
         />
