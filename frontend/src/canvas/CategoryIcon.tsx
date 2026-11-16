@@ -1,14 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Category } from './catalog'
-
-// 類別色是 index.css 的變數，兩個主題各自調深淺
-const CATEGORY_TILE: Record<Category, string> = {
-  TRAFFIC: 'bg-traffic-bg text-traffic',
-  COMPUTE: 'bg-compute-bg text-compute',
-  DATA: 'bg-data-bg text-data',
-  ASYNC: 'bg-async-bg text-async',
-}
+import { CATEGORY_TILE } from './category'
 
 type CategoryIconProps = {
   icon: LucideIcon

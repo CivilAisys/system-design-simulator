@@ -21,7 +21,7 @@ export type NodeParams = Node['params']
 // 非同步的邊（之後的 replication、Message Queue 的 consumer）不算進 Client 的端到端延遲，畫成虛線
 export type EdgeKind = 'SYNC' | 'ASYNC'
 
-// 元件的類別：元件面板依它分組，圖示方塊依它上色（category.ts）
+// 元件的類別：元件面板依它分組，圖示方塊依它上色（category.ts、CategoryIcon）
 export type Category = 'TRAFFIC' | 'COMPUTE' | 'DATA' | 'ASYNC'
 
 // 元件面板的分組順序

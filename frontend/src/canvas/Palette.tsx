@@ -10,17 +10,10 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
-import { CATEGORIES, NODE_KINDS, PALETTE, type Category, type PaletteItem } from './catalog'
+import { CATEGORIES, NODE_KINDS, PALETTE, type PaletteItem } from './catalog'
 import { PALETTE_ITEM_MIME } from './Canvas'
+import { CATEGORY_DOT } from './category'
 import { CategoryIcon } from './CategoryIcon'
-
-// 組名旁的類別色圓點，顏色同 CategoryIcon 的方塊
-const CATEGORY_DOT: Record<Category, string> = {
-  TRAFFIC: 'bg-traffic',
-  COMPUTE: 'bg-compute',
-  DATA: 'bg-data',
-  ASYNC: 'bg-async',
-}
 
 type PaletteProps = {
   // 點擊（或鍵盤）加入時放在畫布中央，拖曳則放在放開的位置
@@ -34,7 +27,7 @@ export function Palette({ onAdd }: PaletteProps) {
   }
 
   return (
-    <Sidebar collapsible="none" className="w-44 border-r">
+    <Sidebar collapsible="none" className="w-[214px] border-r">
       <SidebarContent>
         {CATEGORIES.map((category) => (
           <SidebarGroup key={category.id} className="py-1">

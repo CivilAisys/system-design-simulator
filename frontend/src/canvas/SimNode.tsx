@@ -33,8 +33,8 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       title={errors && errorsTitle(errors, stale)}
       className={cn(
         'relative min-w-36 rounded-card border border-input bg-card px-3 py-2.5 text-card-foreground',
-        // Client 是流量的來源，不是機器：虛線外框、沒有陰影
-        node.type === 'CLIENT' ? 'border-dashed' : 'shadow-(--node-shadow)',
+        // 沒有上游的節點（Client）是流量的來源，不是機器：虛線外框、沒有陰影
+        hasInput ? 'shadow-(--node-shadow)' : 'border-dashed',
         // 選取用強調色的外圈，和狀態色的外框、光暈分開
         selected && 'outline-2 outline-offset-6 outline-primary',
       )}

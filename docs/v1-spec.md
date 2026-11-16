@@ -576,15 +576,16 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 │ System Design Simulator [▶ Run] [Auto-run ☑] [↶][↷] [匯入] [匯出] [範例▾] │
 ├──────────┬─────────────────────────────────────┬───────────────┤
 │ 元件      │                                     │ 屬性           │
-│ ▢ Client │      ┌──────┐     ┌────┐             │ API Server    │
-│ ▢ LB     │      │Users │────▶│ LB │──┐          │ instances  [2]│
-│ ▢ Service│      └──────┘     └────┘  ▼          │ concurrency   │
-│ ▢ Cache  │                      ┌─────────┐     │ ━━━━●━━ 200   │
-│ ▢ CDN    │                      │API  ρ=.8│(黃) │ serviceTime   │
-│ ▢ DB     │                      └─────────┘     │ ━━●━━━━ 50ms  │
-│ ▢ Object │          （React Flow 畫布）           │ ρ ████░ 0.80  │
-│ ▢ Limiter│                                      │               │
-│ ▢ Ext API│                                      │               │
+│ ● 流量    │      ┌──────┐     ┌────┐             │ ▣ API Server  │
+│ ▣ Client │      │Users │────▶│ LB │──┐          │ instances  [2]│
+│ ▣ LB     │      └──────┘     └────┘  ▼          │ concurrency   │
+│ ● 運算    │                      ┌─────────┐     │ ━━━━●━━ 200   │
+│ ▣ Service│                      │▣ API    │(黃) │ serviceTime   │
+│ ● 資料    │                      │  ρ 0.80 │     │ ━━●━━━━ 50ms  │
+│ ▣ Cache  │                      └─────────┘     │ ρ ████░ 0.80  │
+│ ▣ DB     │          （React Flow 畫布）           │               │
+│ ● 非同步  │                                      │               │
+│ ▣ MQ     │                                      │               │
 ├──────────┴─────────────────────────────────────┴───────────────┤
 │ [指標表] [流量 Sankey] [錯誤 (0)]                                    │
 │ 節點    λ     容量   ρ    延遲   丟棄   拒絕   狀態                   │
