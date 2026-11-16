@@ -12,11 +12,16 @@ type ShardGridProps = {
 
 // 一行最多 8 格：64 個 shard 是 8 × 8，節點不會變得太寬
 const MAX_COLUMNS = 8
+// 匯入的檔案可能帶著超出範圍的 shards（錯誤留給 Run 回報），格子最多畫到上限
+const MAX_CELLS = 64
 
 // 分片節點的 cluster 外觀（spec 第 6 節）：每格是一個 shard，依它的狀態上色，最熱的在第一格。
 // 格子只是顯示，不能單獨選取；點下去選的是整個節點
-export function ShardGrid({ count, shards, stale }: ShardGridProps) {
+export function ShardGrid({ count: requested, shards, stale }: ShardGridProps) {
+  const count = Math.min(Math.floor(requested), MAX_CELLS)
   const results = shards?.length === count ? shards : undefined
+  // 平均分配時每格一樣，第一格不算「最熱」
+  const hottest = results != null && results.length > 1 && totalRps(results[0].arrivalRps) > totalRps(results[1].arrivalRps)
   return (
     <div
       className={cn('mt-2 grid w-fit gap-0.5', stale && 'opacity-30')}
@@ -27,7 +32,7 @@ export function ShardGrid({ count, shards, stale }: ShardGridProps) {
         return (
           <div
             key={i}
-            title={shardTitle(i, shard)}
+            title={shardTitle(i, shard, hottest)}
             className={cn('size-3 rounded-sm', shard ? STATUS_CELL[shard.status] : 'bg-muted-foreground/25')}
           />
         )
@@ -36,9 +41,11 @@ export function ShardGrid({ count, shards, stale }: ShardGridProps) {
   )
 }
 
-function shardTitle(index: number, shard: ShardResult | undefined): string {
-  const name = `shard ${index + 1}${index === 0 ? '（最熱）' : ''}`
-  if (!shard) return name
+function shardTitle(index: number, shard: ShardResult | undefined, hottest: boolean): string {
+  const name = `shard ${index + 1}${index === 0 && hottest ? '（最熱）' : ''}`
+  if (!shard) {
+    return name
+  }
   return [
     name,
     `到達率 ${formatRps(totalRps(shard.arrivalRps))}`,

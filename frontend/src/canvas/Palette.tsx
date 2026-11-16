@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { PALETTE, type PaletteItem } from './catalog'
-import { NODE_TYPE_MIME } from './Canvas'
+import { PALETTE_ITEM_MIME } from './Canvas'
 
 type PaletteProps = {
   // 點擊（或鍵盤）加入時放在畫布中央，拖曳則放在放開的位置
@@ -19,7 +19,7 @@ type PaletteProps = {
 
 export function Palette({ onAdd }: PaletteProps) {
   function onDragStart(event: DragEvent, item: PaletteItem) {
-    event.dataTransfer.setData(NODE_TYPE_MIME, item.id)
+    event.dataTransfer.setData(PALETTE_ITEM_MIME, item.id)
     event.dataTransfer.effectAllowed = 'copy'
   }
 

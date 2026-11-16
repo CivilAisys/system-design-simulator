@@ -23,6 +23,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { icon: Icon, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
+  const shards = node.params.shards ?? 1
 
   return (
     <div
@@ -61,9 +62,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
           {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
         </div>
       )}
-      {(node.params.shards ?? 1) > 1 && (
-        <ShardGrid count={node.params.shards ?? 1} shards={result?.shards} stale={stale} />
-      )}
+      {shards > 1 && <ShardGrid count={shards} shards={result?.shards} stale={stale} />}
       {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>
   )

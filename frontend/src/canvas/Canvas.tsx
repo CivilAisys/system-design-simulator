@@ -22,7 +22,7 @@ const nodeTypes = { sim: SimNode }
 const edgeTypes = { rps: RpsEdge }
 
 // 元件面板拖出來的 dataTransfer 格式，值是 PaletteItem 的 id
-export const NODE_TYPE_MIME = 'application/x-sim-node-type'
+export const PALETTE_ITEM_MIME = 'application/x-sim-palette-item'
 
 type CanvasProps = {
   nodes: SimFlowNode[]
@@ -94,14 +94,14 @@ export function Canvas({
   )
 
   function onDragOver(event: DragEvent) {
-    if (event.dataTransfer.types.includes(NODE_TYPE_MIME)) {
+    if (event.dataTransfer.types.includes(PALETTE_ITEM_MIME)) {
       event.preventDefault()
       event.dataTransfer.dropEffect = 'copy'
     }
   }
 
   function onDrop(event: DragEvent) {
-    const id = event.dataTransfer.getData(NODE_TYPE_MIME)
+    const id = event.dataTransfer.getData(PALETTE_ITEM_MIME)
     const item = PALETTE.find((candidate) => candidate.id === id)
     if (!item) {
       return
