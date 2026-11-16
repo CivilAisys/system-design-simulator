@@ -1,5 +1,6 @@
 package simulator.engine;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -7,6 +8,7 @@ import java.util.List;
  * 伺服器類欄位為 null 時代表「不適用」（Client）或「無定義」（過載時的延遲）。
  * {@code successRps} 和 {@code endToEndMs} 只有 Client 有，其他節點為 null。
  * {@code shards} 只有分片（shards > 1）的節點有，最熱的 shard 放第一個；其他節點為 null。
+ * {@code warnings} 永遠是清單，沒有警告時為空。
  */
 public record NodeResult(
         ClassRates arrivalRps,
@@ -20,10 +22,19 @@ public record NodeResult(
         Double avgQueueMs,
         Double avgLatencyMs,
         Status status,
-        List<ShardResult> shards) {
+        List<ShardResult> shards,
+        List<NodeWarning> warnings) {
+
+    /** 加上一個警告。 */
+    NodeResult withWarning(NodeWarning warning) {
+        var all = new ArrayList<>(warnings);
+        all.add(warning);
+        return new NodeResult(arrivalRps, throughputRps, droppedRps, rejectedRps, successRps, endToEndMs, capacityRps,
+                utilization, avgQueueMs, avgLatencyMs, status, shards, List.copyOf(all));
+    }
 
     static NodeResult client(ClassRates sent, double successRps, ClassLatencies endToEndMs) {
         return new NodeResult(sent, sent.total(), 0, 0, successRps, endToEndMs, null, null, null, null, null,
-                null);
+                null, List.of());
     }
 }

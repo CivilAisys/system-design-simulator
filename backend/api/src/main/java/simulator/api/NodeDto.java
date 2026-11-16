@@ -14,6 +14,7 @@ import simulator.engine.Node;
 import simulator.engine.NodeHealth;
 import simulator.engine.ObjectStorageNode;
 import simulator.engine.RateLimiterNode;
+import simulator.engine.ReadReplicaNode;
 import simulator.engine.ServiceNode;
 import simulator.engine.ShardLayout;
 
@@ -45,6 +46,7 @@ public record NodeDto(
             case DATABASE -> new DatabaseNode(id, name, health, capacityParams(), shardLayout());
             case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams());
             case RATE_LIMITER -> new RateLimiterNode(id, name, health, require(params.limitRps(), "limitRps"));
+            case READ_REPLICA -> new ReadReplicaNode(id, name, health, capacityParams());
             case EXTERNAL_API -> new ExternalApiNode(id, name, health,
                     require(params.latencyMs(), "latencyMs"), require(params.quotaRps(), "quotaRps"));
         };

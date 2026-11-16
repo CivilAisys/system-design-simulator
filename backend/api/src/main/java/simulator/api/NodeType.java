@@ -9,5 +9,6 @@ public enum NodeType {
     DATABASE,
     OBJECT_STORAGE,
     RATE_LIMITER,
-    EXTERNAL_API
+    EXTERNAL_API,
+    READ_REPLICA
 }

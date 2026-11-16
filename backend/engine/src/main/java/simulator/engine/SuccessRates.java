@@ -42,25 +42,42 @@ final class SuccessRates {
                 double miss = graph.visits(edge, read);
                 yield (1 - miss) + miss * children.get(edge.target());
             }
+            // 複製是非同步的，replica 跟不上不影響 primary 上的請求
             case StorageNode storage -> 1;
+            // read 的丟棄由 pass(n) 扣掉；複製寫入的丟棄只產生警告
+            case ReadReplicaNode replica -> 1;
             case ExternalApiNode api -> 1;
             // 放行的請求只送往唯一的下游；被拒絕的部分由 pass(n) 扣掉
             case RateLimiterNode limiter -> children.get(edges.getFirst().target());
         };
-        return pass(node) * downstream;
+        return pass(node, read) * downstream;
     }
 
     private double weightedSum(List<Edge> edges, Map<String, Double> children, boolean read) {
         return edges.stream().mapToDouble(edge -> graph.visits(edge, read) * children.get(edge.target())).sum();
     }
 
-    /** 通過率 = 實際處理量 / 到達量；Client 和沒有流量的節點為 1。 */
-    private double pass(Node node) {
+    /**
+     * 這個 class 的通過率 = 實際處理量 / 到達量；Client 和沒有流量的節點為 1。
+     * 每個 shard 依 read／write 比例丟棄，但 Read Replica 各 shard 的比例不同（複製寫入跟著 primary 的 shard），
+     * 所以分片的節點逐 shard 加總這個 class 的處理量。
+     */
+    private double pass(Node node, boolean read) {
         if (node instanceof ClientNode) {
             return 1;
         }
         NodeResult result = nodeResults.get(node.id());
-        double arrival = result.arrivalRps().total();
-        return arrival > 0 ? result.throughputRps() / arrival : 1;
+        double arrival = result.arrivalRps().of(read);
+        if (arrival <= 0) {
+            return 1;
+        }
+        if (result.shards() == null) {
+            return result.throughputRps() / result.arrivalRps().total();
+        }
+        double processed = result.shards().stream()
+                .filter(shard -> shard.arrivalRps().total() > 0)
+                .mapToDouble(shard -> shard.arrivalRps().of(read) * shard.throughputRps() / shard.arrivalRps().total())
+                .sum();
+        return processed / arrival;
     }
 }

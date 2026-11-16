@@ -35,6 +35,9 @@ final class TopologyValidator {
     // 上下游數量也算進另一端不存在的邊：畫布上看得到這條邊，那條邊已經報 UNKNOWN_NODE，節點不能再多報一次
     private final Map<String, Integer> downstreams = new HashMap<>();
     private final Map<String, Integer> upstreams = new HashMap<>();
+    // Database 連到 Read Replica 的邊：Database 算「連到 replica 的下游」，replica 算「primary 的數量」
+    private final Map<String, Integer> replicaDownstreams = new HashMap<>();
+    private final Map<String, Set<String>> primaries = new HashMap<>();
     private final List<ValidationError> errors = new ArrayList<>();
 
     private TopologyValidator(Topology topology, TopologyGraph graph) {
@@ -43,6 +46,14 @@ final class TopologyValidator {
         for (Edge edge : topology.edges()) {
             downstreams.merge(edge.source(), 1, Integer::sum);
             upstreams.merge(edge.target(), 1, Integer::sum);
+            boolean fromDatabase = graph.node(edge.source()) instanceof DatabaseNode;
+            if (fromDatabase && graph.node(edge.target()) instanceof ReadReplicaNode) {
+                replicaDownstreams.merge(edge.source(), 1, Integer::sum);
+            }
+            // 重複的邊（DUPLICATE_EDGE）只算一個 primary；不存在的 source 已經報 UNKNOWN_NODE，也算進去，不重複報錯
+            if (fromDatabase || !graph.contains(edge.source())) {
+                primaries.computeIfAbsent(edge.target(), id -> new HashSet<>()).add(edge.source());
+            }
         }
     }
 
@@ -92,10 +103,21 @@ final class TopologyValidator {
         if (node instanceof ExternalApiNode && downstream > 0) {
             nodeError(node, "EXTERNAL_API_HAS_OUTPUT", "External API " + name + " 不能有下游連線");
         }
-        // Object Storage 沿用 Database 的錯誤碼，訊息用它自己的 type 名稱
-        if (node instanceof StorageNode && downstream > 0) {
-            nodeError(node, "DATABASE_HAS_OUTPUT",
-                    (node instanceof ObjectStorageNode ? "Object Storage " : "Database ") + name + " 不能有下游連線");
+        // Database 只能連到 Read Replica（複製）。Object Storage 沿用同一個錯誤碼，訊息用它自己的 type 名稱
+        if (node instanceof StorageNode && downstream > replicaDownstreams.getOrDefault(node.id(), 0)) {
+            nodeError(node, "DATABASE_HAS_OUTPUT", node instanceof ObjectStorageNode
+                    ? "Object Storage " + name + " 不能有下游連線"
+                    : "Database " + name + " 只能連到 Read Replica");
+        }
+        if (node instanceof ReadReplicaNode) {
+            int primaryCount = primaries.getOrDefault(node.id(), Set.of()).size();
+            if (primaryCount != 1) {
+                nodeError(node, "REPLICA_PRIMARY_COUNT",
+                        "Read Replica " + name + " 必須剛好有一個 Database 上游（primary），目前有 " + primaryCount + " 個");
+            }
+            if (downstream > 0) {
+                nodeError(node, "REPLICA_HAS_OUTPUT", "Read Replica " + name + " 不能有下游連線");
+            }
         }
     }
 
@@ -131,6 +153,7 @@ final class TopologyValidator {
                 checkCapacityParams(storage.capacityParams(), where, report);
                 checkShards(storage.shards(), where, report);
             }
+            case ReadReplicaNode replica -> checkCapacityParams(replica.capacityParams(), where, report);
             case ExternalApiNode api -> {
                 requireBetween(api.latencyMs(), 0, MAX_LATENCY_MS, where, "latencyMs", report);
                 requirePositiveRps(api.quotaRps(), where, "quotaRps", report);

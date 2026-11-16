@@ -4,7 +4,7 @@ import type { Node, NodeResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
 import { formatRps, formatUtilization } from './format'
 import { ShardGrid } from './ShardGrid'
-import { STATUS_GLOW, STATUS_LABEL, STATUS_TEXT } from './status'
+import { STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
 
 export type SimNodeData = {
@@ -14,16 +14,18 @@ export type SimNodeData = {
   errors?: string[]
   // 拓撲在上次 Run 之後改過，結果和錯誤可能已經不準
   stale?: boolean
+  // Read Replica 沒有自己的 shards，沿用 primary 的（spec 4.2.3），Canvas 從連過來的 Database 算
+  mirroredShards?: number
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
-  const { node, result, errors, stale } = data
+  const { node, result, errors, stale, mirroredShards } = data
   const { icon: Icon, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
-  const shards = node.params.shards ?? 1
+  const shards = node.params.shards ?? mirroredShards ?? 1
 
   return (
     <div
@@ -62,6 +64,11 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
           {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
         </div>
       )}
+      {result?.warnings.map((warning) => (
+        <p key={warning} className="mt-1 text-xs font-semibold text-orange-500" title={WARNING_TITLE[warning]}>
+          ⚠ {WARNING_LABEL[warning]}
+        </p>
+      ))}
       {shards > 1 && <ShardGrid count={shards} shards={result?.shards} stale={stale} />}
       {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>

@@ -7,7 +7,7 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import type { Edge, Node, Topology } from '@/api/client'
-import { newEdgeId, newNode, type NodeParams, type PaletteItem } from './catalog'
+import { canFeed, newEdgeId, newNode, type NodeParams, type PaletteItem } from './catalog'
 import type { SimFlowNode } from './SimNode'
 import { arrowMarker } from './edgeStyle'
 import { copyNodes, pasteClip, type Clip } from './clipboard'
@@ -85,8 +85,8 @@ export function useTopologyEditor(initial: Topology) {
   )
 
   const isValidConnection = useCallback(
-    (c: Connection | RpsFlowEdge) => canConnect(edges, c.source, c.target),
-    [edges],
+    (c: Connection | RpsFlowEdge) => canConnect(edges, c.source, c.target) && typesFit(nodes, c.source, c.target),
+    [nodes, edges],
   )
 
   const onConnect = useCallback(
@@ -94,7 +94,7 @@ export function useTopologyEditor(initial: Topology) {
       const id = newEdgeId(c.source, c.target, usedIds)
       usedIds.add(id)
       edit((state) => {
-        if (!canConnect(state.edges, c.source, c.target)) {
+        if (!canConnect(state.edges, c.source, c.target) || !typesFit(state.nodes, c.source, c.target)) {
           return state
         }
         const edge = toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS })
@@ -379,4 +379,12 @@ function toFlowEdge(edge: Edge): RpsFlowEdge {
     markerEnd: arrowMarker(),
     data: { edge },
   }
+}
+
+// type 的連線限制（canFeed），例如 Database 只能連到 Read Replica
+function typesFit(nodes: SimFlowNode[], source: string, target: string): boolean {
+  const type = (id: string) => nodes.find((n) => n.id === id)?.data.node.type
+  const sourceType = type(source)
+  const targetType = type(target)
+  return sourceType == null || targetType == null || canFeed(sourceType, targetType)
 }

@@ -88,7 +88,8 @@ final class EndToEndLatencies {
         double downstream = 0;
         for (Edge edge : edges) {
             double visits = graph.visits(edge, read);
-            if (visits == 0) {
+            // 複製是非同步的，不在請求的路徑上
+            if (visits == 0 || graph.replicates(edge)) {
                 continue;
             }
             called++;
