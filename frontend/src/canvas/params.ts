@@ -172,6 +172,8 @@ export function checkNumber(spec: NumberSpec, value: number): string | null {
   return null
 }
 
+const SHARE_TOLERANCE = 1e-12
+
 const WORKER_PARTNER: Partial<Record<NodeNumberParam, NodeNumberParam>> = {
   instances: 'concurrency',
   concurrency: 'instances',
@@ -187,7 +189,8 @@ export function checkNodeParam(params: NodeParams, param: NodeNumberParam, value
   if (param === 'hotShardShare' || param === 'shards') {
     const shards = param === 'shards' ? value : (params.shards ?? 1)
     const hot = param === 'hotShardShare' ? value : params.hotShardShare
-    return hot !== undefined && hot < 1 / shards
+    // 容許浮點誤差，和後端 TopologyValidator 一致：1/3 算出來的值不會因為最後一位被擋掉
+    return hot !== undefined && hot < 1 / shards - SHARE_TOLERANCE
       ? `hotShardShare 不能小於平均 1/${shards}（${formatShare(1 / shards)}）`
       : null
   }
@@ -220,11 +223,12 @@ function describeRange(spec: NumberSpec): string {
   return spec.minExclusive ? `> ${min} 且 ≤ ${max}` : `${min} ～ ${max}`
 }
 
-// 和後端訊息的寫法一致，例如 0.000001、10,000,000（不用 1e-6 這種科學記號）
 // 最熱 shard 的平均占比 1/N，例如 0.333
 export function formatShare(value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: 3 })
 }
+
+// 和後端訊息的寫法一致，例如 0.000001、10,000,000（不用 1e-6 這種科學記號）
 
 function formatBound(value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: 6 })

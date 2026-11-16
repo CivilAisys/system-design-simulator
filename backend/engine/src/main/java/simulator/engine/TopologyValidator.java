@@ -27,6 +27,8 @@ final class TopologyValidator {
     static final int MAX_CALLS_PER_REQUEST = 10_000;
     static final double MAX_WEIGHT = 1e6;
     static final int MAX_SHARDS = 64;
+    // hotShardShare 的下限 1/N 容許浮點誤差，前端 params.ts 用同一個值
+    static final double SHARE_TOLERANCE = 1e-12;
 
     private final Topology topology;
     private final TopologyGraph graph;
@@ -156,7 +158,7 @@ final class TopologyValidator {
         }
         // 最熱的 shard 至少分到平均值 1/N，否則它就不是最熱的
         Double hot = shards.hotShare();
-        if (hot != null && !(hot >= 1.0 / shards.count() - 1e-12 && hot <= 1)) {
+        if (hot != null && !(hot >= 1.0 / shards.count() - SHARE_TOLERANCE && hot <= 1)) {
             report.accept(invalid(where, "hotShardShare", "介於 1/" + shards.count() + " 和 1 之間", hot));
         }
     }

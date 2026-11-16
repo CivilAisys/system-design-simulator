@@ -148,7 +148,7 @@ system-design-simulator/
 |---|---|---|
 | 後端反序列化 | DTO 欄位用包裝型別（`Double`、`Integer`），`@Schema(defaultValue = …)`；轉成 engine 物件時 `null` 換成預設值 | `SimulateEndpointTest.missingEdgeFieldsDefaultToOne`；型別錯誤見 `wrongTypeIsBadRequest` |
 | OpenAPI | 不標 `requiredMode = REQUIRED`，有 `default`。例外：`NodeParams` 的欄位不標 `default`，預設值寫在 `description`，因為 `NodeParams` 是所有 type 共用的，產生的前端型別會把有 `default` 的欄位當成必填 | `OpenApiSyncTest.fieldsWithDefaultsAreOptional` 檢查有預設值的欄位都不在 `required` |
-| 前端匯入 | 節點參數在 `params.ts` 的 spec 標 `optional: true`，省略時用該類型 `defaults` 裡的值；邊的欄位在 `topologyFile.ts` 的 `toEdge` 補；邊的下拉選單欄位（例如 `requestClass`）的選項在 `params.ts` 的 `EDGE_CHOICE_SPECS`，哪些起點會顯示寫在 `NODE_KINDS` 的 `edgeChoiceParams` | `topologyFile.test.ts` 的「選填的節點參數」、「邊省略的數值參數用預設值 1，requestClass 用 ALL」 |
+| 前端匯入 | 節點參數在 `params.ts` 的 spec 標 `optional: true`，省略時用該類型 `defaults` 裡的值；沒有固定預設值的選填參數（例如 `hotShardShare`，省略時代表平均分配）不放進 `defaults`，在 `toNode` 另外讀，省略時不補；邊的欄位在 `topologyFile.ts` 的 `toEdge` 補；邊的下拉選單欄位（例如 `requestClass`）的選項在 `params.ts` 的 `EDGE_CHOICE_SPECS`，哪些起點會顯示寫在 `NODE_KINDS` 的 `edgeChoiceParams` | `topologyFile.test.ts` 的「選填的節點參數」、「邊省略的數值參數用預設值 1，requestClass 用 ALL」 |
 
 **新增一種 Node type**：
 
@@ -518,7 +518,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 - 邊上的 label 顯示 RPS，粗細依流量比例。
 - Rate Limiter、External API 節點沒有 ρ，改顯示拒絕量和狀態（「限流中」／「未觸發」、「超過配額」／「配額內」）。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
-- 指標表在分片節點的名稱旁顯示 shard 數；屬性面板在 `shards` > 1 時顯示 `hotShardShare`，沒設定時顯示平均值 `1/N`。
+- 指標表在分片節點的名稱旁顯示 shard 數；屬性面板在 `shards` > 1 時顯示 `hotShardShare`，沒設定時顯示平均值 `1/N`；設定過之後可以按「改回平均」拿掉這個參數，之後改 shard 數占比會跟著 `1/N` 走。
 - 指標表「丟棄」和「拒絕」分兩欄；結果面板上方的 summary 在有拒絕時另外列出總拒絕量（丟棄率已經包含它）。
 - **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。
 - **流量粒子動畫**：Run 之後，邊上有小點沿方向流動，速度或密度依該邊 RPS 調整。

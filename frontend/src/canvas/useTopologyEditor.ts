@@ -25,7 +25,8 @@ const EDGE_DEFAULTS: Omit<Edge, 'id' | 'source' | 'target'> = {
   requestClass: 'ALL',
 }
 
-export type NodePatch = { name?: string; params?: Partial<NodeParams> }
+// clearParams：拿掉的選填參數（例如 hotShardShare 改回平均分配）。params 裡的 undefined 代表「沒有改」，不能用來刪除
+export type NodePatch = { name?: string; params?: Partial<NodeParams>; clearParams?: (keyof NodeParams)[] }
 export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs' | 'requestClass'>>
 
 type CanvasState = {
@@ -189,20 +190,27 @@ export function useTopologyEditor(initial: Topology) {
           ...state,
           nodes: state.nodes.map((n) => {
             const node = n.data.node
-            const unchanged = sameValues(node, { name: patch.name }) && sameValues(node.params, patch.params ?? {})
+            const cleared = (patch.clearParams ?? []).filter((param) => node.params[param] !== undefined)
+            const unchanged =
+              sameValues(node, { name: patch.name }) && sameValues(node.params, patch.params ?? {}) && !cleared.length
             if (n.id !== id || unchanged) {
               return n
             }
+            const params = { ...node.params, ...patch.params }
+            for (const param of cleared) {
+              delete params[param]
+            }
             return {
               ...n,
-              data: {
-                ...n.data,
-                node: { ...node, name: patch.name ?? node.name, params: { ...node.params, ...patch.params } },
-              },
+              data: { ...n.data, node: { ...node, name: patch.name ?? node.name, params } },
             }
           }),
         }),
-        fieldGroup(`node:${id}`, { name: patch.name, ...patch.params }),
+        fieldGroup(`node:${id}`, {
+          name: patch.name,
+          ...patch.params,
+          ...Object.fromEntries((patch.clearParams ?? []).map((param) => [param, null])),
+        }),
       ),
     [edit],
   )
