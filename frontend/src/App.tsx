@@ -274,7 +274,10 @@ function Simulator() {
       </header>
       <SidebarProvider className="min-h-0 flex-1">
         <Palette onAdd={addAtCenter} />
-        <main ref={canvasRef} className="min-w-0 flex-1">
+        <main ref={canvasRef} className="relative min-w-0 flex-1">
+          {/* 通知放在畫布右上角：sonner 預設 fixed 貼著視窗，會蓋住屬性面板和工具列，
+              改成 absolute 跟著畫布（結果面板拉高時也留在畫布裡） */}
+          <Toaster theme={theme} position="top-right" offset={16} closeButton style={{ position: 'absolute' }} />
           <Canvas
             nodes={editor.nodes}
             edges={editor.edges}
@@ -313,7 +316,6 @@ function Simulator() {
           onFocusError={focusError}
         />
       </section>
-      <Toaster theme={theme} position="top-right" />
     </div>
   )
 }

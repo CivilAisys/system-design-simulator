@@ -2,7 +2,7 @@ import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 // 主題由 App 的 useTheme 透過 theme prop 傳入，不用 next-themes
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = ({ style, ...props }: ToasterProps) => {
   return (
     <Sonner
       className="toaster group"
@@ -29,6 +29,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          ...style,
         } as React.CSSProperties
       }
       toastOptions={{
