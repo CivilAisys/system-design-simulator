@@ -48,6 +48,14 @@
     --color-over-bg: var(--status-over-bg);
     --color-over-ink: var(--status-over-ink);
     --color-over-row: var(--status-over-row);
+    --color-traffic: var(--category-traffic);
+    --color-traffic-bg: var(--category-traffic-bg);
+    --color-compute: var(--category-compute);
+    --color-compute-bg: var(--category-compute-bg);
+    --color-data: var(--category-data);
+    --color-data-bg: var(--category-data-bg);
+    --color-async: var(--category-async);
+    --color-async-bg: var(--category-async-bg);
     /* 節點、表格外框等卡片的圓角 */
     --radius-card: 16px;
     --color-sidebar-ring: var(--sidebar-ring);
@@ -88,7 +96,8 @@
 /* 配色照設計稿（深色：A 的配色、淺色：C 的配色，形狀共用 C）。
    shadcn 的變數對應：background 是工具列和兩側面板（chrome），muted 是輸入框和分頁底色（panel），
    border／input 是兩階外框（line／line2），primary 是紫色強調色：Run、選取外框、流量粒子、slider、開關都用它。
-   狀態色四級（OK／WARN／CRITICAL／OVERLOADED）各有主色、淡底、深色文字和節點光暈，CRITICAL 設計稿沒畫，用同一套規則補上橘色 */
+   狀態色四級（OK／WARN／CRITICAL／OVERLOADED）各有主色、淡底、深色文字和節點光暈，CRITICAL 設計稿沒畫，用同一套規則補上橘色。
+   元件類別色（流量藍、運算紫、資料粉、非同步青）有圖示色和方塊底色，兩個主題同一組色相 */
 :root {
     --canvas: #f4f5fa;
     --canvas-dot: #d5d8e6;
@@ -141,6 +150,14 @@
     --status-over-ink: #b91c1c;
     --status-over-glow: 0 0 0 5px #fecaca, 0 8px 24px #ef444440;
     --status-over-row: #fff5f5;
+    --category-traffic: #075985;
+    --category-traffic-bg: #e0f2fe;
+    --category-compute: #4327d6;
+    --category-compute-bg: #ebe5ff;
+    --category-data: #9d174d;
+    --category-data-bg: #fce7f3;
+    --category-async: #115e59;
+    --category-async-bg: #ccfbf1;
 }
 
 .dark {
@@ -193,6 +210,14 @@
     --status-over-ink: #fecaca;
     --status-over-glow: 0 0 0 2px #f8717199, 0 0 32px #f8717166;
     --status-over-row: #1a0d14;
+    --category-traffic: #7dd3fc;
+    --category-traffic-bg: #0c2a3d;
+    --category-compute: #c4b5fd;
+    --category-compute-bg: #241a4d;
+    --category-data: #f9a8d4;
+    --category-data-bg: #3a1530;
+    --category-async: #5eead4;
+    --category-async-bg: #0b302c;
 }
 
 /* React Flow 的顏色跟著主題。要用不帶 -default 的變數：.react-flow.dark 會蓋掉 -default 那組 */

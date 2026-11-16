@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canFeed, newEdgeRequestClass, newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
+import { canFeed, CATEGORIES, newEdgeRequestClass, newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
 import { checkNodeParam, NODE_CHOICE_SPECS } from './params'
 
 describe('Node type 定義', () => {
@@ -24,17 +24,23 @@ describe('元件面板', () => {
     expect(PALETTE.map((item) => item.id)).toEqual([
       'CLIENT',
       'LOAD_BALANCER',
+      'CDN',
+      'RATE_LIMITER',
       'SERVICE',
+      'EXTERNAL_API',
       'CACHE',
       'REDIS_CLUSTER',
-      'CDN',
       'DATABASE',
       'READ_REPLICA',
       'OBJECT_STORAGE',
-      'RATE_LIMITER',
-      'EXTERNAL_API',
       'MESSAGE_QUEUE',
     ])
+  })
+
+  it('每個 type 都有類別，同類別的排在一起，類別的順序同 CATEGORIES', () => {
+    const categories = NODE_TYPES.map((type) => NODE_KINDS[type].category)
+    const grouped = categories.filter((category, i) => category !== categories[i - 1])
+    expect(grouped).toEqual(CATEGORIES.map((category) => category.id))
   })
 
   it('Redis Cluster 是 shards = 3 的 Cache，其他參數用 Cache 的預設值', () => {

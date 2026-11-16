@@ -160,7 +160,7 @@ system-design-simulator/
 
 - 後端 api：`NodeType` 加一個值；`NodeParamsDto` 加該類型的參數（`description` 寫上用到它的 type）；`NodeDto.toNode` 建出 engine 的節點。改完跑 `./gradlew :api:generateOpenApi` 更新 `openapi.json`，前端的型別跟著重新產生。
 - 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`。
-- 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。只換名稱、圖示和部分預設值、type 不變的元件（例如 Redis Cluster）不是新的 type，加在同一個檔案的 `PRESETS`，元件面板讀的是由兩者組成的 `PALETTE`。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類、節點上顯示的指標，元件面板、畫布、屬性面板和匯入都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
+- 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。只換名稱、圖示和部分預設值、type 不變的元件（例如 Redis Cluster）不是新的 type，加在同一個檔案的 `PRESETS`，元件面板讀的是由兩者組成的 `PALETTE`。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、類別（流量／運算／資料／非同步，元件面板依它分組、圖示方塊依它上色；`NODE_TYPES` 要把同類別的排在一起）、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類、節點上顯示的指標，元件面板、畫布、屬性面板和匯入都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
 - 計算和既有 type 完全相同、只差預設值和名稱的新 type（例如 CDN 之於 Cache、Object Storage 之於 Database）：engine 讓兩者實作同一個 sealed 子介面（`CachingNode`、`StorageNode`），`switch` 對子介面寫一個分支，計算和驗證共用；前端 `NODE_KINDS` 仍各寫一筆。
 - 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。只能連到特定 type 時寫在 `outputTargets`（例如 Database 只能連到 Read Replica）。
 - 文件：本 spec 的 3.3（元件表）、4.5（驗證規則）、5（API 範例有需要時），`GLOSSARY.md` 的新名詞，並在 `frontend/src/examples/` 加一個用到它的內建範例。
@@ -576,15 +576,16 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 │ System Design Simulator [▶ Run] [Auto-run ☑] [↶][↷] [匯入] [匯出] [範例▾] │
 ├──────────┬─────────────────────────────────────┬───────────────┤
 │ 元件      │                                     │ 屬性           │
-│ ▢ Client │      ┌──────┐     ┌────┐             │ API Server    │
-│ ▢ LB     │      │Users │────▶│ LB │──┐          │ instances  [2]│
-│ ▢ Service│      └──────┘     └────┘  ▼          │ concurrency   │
-│ ▢ Cache  │                      ┌─────────┐     │ ━━━━●━━ 200   │
-│ ▢ CDN    │                      │API  ρ=.8│(黃) │ serviceTime   │
-│ ▢ DB     │                      └─────────┘     │ ━━●━━━━ 50ms  │
-│ ▢ Object │          （React Flow 畫布）           │ ρ ████░ 0.80  │
-│ ▢ Limiter│                                      │               │
-│ ▢ Ext API│                                      │               │
+│ ● 流量    │      ┌──────┐     ┌────┐             │ ▣ API Server  │
+│ ▣ Client │      │Users │────▶│ LB │──┐          │ instances  [2]│
+│ ▣ LB     │      └──────┘     └────┘  ▼          │ concurrency   │
+│ ● 運算    │                      ┌─────────┐     │ ━━━━●━━ 200   │
+│ ▣ Service│                      │▣ API    │(黃) │ serviceTime   │
+│ ● 資料    │                      │  ρ 0.80 │     │ ━━●━━━━ 50ms  │
+│ ▣ Cache  │                      └─────────┘     │ ρ ████░ 0.80  │
+│ ▣ DB     │          （React Flow 畫布）           │               │
+│ ● 非同步  │                                      │               │
+│ ▣ MQ     │                                      │               │
 ├──────────┴─────────────────────────────────────┴───────────────┤
 │ [指標表] [流量 Sankey] [錯誤 (0)]                                    │
 │ 節點    λ     容量   ρ    延遲   丟棄   拒絕   狀態                   │
@@ -593,7 +594,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 
 | 區塊 | 元件 |
 |---|---|
-| 左側元件面板 | shadcn Sidebar（拖到畫布，放在滑鼠放開的位置；點一下則放在畫面中央，被占了就往外找最近一個不重疊的位置） |
+| 左側元件面板 | shadcn Sidebar，依類別分成流量、運算、資料、非同步四組，每組有類別色（流量藍、運算紫、資料粉、非同步青），元件圖示放在類別色的圓角方塊裡，畫布節點和屬性面板標題用同一個樣式（拖到畫布，放在滑鼠放開的位置；點一下則放在畫面中央，被占了就往外找最近一個不重疊的位置） |
 | 右側屬性面板 | shadcn Input、Slider、Progress（ρ） |
 | 下方結果 | shadcn Tabs、Table、Badge（狀態）；ECharts Sankey |
 | 工具列 | shadcn Button、Switch、DropdownMenu |
@@ -614,7 +615,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - 指標表「丟棄」和「拒絕」分兩欄；結果面板上方的 summary 在有拒絕時另外列出總拒絕量（丟棄率已經包含它）。
 - **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。複製的邊不畫，它不是請求的流向（Message Queue 送給 consumer 的訊息照畫，consumer 處理不完的流進「積壓」終點；處理了但下游失敗的訊息已經流到下游、在下游的「丟棄」裡，不再畫一次）；所以 Read Replica 的流入只有 read，丟棄裡可能含複製寫入。
 - **流量粒子動畫**：Run 之後，邊上有小點沿方向流動，速度或密度依該邊 RPS 調整。
-- **節點發光**：節點外框依狀態（4.4）顯示綠、黃、橘、紅的光暈；`OVERLOADED` 時脈動。
+- **節點發光**：節點外框依狀態（4.4）顯示綠、黃、橘、紅的光暈；`OVERLOADED` 時脈動。Client 是流量的來源、不是機器，外框畫成虛線、沒有陰影和狀態色。
 - **主題**：預設深色，工具列可切換淺色。
 - **結果面板高度**：拖動結果面板上緣的分隔線調整高度，或聚焦分隔線後用方向鍵調整（↑ 變高、↓ 變矮，Home／End 到最矮／最高）。最矮 120px，最高為視窗高度的 70%，畫布不會被擠到看不見。高度存在 localStorage，重新整理後保留；Sankey 跟著重新排版。
 - **Auto-run**（預設開啟）：拓撲有實質變化時自動 Run，debounce 300ms（連續修改時只在停下 300ms 後送出一次）。
