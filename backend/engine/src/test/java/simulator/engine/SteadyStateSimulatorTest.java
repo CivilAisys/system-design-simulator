@@ -224,14 +224,14 @@ class SteadyStateSimulatorTest {
         assertRates(result.nodes().get("db").arrivalRps(), 90, 50);
     }
 
-    /** Client → Service → cache → Database，Service 也直接呼叫 Database，讓延遲和成功率都經過 cache。 */
+    /** Client → Service → cache → Database，端到端延遲和成功率都經過 cache。Database 容量足夠不影響結果。 */
     private SimulationResult runThrough(CachingNode cache) {
         return simulator.simulate(new Topology(
                 List.of(
                         new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
                         new ServiceNode("svc", "API", NodeHealth.HEALTHY, HUGE, CallMode.SEQUENTIAL),
                         cache,
-                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, new CapacityParams(1, 1, 5))),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, HUGE)),
                 List.of(
                         new Edge("e1", "client", "svc", 1, 1, 1),
                         new Edge("e2", "svc", "cache", 2, 1, 1),
@@ -241,7 +241,7 @@ class SteadyStateSimulatorTest {
     @ParameterizedTest
     @ValueSource(ints = {1, 5, 20})
     void cdnComputesLikeCacheWithSameParams(int concurrency) {
-        // concurrency 1、5 時 cache 過載，20 時沒有過載但 DB 過載：兩種情況 CDN 都要和 Cache 一模一樣
+        // λ = 1000：concurrency 1、5 時 cache 過載（成功率 < 1），20 時沒有過載（端到端延遲是數字）
         var params = new CapacityParams(1, concurrency, 10);
 
         SimulationResult cdn = runThrough(new CdnNode("cache", "CDN", NodeHealth.HEALTHY, params, 0.8));
@@ -249,6 +249,11 @@ class SteadyStateSimulatorTest {
 
         assertThat(cdn.valid()).isTrue();
         assertThat(cdn).isEqualTo(cache);
+        if (concurrency == 20) {
+            assertThat(cdn.nodes().get("client").endToEndMs().read().ms()).isNotNull();
+        } else {
+            assertThat(cdn.nodes().get("client").successRps()).isLessThan(1000);
+        }
     }
 
     /** Client → Service，Service 對 a、b 兩個 Database 各呼叫 callsA、callsB 次。 */

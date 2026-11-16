@@ -8,7 +8,7 @@
 ## 1. 範圍
 
 ### 1.1 做什麼
-- 5 種元件的拖拉、連線、刪除、參數編輯
+- 3.3 各種元件的拖拉、連線、刪除、參數編輯
 - 後端穩態（steady-state）計算：使用率、平均延遲、丟棄量、瓶頸
 - 結果視覺化：節點變色、邊上 RPS、指標表、Sankey
 - 畫布效果：邊上的流量粒子動畫、節點依 ρ 發光、深色主題（可切換淺色），見第 6 節
@@ -144,6 +144,7 @@ system-design-simulator/
 - 後端 api：`NodeType` 加一個值；`NodeParamsDto` 加該類型的參數（`description` 寫上用到它的 type）；`NodeDto.toNode` 建出 engine 的節點。改完跑 `./gradlew :api:generateOpenApi` 更新 `openapi.json`，前端的型別跟著重新產生。
 - 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`。
 - 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類，元件面板、畫布、屬性面板和匯入都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
+- 計算和既有 type 完全相同、只差預設值和名稱的新 type（例如 CDN 之於 Cache）：engine 讓兩者實作同一個 sealed 子介面（`CachingNode`），`switch` 對子介面寫一個分支，計算和驗證共用；前端 `NODE_KINDS` 仍各寫一筆。
 - 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。
 - 文件：本 spec 的 3.3（元件表）、4.5（驗證規則）、5（API 範例有需要時），`GLOSSARY.md` 的新名詞，並在 `frontend/src/examples/` 加一個用到它的內建範例。
 
@@ -434,8 +435,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 │ ▢ LB     │      │Users │────▶│ LB │──┐          │ instances  [2]│
 │ ▢ Service│      └──────┘     └────┘  ▼          │ concurrency   │
 │ ▢ Cache  │                      ┌─────────┐     │ ━━━━●━━ 200   │
-│ ▢ DB     │                      │API  ρ=.8│(黃) │ serviceTime   │
-│          │                      └─────────┘     │ ━━●━━━━ 50ms  │
+│ ▢ CDN    │                      │API  ρ=.8│(黃) │ serviceTime   │
+│ ▢ DB     │                      └─────────┘     │ ━━●━━━━ 50ms  │
 │          │          （React Flow 畫布）           │ ρ ████░ 0.80  │
 ├──────────┴─────────────────────────────────────┴───────────────┤
 │ [指標表] [流量 Sankey] [錯誤 (0)]                                    │
@@ -491,7 +492,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 
 ## 7. 驗收標準
 
-- [ ] 能從左側拖出 5 種元件，連線、刪除節點和邊
+- [ ] 能從左側拖出 3.3 的每一種元件，連線、刪除節點和邊
 - [ ] 改參數後 Run，節點顏色、邊 RPS、指標表、Sankey 都會更新
 - [ ] 把 Client RPS 調高到超過 DB 容量時，DB 變紅，並顯示為瓶頸和丟棄量
 - [ ] 調高 Cache hitRatio，DB 負載下降
