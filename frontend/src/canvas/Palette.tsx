@@ -39,7 +39,7 @@ export function Palette({ onAdd }: PaletteProps) {
                       onDragStart={(event) => onDragStart(event, item)}
                       onClick={() => onAdd(item)}
                       title={`拖到畫布，或點擊加入 ${label}`}
-                      className="cursor-grab active:cursor-grabbing"
+                      className="h-9 cursor-grab rounded-[10px] text-[13px] active:cursor-grabbing"
                     >
                       <Icon />
                       <span>{label}</span>

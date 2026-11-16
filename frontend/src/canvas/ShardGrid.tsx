@@ -1,7 +1,7 @@
 import { totalRps, type ShardResult } from '@/api/client'
 import { cn } from '@/lib/utils'
 import { formatMs, formatRps, formatUtilization } from './format'
-import { STATUS_CELL } from './status'
+import { STATUS_FILL } from './status'
 
 type ShardGridProps = {
   count: number
@@ -34,7 +34,7 @@ export function ShardGrid({ count: requested, shards, stale }: ShardGridProps) {
           <div
             key={i}
             title={shardTitle(i, shard, hottest)}
-            className={cn('size-3 rounded-sm', shard ? STATUS_CELL[shard.status] : 'bg-muted-foreground/25')}
+            className={cn('size-3 rounded-sm', shard ? STATUS_FILL[shard.status] : 'bg-muted-foreground/25')}
           />
         )
       })}

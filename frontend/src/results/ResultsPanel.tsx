@@ -38,7 +38,7 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
   const hasFlow = computed != null && Object.values(computed.edges).some(({ rps }) => totalRps(rps) > 0)
 
   return (
-    <Tabs defaultValue="metrics" className="h-full gap-0 p-2">
+    <Tabs defaultValue="metrics" className="h-full gap-3 px-4 pt-3 pb-2">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <TabsList>
           <TabsTrigger value="metrics">指標表</TabsTrigger>

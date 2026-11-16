@@ -1,68 +1,95 @@
 import type { NodeWarning, Status } from '@/api/client'
+import type { Theme } from '@/theme'
 
 // 第 4.4 節的狀態色，畫布節點、指標表和 Sankey 共用。
 // Rate Limiter 的 LIMITING／NOT_LIMITING 不是 ρ 分級：限流是設計上預期的行為，不變色、不發光。
 // External API 超過配額（OVER_QUOTA）會讓請求失敗，用紅色標出但不脈動；配額內（WITHIN_QUOTA）不變色
 
-// 畫布節點的外框和光暈（spec 第 6 節），畫在節點後面的一層，不改底色。過載時的脈動在 SimNode 加
+// 畫布節點的外框和光暈（spec 第 6 節），畫在節點後面的一層，不改底色。過載時的脈動在 SimNode 加。
+// 光暈是 index.css 的變數：深色主題發光，淺色主題是外圈的光圈；OK 只有很淡的光暈，外框維持原本的顏色
 export const STATUS_GLOW: Record<Status, string> = {
-  OK: 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/40',
-  WARN: 'ring-2 ring-yellow-500 shadow-lg shadow-yellow-500/50',
-  CRITICAL: 'ring-2 ring-orange-500 shadow-xl shadow-orange-500/50',
-  OVERLOADED: 'ring-2 ring-red-500 shadow-xl shadow-red-500/60',
+  OK: 'shadow-(--status-ok-glow)',
+  WARN: 'border-[1.5px] border-warn shadow-(--status-warn-glow)',
+  CRITICAL: 'border-[1.5px] border-critical shadow-(--status-critical-glow)',
+  OVERLOADED: 'border-[1.5px] border-over shadow-(--status-over-glow)',
   LIMITING: '',
   NOT_LIMITING: '',
-  OVER_QUOTA: 'ring-2 ring-red-500',
+  OVER_QUOTA: 'border-[1.5px] border-over',
   WITHIN_QUOTA: '',
 }
 
 export const STATUS_TEXT: Record<Status, string> = {
-  OK: 'text-emerald-500',
-  WARN: 'text-yellow-500',
-  CRITICAL: 'text-orange-500',
-  OVERLOADED: 'text-red-500',
+  OK: 'text-ok-ink',
+  WARN: 'text-warn-ink',
+  CRITICAL: 'text-critical-ink',
+  OVERLOADED: 'text-over-ink',
   LIMITING: 'text-muted-foreground',
   NOT_LIMITING: 'text-muted-foreground',
-  OVER_QUOTA: 'text-red-500',
+  OVER_QUOTA: 'text-over-ink',
   WITHIN_QUOTA: 'text-muted-foreground',
 }
 
 export const STATUS_BADGE: Record<Status, string> = {
-  OK: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-  WARN: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400',
-  CRITICAL: 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
-  OVERLOADED: 'bg-red-500/15 text-red-700 dark:text-red-400',
+  OK: 'bg-ok-bg text-ok-ink',
+  WARN: 'bg-warn-bg text-warn-ink',
+  CRITICAL: 'bg-critical-bg text-critical-ink',
+  OVERLOADED: 'bg-over-bg text-over-ink',
   LIMITING: 'bg-muted text-muted-foreground',
   NOT_LIMITING: 'bg-muted text-muted-foreground',
-  OVER_QUOTA: 'bg-red-500/15 text-red-700 dark:text-red-400',
+  OVER_QUOTA: 'bg-over-bg text-over-ink',
   WITHIN_QUOTA: 'bg-muted text-muted-foreground',
 }
 
-// 分片節點裡每個 shard 的格子（spec 第 6 節）：實心填色，過載的格子發光。Rate Limiter、External API 不會分片
-export const STATUS_CELL: Record<Status, string> = {
-  OK: 'bg-emerald-500',
-  WARN: 'bg-yellow-500',
-  CRITICAL: 'bg-orange-500',
-  OVERLOADED: 'bg-red-500 shadow-md shadow-red-500/80',
+// 實心的狀態色：分片節點裡每個 shard 的格子（spec 第 6 節，過載的格子發光）、狀態圓點和 ρ 的進度條。
+// 灰色那幾種是 Rate Limiter、External API 的狀態圓點：它們不會分片，也沒有 ρ
+export const STATUS_FILL: Record<Status, string> = {
+  OK: 'bg-ok',
+  WARN: 'bg-warn',
+  CRITICAL: 'bg-critical',
+  OVERLOADED: 'bg-over shadow-md shadow-over/80',
   LIMITING: 'bg-muted-foreground/40',
   NOT_LIMITING: 'bg-muted-foreground/40',
   OVER_QUOTA: 'bg-muted-foreground/40',
   WITHIN_QUOTA: 'bg-muted-foreground/40',
 }
 
-// 中性灰：Client（沒有狀態）、Rate Limiter 和配額內的 External API 的 Sankey 節點
-export const NEUTRAL_HEX = '#a3a3a3'
+// ECharts 畫在 canvas 上吃不到 CSS 變數，用 index.css 裡同樣的值，改配色時要一起改。
+// neutral 是 muted-foreground：Client（沒有狀態）、Rate Limiter 和配額內的 External API 的 Sankey 節點
+export const SANKEY_COLORS = {
+  dark: {
+    ok: '#34d399',
+    warn: '#facc15',
+    critical: '#fb923c',
+    over: '#f87171',
+    neutral: '#8b97b3',
+    text: '#eef2fa',
+    tooltip: '#121a2e',
+    tooltipBorder: '#26324f',
+  },
+  light: {
+    ok: '#10b981',
+    warn: '#f59e0b',
+    critical: '#f97316',
+    over: '#ef4444',
+    neutral: '#62677e',
+    text: '#1b1f3b',
+    tooltip: '#ffffff',
+    tooltipBorder: '#e4e6ef',
+  },
+} satisfies Record<Theme, Record<string, string>>
 
-// ECharts 畫在 canvas 上吃不到 Tailwind class，用同色系的 hex（Tailwind 500）
-export const STATUS_HEX: Record<Status, string> = {
-  OK: '#10b981',
-  WARN: '#eab308',
-  CRITICAL: '#f97316',
-  OVERLOADED: '#ef4444',
-  LIMITING: NEUTRAL_HEX,
-  NOT_LIMITING: NEUTRAL_HEX,
-  OVER_QUOTA: '#ef4444',
-  WITHIN_QUOTA: NEUTRAL_HEX,
+export type SankeyColors = (typeof SANKEY_COLORS)[Theme]
+
+// Sankey 節點依狀態取 SANKEY_COLORS 裡的哪個顏色
+export const SANKEY_STATUS_COLOR: Record<Status, keyof SankeyColors> = {
+  OK: 'ok',
+  WARN: 'warn',
+  CRITICAL: 'critical',
+  OVERLOADED: 'over',
+  LIMITING: 'neutral',
+  NOT_LIMITING: 'neutral',
+  OVER_QUOTA: 'over',
+  WITHIN_QUOTA: 'neutral',
 }
 
 // 顯示的文字：ρ 分級沿用英文代碼，Rate Limiter 和 External API 的狀態用中文

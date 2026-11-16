@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import { NODE_KINDS } from './catalog'
 import { formatUtilization } from './format'
 import { NumberField } from './NumberField'
@@ -21,6 +22,7 @@ import {
   type ChoiceSpec,
 } from './params'
 import type { SimFlowNode } from './SimNode'
+import { STATUS_BADGE, STATUS_FILL, STATUS_TEXT } from './status'
 import type { RpsFlowEdge } from './RpsEdge'
 import type { EdgePatch, NodePatch } from './useTopologyEditor'
 
@@ -72,6 +74,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
   const node = flowNode.data.node
   const { label, icon: Icon, numberParams, choiceParams } = NODE_KINDS[node.type]
   const utilization = result?.utilization ?? null
+  const status = result?.status ?? null
 
   // 分片時才有熱點：省略時平均分配，顯示平均值；改了之後就是明確的占比。緊接在 shards 後面顯示
   const hotShareField = (node.params.shards ?? 1) > 1 && (
@@ -161,12 +164,19 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
       ))}
       {/* Client 沒有容量，ρ 不適用；Run 之前也還沒有值 */}
       {utilization !== null && (
-        <div className="grid gap-1.5">
+        // 底色跟著狀態（STATUS_BADGE 的淡底和深色文字）
+        <div className={cn('grid gap-2.5 rounded-xl bg-muted p-3.5', status && STATUS_BADGE[status])}>
           <div className="flex items-baseline justify-between text-sm">
             <span>ρ</span>
-            <span className="tabular-nums">{formatUtilization(utilization)}</span>
+            <span className={cn('font-heading text-[22px] font-bold', status && STATUS_TEXT[status])}>
+              {formatUtilization(utilization)}
+            </span>
           </div>
-          <Progress value={Math.min(utilization, 1) * 100} aria-label="ρ" />
+          <Progress
+            value={Math.min(utilization, 1) * 100}
+            aria-label="ρ"
+            indicatorClassName={status ? STATUS_FILL[status] : undefined}
+          />
         </div>
       )}
     </div>
@@ -254,7 +264,7 @@ function PanelHeader({ title, icon, nodeId, edgeId }: PanelHeaderProps) {
   return (
     <div className="flex items-center gap-2">
       {icon}
-      <h2 className="min-w-0 flex-1 truncate font-heading text-sm font-semibold" title={title}>
+      <h2 className="min-w-0 flex-1 truncate font-heading text-[15px] font-bold" title={title}>
         {title}
       </h2>
       <Button

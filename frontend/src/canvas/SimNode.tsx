@@ -4,7 +4,7 @@ import type { Node, NodeResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
 import { formatRps, formatUtilization } from './format'
 import { ShardGrid } from './ShardGrid'
-import { STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
+import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
 
 export type SimNodeData = {
@@ -31,8 +31,9 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
     <div
       title={errors && errorsTitle(errors, stale)}
       className={cn(
-        'relative min-w-36 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm',
-        selected && 'border-primary',
+        'relative min-w-36 rounded-card border border-input bg-card px-3 py-2.5 text-card-foreground shadow-(--node-shadow)',
+        // 選取用強調色的外圈，和狀態色的外框、光暈分開
+        selected && 'outline-2 outline-offset-6 outline-primary',
       )}
     >
       {/* 外框和光暈單獨一層，過載脈動時只有光暈閃，文字不跟著閃。
@@ -41,7 +42,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         <div
           aria-hidden
           className={cn(
-            'pointer-events-none absolute -inset-px rounded-lg',
+            'pointer-events-none absolute -inset-px rounded-card',
             errors ? 'ring-2 ring-destructive shadow-lg shadow-destructive/40' : status && STATUS_GLOW[status],
             stale
               ? 'opacity-30'
@@ -52,11 +53,12 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       {hasInput && <Handle type="target" position={Position.Left} />}
       <div className="flex items-center gap-2">
         <Icon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="font-medium">{node.name}</span>
+        <span className="text-[13px] font-semibold">{node.name}</span>
       </div>
       {result && (
-        <div className="mt-1 flex items-baseline justify-between gap-3 text-xs">
-          <span className="text-muted-foreground">
+        <div className="mt-1 flex items-center justify-between gap-3 text-xs">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            {status && <span aria-hidden className={cn('size-2 rounded-full', STATUS_FILL[status])} />}
             {nodeMetric === 'rejected'
               ? `拒絕 ${formatRps(result.rejectedRps)}`
               : `ρ ${formatUtilization(result.utilization)}`}
@@ -65,7 +67,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         </div>
       )}
       {result?.warnings.map((warning) => (
-        <p key={warning} className="mt-1 text-xs font-semibold text-orange-500" title={WARNING_TITLE[warning]}>
+        <p key={warning} className="mt-1 text-xs font-semibold text-critical-ink" title={WARNING_TITLE[warning]}>
           ⚠ {WARNING_LABEL[warning]}
         </p>
       ))}

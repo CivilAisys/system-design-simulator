@@ -44,7 +44,7 @@ export function StorageTable({ topology, result }: StorageTableProps) {
           const overloaded = result.nodes[node.id]?.status === 'OVERLOADED'
           return (
             <TableRow key={node.id}>
-              <TableCell className="font-medium">
+              <TableCell className="font-semibold text-foreground">
                 {node.name}
                 {overloaded && (
                   <span
