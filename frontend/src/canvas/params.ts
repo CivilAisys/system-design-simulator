@@ -9,6 +9,8 @@ export type NodeNumberParam =
   | 'serviceTimeMs'
   | 'hitRatio'
   | 'limitRps'
+  | 'latencyMs'
+  | 'quotaRps'
 export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
 
@@ -66,6 +68,17 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
   // 0 等於全部拒絕，要停用就刪掉節點（spec 4.5），所以要 > 0；上限同 rps
   limitRps: {
     label: 'limitRps',
+    unit: 'rps',
+    min: 0,
+    minExclusive: true,
+    max: 1e12,
+    slider: { min: 1, max: 1_000_000, scale: 'log' },
+  },
+  // External API 的固定回應時間，範圍同邊的 latencyMs
+  latencyMs: { label: 'latencyMs', unit: 'ms', min: 0, max: 1e7, slider: { min: 1, max: 10_000, scale: 'log' } },
+  // 規則同 limitRps
+  quotaRps: {
+    label: 'quotaRps',
     unit: 'rps',
     min: 0,
     minExclusive: true,

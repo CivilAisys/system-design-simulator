@@ -86,6 +86,9 @@ final class TopologyValidator {
             nodeError(node, "RATE_LIMITER_DOWNSTREAM_COUNT",
                     "Rate Limiter " + name + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
         }
+        if (node instanceof ExternalApiNode && downstream > 0) {
+            nodeError(node, "EXTERNAL_API_HAS_OUTPUT", "External API " + name + " 不能有下游連線");
+        }
         // Object Storage 沿用 Database 的錯誤碼，訊息用它自己的 type 名稱
         if (node instanceof StorageNode && downstream > 0) {
             nodeError(node, "DATABASE_HAS_OUTPUT",
@@ -121,12 +124,11 @@ final class TopologyValidator {
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
             }
             case StorageNode storage -> checkCapacityParams(storage.capacityParams(), where, report);
-            case RateLimiterNode limiter -> {
-                // 0 等於全部拒絕，要停用就刪掉節點
-                if (!(limiter.limitRps() > 0 && limiter.limitRps() <= MAX_RPS)) {
-                    report.accept(invalid(where, "limitRps", "> 0 且 ≤ " + bound(MAX_RPS), limiter.limitRps()));
-                }
+            case ExternalApiNode api -> {
+                requireBetween(api.latencyMs(), 0, MAX_LATENCY_MS, where, "latencyMs", report);
+                requirePositiveRps(api.quotaRps(), where, "quotaRps", report);
             }
+            case RateLimiterNode limiter -> requirePositiveRps(limiter.limitRps(), where, "limitRps", report);
         }
     }
 
@@ -157,6 +159,13 @@ final class TopologyValidator {
     }
 
     // 以下檢查都把 NaN 和無限大當成不合法
+
+    /** 上限類參數（limitRps、quotaRps）：0 等於全部拒絕，要停用就刪掉節點。 */
+    private static void requirePositiveRps(double value, String where, String param, Consumer<String> report) {
+        if (!(value > 0 && value <= MAX_RPS)) {
+            report.accept(invalid(where, param, "> 0 且 ≤ " + bound(MAX_RPS), value));
+        }
+    }
 
     private static void requireAtLeast(double value, double min, String where, String param,
             Consumer<String> report) {

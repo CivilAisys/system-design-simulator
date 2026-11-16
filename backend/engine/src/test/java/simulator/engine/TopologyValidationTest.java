@@ -197,6 +197,16 @@ class TopologyValidationTest {
     }
 
     @Test
+    void externalApiWithOutgoingEdgeIsRejected() {
+        SimulationResult result = run(
+                List.of(client("c"), new ExternalApiNode("pay", "Payments", NodeHealth.HEALTHY, 100, 1000),
+                        database("db")),
+                List.of(edge("e1", "c", "pay"), edge("e2", "pay", "db")));
+
+        assertErrors(result, tuple("EXTERNAL_API_HAS_OUTPUT", "pay", null));
+    }
+
+    @Test
     void rateLimiterWithoutExactlyOneDownstreamIsRejected() {
         var limiter = new RateLimiterNode("rl", "Limiter", NodeHealth.HEALTHY, 1000);
         SimulationResult none = run(List.of(client("c"), limiter), List.of(edge("e1", "c", "rl")));

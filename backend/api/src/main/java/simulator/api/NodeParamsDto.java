@@ -13,5 +13,7 @@ public record NodeParamsDto(
         @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE") Double serviceTimeMs,
         @Schema(description = "SERVICE") CallMode callMode,
         @Schema(description = "CACHE, CDN") Double hitRatio,
-        @Schema(description = "RATE_LIMITER") Double limitRps) {
+        @Schema(description = "RATE_LIMITER") Double limitRps,
+        @Schema(description = "EXTERNAL_API：固定的回應時間") Double latencyMs,
+        @Schema(description = "EXTERNAL_API：對方給的配額") Double quotaRps) {
 }

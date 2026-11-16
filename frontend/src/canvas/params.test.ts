@@ -12,7 +12,7 @@ import {
   toSlider,
 } from './params'
 
-const { rps, readRatio, instances, concurrency, serviceTimeMs, limitRps } = NODE_PARAM_SPECS
+const { rps, readRatio, instances, concurrency, serviceTimeMs, limitRps, quotaRps } = NODE_PARAM_SPECS
 const { weight, callsPerRequest, latencyMs } = EDGE_PARAM_SPECS
 
 describe('checkNumber', () => {
@@ -50,6 +50,7 @@ describe('checkNumber', () => {
   it('下限不含本身時，等於下限也不合法', () => {
     expect(checkNumber(weight, 0)).toBe('超出範圍（> 0 且 ≤ 1,000,000）')
     expect(checkNumber(limitRps, 0)).toBe('超出範圍（> 0 且 ≤ 1,000,000,000,000）')
+    expect(checkNumber(quotaRps, 0)).toBe('超出範圍（> 0 且 ≤ 1,000,000,000,000）')
   })
 
   it('大於上限', () => {

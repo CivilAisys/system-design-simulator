@@ -185,7 +185,7 @@ describe('格式錯誤', () => {
 
     it('type 不是已知的類型', () => {
       expect(errorsOf((f) => void (f.nodes[4].type = 'QUEUE'))).toEqual([
-        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、OBJECT_STORAGE、RATE_LIMITER 其中之一',
+        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、OBJECT_STORAGE、RATE_LIMITER、EXTERNAL_API 其中之一',
       ])
     })
 
@@ -342,6 +342,15 @@ describe('畫不出來的邊', () => {
     ])
   })
 
+  it('從 External API 連出', () => {
+    const file = withExternalApi()
+    file.edges.push({ id: 'e7', source: 'pay', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1 })
+    expect(toTopology(file)).toEqual({
+      ok: false,
+      errors: ['edges[6]（id "e7"）：External API 不能有下游（source 是 "pay"）'],
+    })
+  })
+
   it('從 Object Storage 連出', () => {
     const file = withObjectStorage()
     file.edges.push({ id: 'e7', source: 'storage', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1 })
@@ -436,6 +445,23 @@ function withRateLimiter() {
   }
 }
 
+// 合法檔案再加一個 Service 呼叫的 External API
+function withExternalApi() {
+  const file = validFile()
+  const api = {
+    id: 'pay',
+    type: 'EXTERNAL_API',
+    name: 'Payments',
+    params: { latencyMs: 300, quotaRps: 1000 },
+    ui: { x: 900, y: 300 },
+  }
+  return {
+    ...file,
+    nodes: [...file.nodes, api],
+    edges: [...file.edges, { id: 'e6', source: 'svc', target: 'pay', weight: 1, callsPerRequest: 1, latencyMs: 20 }],
+  }
+}
+
 describe('匯出再匯入', () => {
   it.each([
     ['合法檔案', topologyOf(validFile())],
@@ -443,6 +469,7 @@ describe('匯出再匯入', () => {
     ['CDN', topologyOf(withCdn())],
     ['Object Storage', topologyOf(withObjectStorage())],
     ['Rate Limiter', topologyOf(withRateLimiter())],
+    ['External API', topologyOf(withExternalApi())],
   ])('%s 得到相同的拓撲', (_, topology) => {
     expect(parseTopology(serializeTopology(topology))).toEqual({ ok: true, topology })
   })

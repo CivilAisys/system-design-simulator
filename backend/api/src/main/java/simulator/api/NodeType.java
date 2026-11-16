@@ -8,5 +8,6 @@ public enum NodeType {
     CDN,
     DATABASE,
     OBJECT_STORAGE,
-    RATE_LIMITER
+    RATE_LIMITER,
+    EXTERNAL_API
 }
