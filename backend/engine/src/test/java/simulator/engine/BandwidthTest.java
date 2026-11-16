@@ -106,15 +106,53 @@ class BandwidthTest {
 
     @Test
     void mixedClientsBehindOneCdnUseTheAverageResponseSize() {
-        // 兩個 Client 的 read 各 900 rps，經過 Rate Limiter（不限流）後進同一個 CDN
+        // web 的 read 900 rps、app 的 read 300 rps，經過 Rate Limiter（不限流）後進同一個 CDN；
+        // 加權平均 = (900 × 10 KB + 300 × 30 KB) / 1200 = 15 KB（直接平均是 20 KB）
         SimulationResult result = simulator.simulate(new Topology(
-                List.of(client("web", 1000, 10_000, 0), client("app", 1000, 30_000, 0),
+                List.of(client("web", 1000, 10_000, 0), client("app", 1000 / 3.0, 30_000, 0),
                         new RateLimiterNode("rl", "rl", NodeHealth.HEALTHY, 1e6), cdn("cdn", 0.5),
                         service("origin")),
                 List.of(new Edge("e1", "web", "rl", 1, 1, 0), new Edge("e2", "app", "rl", 1, 1, 0),
                         new Edge("e3", "rl", "cdn", 1, 1, 0), new Edge("e4", "cdn", "origin", 1, 1, 0))));
 
         assertThat(result.summary().cdnOffloadBytesPerSec())
-                .isCloseTo(0.5 * (900 * 10_000 + 900 * 30_000), within(EPS));
+                .isCloseTo(0.5 * 1200 * 15_000, within(EPS));
+    }
+
+    @Test
+    void cacheHitsAreNotOffloaded() {
+        // Cache 命中的回應仍由 origin 的 Service 送出
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(client("c", 1000, 10_000, 0),
+                        new CacheNode("cache", "cache", NodeHealth.HEALTHY, AMPLE, 0.95), service("origin")),
+                List.of(new Edge("e1", "c", "cache", 1, 1, 0), new Edge("e2", "cache", "origin", 1, 1, 0))));
+
+        assertThat(result.summary().cdnOffloadBytesPerSec()).isZero();
+    }
+
+    @Test
+    void overloadedCdnOnlyOffloadsWhatItServes() {
+        // CDN 容量 1 × 450 / 1000ms = 450 rps：read 900、write 100 依比例丟棄，處理的 read = 900 × 450 / 1000
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(client("c", 1000, 10_000, 0),
+                        new CdnNode("cdn", "cdn", NodeHealth.HEALTHY, new CapacityParams(1, 450, 1000), 1),
+                        service("origin")),
+                List.of(new Edge("e1", "c", "cdn", 1, 1, 0), new Edge("e2", "cdn", "origin", 1, 1, 0))));
+
+        assertThat(result.summary().cdnOffloadBytesPerSec()).isCloseTo(405 * 10_000, within(EPS));
+        // 出口是需求量，不扣除丟棄
+        assertThat(result.summary().bandwidth().egressBytesPerSec()).isCloseTo(900 * 10_000, within(EPS));
+    }
+
+    @Test
+    void offloadNeverExceedsEgress() {
+        // CDN 在 fan-out 的 Service 後面：每個請求呼叫 3 次，子呼叫沿用 Client 的回應大小，擋掉的量封頂在出口
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(client("c", 1000, 10_000, 0), service("api"), cdn("cdn", 1), service("origin")),
+                List.of(new Edge("e1", "c", "api", 1, 1, 0), new Edge("e2", "api", "cdn", 1, 3, 0),
+                        new Edge("e3", "cdn", "origin", 1, 1, 0))));
+
+        assertThat(result.summary().cdnOffloadBytesPerSec())
+                .isEqualTo(result.summary().bandwidth().egressBytesPerSec());
     }
 }

@@ -31,7 +31,7 @@ public final class SteadyStateSimulator implements Simulator {
         // consumer → Message Queue 送給它的邊
         Map<String, List<Edge>> queuedByConsumer = new HashMap<>();
         // 每個節點收到的 read 對應的回應大小總和（bytes/s），用來算 CDN 擋掉多少 origin 頻寬（spec 4.7）
-        Map<String, Double> readBytes = new HashMap<>();
+        Map<String, Double> readBytesPerSec = new HashMap<>();
         var bandwidth = Bandwidth.ZERO;
         double cdnOffload = 0;
         List<Node> order = graph.topologicalOrder();
@@ -59,7 +59,7 @@ public final class SteadyStateSimulator implements Simulator {
             };
             double bytesPerRead = node instanceof ClientNode client
                     ? client.readResponseBytes()
-                    : arrival.read() > 0 ? readBytes.getOrDefault(node.id(), 0.0) / arrival.read() : 0;
+                    : arrival.read() > 0 ? readBytesPerSec.getOrDefault(node.id(), 0.0) / arrival.read() : 0;
             if (node instanceof CdnNode cdn) {
                 cdnOffload += processed.read() * cdn.hitRatio() * bytesPerRead;
             }
@@ -79,7 +79,7 @@ public final class SteadyStateSimulator implements Simulator {
                 } else {
                     edgeResults.put(edge.id(), new EdgeResult(rps));
                 }
-                readBytes.merge(edge.target(), rps.read() * bytesPerRead, Double::sum);
+                readBytesPerSec.merge(edge.target(), rps.read() * bytesPerRead, Double::sum);
                 arrivals.merge(edge.target(), rps, ClassRates::plus);
                 if (graph.feedsConsumer(edge)) {
                     queuedByConsumer.computeIfAbsent(edge.target(), id -> new ArrayList<>()).add(edge);

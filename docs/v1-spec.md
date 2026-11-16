@@ -426,7 +426,7 @@ back-of-envelope 估算只算 **Client 進出的流量**。內部呼叫每條的
 
 - 每條 Client 的邊各自計算（邊結果的 `bandwidth`），`summary.bandwidth` 是所有 Client 的邊加總。
 - 用 Client **送出**的請求數計算，是需求量：之後被丟棄或拒絕的請求不扣除。
-- **CDN 擋掉的 origin 頻寬**（`summary.cdnOffloadBytesPerSec`）：CDN 命中的 read 由 CDN 直接回應，不必從 origin 送出。每個 CDN 擋掉 `處理的 read × hitRatio × 平均回應大小`，平均回應大小是到達這個 CDN 的 read 依來源 Client 的 `readResponseBytes` 加權平均（不同 Client 的 read 經過同一個 CDN 時）。origin 出口 = 出口 − CDN 擋掉的部分。
+- **CDN 擋掉的 origin 頻寬**（`summary.cdnOffloadBytesPerSec`）：CDN 命中的 read 由 CDN 直接回應，不必從 origin 送出。每個 CDN 擋掉 `處理的 read × hitRatio × 平均回應大小`，平均回應大小是到達這個 CDN 的 read 依來源 Client 的 `readResponseBytes` 加權平均（不同 Client 的 read 經過同一個 CDN 時）。origin 出口 = 出口 − CDN 擋掉的部分。CDN 只算它實際處理的命中，所以 CDN 過載或上游拒絕時，被丟棄或拒絕的 read 也算在 origin 出口裡，是上限值（和出口一樣是需求量；過載照常標示）。
 - 只有 CDN 算，Cache 不算：Cache 命中的回應仍由 origin 的 Service 送出。
 - CDN 放在 Service 後面時，fan-out 的子呼叫沿用 Client 的回應大小，是近似值；擋掉的量最多等於出口頻寬。
 
