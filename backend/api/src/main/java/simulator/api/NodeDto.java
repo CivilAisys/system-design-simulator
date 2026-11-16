@@ -8,6 +8,7 @@ import simulator.engine.CapacityParams;
 import simulator.engine.CdnNode;
 import simulator.engine.ClientNode;
 import simulator.engine.DatabaseNode;
+import simulator.engine.ExternalApiNode;
 import simulator.engine.LoadBalancerNode;
 import simulator.engine.Node;
 import simulator.engine.NodeHealth;
@@ -42,6 +43,8 @@ public record NodeDto(
             case DATABASE -> new DatabaseNode(id, name, health, capacityParams());
             case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams());
             case RATE_LIMITER -> new RateLimiterNode(id, name, health, require(params.limitRps(), "limitRps"));
+            case EXTERNAL_API -> new ExternalApiNode(id, name, health,
+                    require(params.latencyMs(), "latencyMs"), require(params.quotaRps(), "quotaRps"));
         };
     }
 

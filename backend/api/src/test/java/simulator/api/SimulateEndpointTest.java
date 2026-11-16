@@ -184,6 +184,19 @@ class SimulateEndpointTest {
         assertThat(unlimited.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
     }
 
+    // 「External API」範例要示範的情境：第三方的固定延遲拖慢結帳，超過配額的部分被拒絕
+    @Test
+    void externalApiExampleIsSlowAndOverQuota() throws Exception {
+        JsonNode body = simulate(readExample("external-api.json"));
+
+        assertThat(body.at("/nodes/ext-1/status").asText()).isEqualTo("OVER_QUOTA");
+        assertThat(body.at("/nodes/ext-1/rejectedRps").asDouble()).isCloseTo(500, within(1e-6));
+        assertThat(body.at("/summary/dropRate").asDouble()).isCloseTo(1.0 / 3, within(1e-9));
+        // 端到端延遲大半來自 External API：來回 2 × 20ms 加上它的 300ms
+        assertThat(body.at("/summary/avgEndToEndMs/write/ms").asDouble()).isGreaterThan(340);
+        assertThat(body.at("/summary/bottleneckNodeId").asText()).isNotEqualTo("ext-1");
+    }
+
     static Stream<String> exampleFiles() throws Exception {
         List<String> files;
         try (Stream<Path> listing = Files.list(examplesDir())) {
@@ -286,7 +299,7 @@ class SimulateEndpointTest {
                 // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
                 Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
-                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, RATE_LIMITER]"),
+                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, RATE_LIMITER, EXTERNAL_API]"),
                 Arguments.of("/nodes/0/name", "123", "nodes[0].name, expected a string"),
                 Arguments.of("/nodes", "{}", "nodes, expected an array"));
     }

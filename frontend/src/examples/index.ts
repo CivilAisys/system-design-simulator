@@ -2,6 +2,7 @@ import type { Topology } from '@/api/client'
 import { toTopology } from '@/io/topologyFile'
 import basicWebApp from './basic-web-app.json'
 import cdn from './cdn.json'
+import externalApi from './external-api.json'
 import fanOut from './fan-out.json'
 import mediaStorage from './media-storage.json'
 import overload from './overload.json'
@@ -25,6 +26,8 @@ export const EXAMPLES: Example[] = [
   { id: 'media-storage', label: '媒體儲存', topology: builtIn(mediaStorage) },
   // 12,000 rps 會壓垮容量 8,000 的 API：Rate Limiter 只放行 6,000，其餘拒絕，API 回到穩態
   { id: 'rate-limiter', label: 'Rate Limiter', topology: builtIn(rateLimiter) },
+  // 結帳呼叫第三方金流：300ms 的固定延遲佔掉大半端到端延遲，1,500 rps 超過 1,000 的配額，三分之一被拒絕
+  { id: 'external-api', label: 'External API', topology: builtIn(externalApi) },
 ]
 
 // JSON import 的型別太寬（type 是 string），走和匯入檔案相同的檢查來取得 Topology

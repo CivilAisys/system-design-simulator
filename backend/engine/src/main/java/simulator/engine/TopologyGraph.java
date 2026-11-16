@@ -78,6 +78,7 @@ final class TopologyGraph {
             case ServiceNode service -> edge.callsPerRequest();
             case CachingNode cache -> read ? 1 - cache.hitRatio() : 1;
             case StorageNode storage -> 0;
+            case ExternalApiNode api -> 0;
             case RateLimiterNode limiter -> 1;
         };
     }

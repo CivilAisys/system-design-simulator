@@ -13,7 +13,7 @@ echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
 
 type SankeyOption = echarts.ComposeOption<SankeySeriesOption | TooltipComponentOption>
 
-// 沒被送往下游的流量各自流進一個終點：過載的丟棄和 Rate Limiter 的拒絕分開顯示。
+// 沒被送往下游的流量各自流進一個終點：過載的丟棄和 Rate Limiter／External API 的拒絕分開顯示。
 // id 用 \u0000 開頭，不會和使用者的節點 id 撞在一起
 const SINKS = [
   { id: '\u0000dropped', name: '丟棄', color: STATUS_HEX.OVERLOADED, rps: (node: NodeResult) => node.droppedRps },

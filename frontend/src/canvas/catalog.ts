@@ -1,4 +1,4 @@
-import { Archive, Database, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
+import { Archive, Cloud, Database, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
 import type { EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
@@ -25,7 +25,7 @@ type NodeKind = {
   edgeParams: EdgeNumberParam[]
   // 出邊的種類，依 source 的 type 決定
   outputEdgeKind: EdgeKind
-  // Run 之後節點上顯示的指標：ρ，或沒有 ρ 的 Rate Limiter 改顯示拒絕量
+  // Run 之後節點上顯示的指標：ρ，或沒有 ρ 的 Rate Limiter、External API 改顯示拒絕量
   nodeMetric: 'utilization' | 'rejected'
 }
 
@@ -41,6 +41,7 @@ export const NODE_TYPES: NodeType[] = [
   'DATABASE',
   'OBJECT_STORAGE',
   'RATE_LIMITER',
+  'EXTERNAL_API',
 ]
 
 export const NODE_KINDS: Record<NodeType, NodeKind> = {
@@ -148,6 +149,20 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
+    edgeParams: ['latencyMs'],
+    outputEdgeKind: 'SYNC',
+    nodeMetric: 'rejected',
+  },
+  // 第三方服務，終點：固定延遲 latencyMs，超過 quotaRps 的部分被對方拒絕（spec 3.3）
+  EXTERNAL_API: {
+    label: 'External API',
+    icon: Cloud,
+    idPrefix: 'ext',
+    defaults: { latencyMs: 100, quotaRps: 1000 },
+    numberParams: ['latencyMs', 'quotaRps'],
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: false,
     edgeParams: ['latencyMs'],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'rejected',

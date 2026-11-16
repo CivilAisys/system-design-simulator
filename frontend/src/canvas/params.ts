@@ -9,6 +9,8 @@ export type NodeNumberParam =
   | 'serviceTimeMs'
   | 'hitRatio'
   | 'limitRps'
+  | 'latencyMs'
+  | 'quotaRps'
 export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
 
@@ -37,6 +39,12 @@ export type ChoiceSpec = {
 // instances × concurrency 的上限（spec 4.5）：看乘積，不是各自檢查
 export const MAX_WORKERS = 1_000_000
 
+// Rate Limiter 的 limitRps、External API 的 quotaRps：0 等於全部拒絕，要停用就刪掉節點（spec 4.5），
+// 所以要 > 0；上限同 rps
+function upperLimitSpec(label: string): NumberSpec {
+  return { label, unit: 'rps', min: 0, minExclusive: true, max: 1e12, slider: { min: 1, max: 1_000_000, scale: 'log' } }
+}
+
 // 合法範圍要和 spec 4.5 的 INVALID_PARAM 一致
 export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
   rps: { label: 'rps', unit: 'rps', min: 0, max: 1e12, slider: { min: 1, max: 1_000_000, scale: 'log' } },
@@ -63,15 +71,12 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
     slider: { min: 0.01, max: 10_000, scale: 'log' },
   },
   hitRatio: { label: 'hitRatio', min: 0, max: 1, slider: { min: 0, max: 1, scale: 'linear', step: 0.01 } },
-  // 0 等於全部拒絕，要停用就刪掉節點（spec 4.5），所以要 > 0；上限同 rps
-  limitRps: {
-    label: 'limitRps',
-    unit: 'rps',
-    min: 0,
-    minExclusive: true,
-    max: 1e12,
-    slider: { min: 1, max: 1_000_000, scale: 'log' },
-  },
+  limitRps: upperLimitSpec('limitRps'),
+
+  // External API 的固定回應時間，範圍同邊的 latencyMs
+  latencyMs: { label: 'latencyMs', unit: 'ms', min: 0, max: 1e7, slider: { min: 0, max: 2000, scale: 'linear', step: 10 } },
+  quotaRps: upperLimitSpec('quotaRps'),
+
 }
 
 export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {

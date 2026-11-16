@@ -11,7 +11,7 @@
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
-拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database、Object Storage 或 Rate Limiter。
+拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database、Object Storage、Rate Limiter 或 External API。
 _Avoid_: component、box
 
 **Edge（邊）**:
@@ -38,6 +38,10 @@ _Avoid_: server、app、backend
 **Rate Limiter**:
 限制每秒放行的請求數（全域上限，不分 Client），超過的部分拒絕，不往下送。
 
+**External API**:
+第三方服務（金流、簡訊、地圖 API 等），固定延遲、不排隊，超過對方配額（quota）的請求被拒絕。
+_Avoid_: third-party service、外部服務
+
 **Database（DB）**:
 資料儲存，是請求的終點，沒有下游。
 
@@ -59,11 +63,11 @@ _Avoid_: input rps、load
 一個 Node 每秒實際處理完的請求數，過載時等於容量。
 
 **Dropped（丟棄量）**:
-到達但超出容量、沒被處理的請求數。Rate Limiter 刻意擋下的是拒絕量，不是丟棄量。
+到達但超出容量、沒被處理的請求數。Rate Limiter、External API 擋下的是拒絕量，不是丟棄量。
 _Avoid_: lost、failed
 
 **Rejected（拒絕量）**:
-Rate Limiter 超過上限、刻意擋下的請求數。和丟棄量是不同的指標，但兩者都算進丟棄率。
+Rate Limiter 超過上限、或 External API 超過配額而擋下的請求數（相當於 HTTP 429）。和丟棄量是不同的指標，但兩者都算進丟棄率。
 _Avoid_: dropped、throttled
 
 **Fan-out**:

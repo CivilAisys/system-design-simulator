@@ -130,6 +130,25 @@ class ParamRangeTest {
         assertInvalidParam(result, "rl", null, "limitRps");
     }
 
+    @ParameterizedTest
+    @ValueSource(doubles = {0, 1.1e12, Double.NaN})
+    void invalidExternalApiQuotaIsRejected(double quotaRps) {
+        assertInvalidParam(runExternalApi(100, quotaRps), "pay", null, "quotaRps");
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {-1, 1.1e7, Double.NaN})
+    void invalidExternalApiLatencyIsRejected(double latencyMs) {
+        assertInvalidParam(runExternalApi(latencyMs, 1000), "pay", null, "latencyMs");
+    }
+
+    private SimulationResult runExternalApi(double latencyMs, double quotaRps) {
+        return simulator.simulate(new Topology(
+                List.of(client(100, 0.9),
+                        new ExternalApiNode("pay", "Payments", NodeHealth.HEALTHY, latencyMs, quotaRps)),
+                List.of(new Edge("e1", "c", "pay", 1, 1, 1))));
+    }
+
     @Test
     void serviceEdgeWithLessThanOneCallIsRejected() {
         assertInvalidParam(run(client(100, 0.9),

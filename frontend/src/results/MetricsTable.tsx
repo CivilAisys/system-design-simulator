@@ -27,7 +27,10 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
           <TableHead className="text-right" title="超過容量、沒被處理的請求">
             丟棄
           </TableHead>
-          <TableHead className="text-right" title="Rate Limiter 超過 limitRps 拒絕的請求，和丟棄一樣算進丟棄率">
+          <TableHead
+            className="text-right"
+            title="Rate Limiter 超過 limitRps、External API 超過 quotaRps 拒絕的請求，和丟棄一樣算進丟棄率"
+          >
             拒絕
           </TableHead>
           <TableHead className="text-right" title="只有 Client 有：請求整條呼叫路徑都成功的每秒請求數">

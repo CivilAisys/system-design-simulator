@@ -1,7 +1,8 @@
 import type { Status } from '@/api/client'
 
 // 第 4.4 節的狀態色，畫布節點、指標表和 Sankey 共用。
-// Rate Limiter 的 LIMITING／NOT_LIMITING 不是 ρ 分級：限流是設計上預期的行為，不變色、不發光
+// Rate Limiter 的 LIMITING／NOT_LIMITING 不是 ρ 分級：限流是設計上預期的行為，不變色、不發光。
+// External API 超過配額（OVER_QUOTA）會讓請求失敗，用紅色標出但不脈動；配額內（WITHIN_QUOTA）不變色
 
 // 畫布節點的外框和光暈（spec 第 6 節），畫在節點後面的一層，不改底色。過載時的脈動在 SimNode 加
 export const STATUS_GLOW: Record<Status, string> = {
@@ -11,6 +12,8 @@ export const STATUS_GLOW: Record<Status, string> = {
   OVERLOADED: 'ring-2 ring-red-500 shadow-xl shadow-red-500/60',
   LIMITING: '',
   NOT_LIMITING: '',
+  OVER_QUOTA: 'ring-2 ring-red-500',
+  WITHIN_QUOTA: '',
 }
 
 export const STATUS_TEXT: Record<Status, string> = {
@@ -20,6 +23,8 @@ export const STATUS_TEXT: Record<Status, string> = {
   OVERLOADED: 'text-red-500',
   LIMITING: 'text-muted-foreground',
   NOT_LIMITING: 'text-muted-foreground',
+  OVER_QUOTA: 'text-red-500',
+  WITHIN_QUOTA: 'text-muted-foreground',
 }
 
 export const STATUS_BADGE: Record<Status, string> = {
@@ -29,9 +34,11 @@ export const STATUS_BADGE: Record<Status, string> = {
   OVERLOADED: 'bg-red-500/15 text-red-700 dark:text-red-400',
   LIMITING: 'bg-muted text-muted-foreground',
   NOT_LIMITING: 'bg-muted text-muted-foreground',
+  OVER_QUOTA: 'bg-red-500/15 text-red-700 dark:text-red-400',
+  WITHIN_QUOTA: 'bg-muted text-muted-foreground',
 }
 
-// 中性灰：Client（沒有狀態）和 Rate Limiter 的 Sankey 節點
+// 中性灰：Client（沒有狀態）、Rate Limiter 和配額內的 External API 的 Sankey 節點
 export const NEUTRAL_HEX = '#a3a3a3'
 
 // ECharts 畫在 canvas 上吃不到 Tailwind class，用同色系的 hex（Tailwind 500）
@@ -42,9 +49,11 @@ export const STATUS_HEX: Record<Status, string> = {
   OVERLOADED: '#ef4444',
   LIMITING: NEUTRAL_HEX,
   NOT_LIMITING: NEUTRAL_HEX,
+  OVER_QUOTA: '#ef4444',
+  WITHIN_QUOTA: NEUTRAL_HEX,
 }
 
-// 顯示的文字：ρ 分級沿用英文代碼，Rate Limiter 的狀態用中文
+// 顯示的文字：ρ 分級沿用英文代碼，Rate Limiter 和 External API 的狀態用中文
 export const STATUS_LABEL: Record<Status, string> = {
   OK: 'OK',
   WARN: 'WARN',
@@ -52,4 +61,6 @@ export const STATUS_LABEL: Record<Status, string> = {
   OVERLOADED: 'OVERLOADED',
   LIMITING: '限流中',
   NOT_LIMITING: '未觸發',
+  OVER_QUOTA: '超過配額',
+  WITHIN_QUOTA: '配額內',
 }
