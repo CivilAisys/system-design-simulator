@@ -601,7 +601,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 | 右側屬性面板 | shadcn Input、Slider、Progress（ρ）。參數名稱寫成「中文（英文）」，英文是 API 的欄位名稱、用較淡的顏色，例如「機器數（instances）」「使用率（ρ）」；下拉選項寫成「依序（SEQUENTIAL）」；元件名稱和單位維持英文 |
 | 下方結果 | shadcn Tabs、Table、Badge（狀態）；ECharts Sankey；分頁下方的重點數字卡片 |
 | 工具列 | shadcn Button、Switch、DropdownMenu |
-| 通知 | shadcn Sonner（例如「發現瓶頸：DB」） |
+| 通知 | shadcn Sonner（例如「發現瓶頸：DB」），出現在畫布右上角，不蓋住屬性面板和工具列；每則都有 ✕ 可以關閉 |
 
 **互動規則**
 - 自訂 React Flow 節點：顯示名稱、類型圖示、ρ 和狀態色；Run 之後才會出現指標。
