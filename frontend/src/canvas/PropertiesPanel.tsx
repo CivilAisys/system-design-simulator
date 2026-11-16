@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { NODE_KINDS } from './catalog'
+import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
 import { NumberField } from './NumberField'
 import {
@@ -72,7 +73,7 @@ type NodePropertiesProps = {
 function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProps) {
   const nameId = useId()
   const node = flowNode.data.node
-  const { label, icon: Icon, numberParams, choiceParams } = NODE_KINDS[node.type]
+  const { label, icon, category, numberParams, choiceParams } = NODE_KINDS[node.type]
   const utilization = result?.utilization ?? null
   const status = result?.status ?? null
 
@@ -106,7 +107,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
 
   return (
     <div className="grid gap-4">
-      <PanelHeader title={label} icon={<Icon className="size-4 text-muted-foreground" />} nodeId={node.id} />
+      <PanelHeader title={label} icon={<CategoryIcon icon={icon} category={category} />} nodeId={node.id} />
       <div className="grid gap-1.5">
         <Label htmlFor={nameId}>名稱</Label>
         <Input id={nameId} value={node.name} onChange={(event) => onUpdate(node.id, { name: event.target.value })} />

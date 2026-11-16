@@ -21,10 +21,22 @@ export type NodeParams = Node['params']
 // 非同步的邊（之後的 replication、Message Queue 的 consumer）不算進 Client 的端到端延遲，畫成虛線
 export type EdgeKind = 'SYNC' | 'ASYNC'
 
+// 元件的類別：元件面板依它分組，圖示方塊依它上色（category.ts）
+export type Category = 'TRAFFIC' | 'COMPUTE' | 'DATA' | 'ASYNC'
+
+// 元件面板的分組順序
+export const CATEGORIES: { id: Category; label: string }[] = [
+  { id: 'TRAFFIC', label: '流量' },
+  { id: 'COMPUTE', label: '運算' },
+  { id: 'DATA', label: '資料' },
+  { id: 'ASYNC', label: '非同步' },
+]
+
 // 一種 Node type 在前端的全部定義。新增 type 時只要在 NODE_TYPES 和 NODE_KINDS 各加一筆（spec 3.6）
 type NodeKind = {
   label: string
   icon: LucideIcon
+  category: Category
   // 新節點的 id 前綴
   idPrefix: string
   // spec 3.3 的預設值，涵蓋 numberParams 和 choiceParams 的每個參數
@@ -54,18 +66,18 @@ function storageDefaults(bytesPerWrite: number): NodeParams {
   return { bytesPerWrite, retentionDays: 365 }
 }
 
-// 左側元件面板的順序
+// 左側元件面板的順序，同一類別的放在一起，類別的順序同 CATEGORIES
 export const NODE_TYPES: NodeType[] = [
   'CLIENT',
   'LOAD_BALANCER',
-  'SERVICE',
-  'CACHE',
   'CDN',
+  'RATE_LIMITER',
+  'SERVICE',
+  'EXTERNAL_API',
+  'CACHE',
   'DATABASE',
   'READ_REPLICA',
   'OBJECT_STORAGE',
-  'RATE_LIMITER',
-  'EXTERNAL_API',
   'MESSAGE_QUEUE',
 ]
 
@@ -73,6 +85,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   CLIENT: {
     label: 'Client',
     icon: Users,
+    category: 'TRAFFIC',
     idPrefix: 'client',
     defaults: { rps: 1000, readRatio: 0.9, readResponseBytes: 10_000, writeRequestBytes: 1_000 },
     numberParams: ['rps', 'readRatio', 'readResponseBytes', 'writeRequestBytes'],
@@ -88,6 +101,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   LOAD_BALANCER: {
     label: 'Load Balancer',
     icon: Network,
+    category: 'TRAFFIC',
     idPrefix: 'lb',
     defaults: { instances: 1, concurrency: 1000, serviceTimeMs: 1 },
     numberParams: CAPACITY_PARAMS,
@@ -102,6 +116,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   SERVICE: {
     label: 'Service',
     icon: Server,
+    category: 'COMPUTE',
     idPrefix: 'svc',
     defaults: { instances: 2, concurrency: 200, serviceTimeMs: 50, callMode: 'SEQUENTIAL' },
     numberParams: CAPACITY_PARAMS,
@@ -116,6 +131,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   CACHE: {
     label: 'Cache',
     icon: Zap,
+    category: 'DATA',
     idPrefix: 'cache',
     defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, shards: 1 },
     numberParams: [...CAPACITY_PARAMS, 'hitRatio', 'shards'],
@@ -131,6 +147,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   CDN: {
     label: 'CDN',
     icon: Globe,
+    category: 'TRAFFIC',
     idPrefix: 'cdn',
     defaults: { instances: 10, concurrency: 1000, serviceTimeMs: 1, hitRatio: 0.95 },
     numberParams: [...CAPACITY_PARAMS, 'hitRatio'],
@@ -145,6 +162,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   DATABASE: {
     label: 'Database',
     icon: Database,
+    category: 'DATA',
     idPrefix: 'db',
     defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1, ...storageDefaults(1_000) },
     numberParams: [...CAPACITY_PARAMS, 'shards', ...STORAGE_PARAMS],
@@ -162,6 +180,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   READ_REPLICA: {
     label: 'Read Replica',
     icon: DatabaseBackup,
+    category: 'DATA',
     idPrefix: 'replica',
     defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
     numberParams: CAPACITY_PARAMS,
@@ -177,6 +196,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   OBJECT_STORAGE: {
     label: 'Object Storage',
     icon: Archive,
+    category: 'DATA',
     idPrefix: 'storage',
     defaults: { instances: 1, concurrency: 10000, serviceTimeMs: 20, ...storageDefaults(1_000_000) },
     numberParams: [...CAPACITY_PARAMS, ...STORAGE_PARAMS],
@@ -192,6 +212,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   RATE_LIMITER: {
     label: 'Rate Limiter',
     icon: Gauge,
+    category: 'TRAFFIC',
     idPrefix: 'limiter',
     defaults: { limitRps: 1000 },
     numberParams: ['limitRps'],
@@ -207,6 +228,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   EXTERNAL_API: {
     label: 'External API',
     icon: Cloud,
+    category: 'COMPUTE',
     idPrefix: 'ext',
     defaults: { latencyMs: 100, quotaRps: 1000 },
     numberParams: ['latencyMs', 'quotaRps'],
@@ -222,6 +244,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   MESSAGE_QUEUE: {
     label: 'Message Queue',
     icon: Inbox,
+    category: 'ASYNC',
     idPrefix: 'mq',
     defaults: { instances: 1, concurrency: 1000, serviceTimeMs: 1 },
     numberParams: CAPACITY_PARAMS,
