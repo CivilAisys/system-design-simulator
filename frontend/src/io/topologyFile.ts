@@ -10,7 +10,7 @@ export type ParseResult = { ok: true; topology: Topology } | { ok: false; errors
 
 // 匯入檔是第 5 節的 Request 格式。這裡擋三種錯誤：
 // - 後端會回 400 的格式錯誤（缺欄位、型別不對、數值溢位成 Infinity、id 重複）
-// - 畫布畫不出來或選不到的邊（連到不存在的節點、連回自己、重複的邊、連進 Client、從 Database 連出），
+// - 畫布畫不出來或選不到的邊（連到不存在的節點、連回自己、重複的邊、連進 Client、從沒有下游的 type 連出），
 //   編輯器本身也不允許建立這些邊
 // 參數範圍和其他拓撲規則交給後端驗證，匯入後在錯誤分頁顯示，和使用者自己編輯出來的狀態一樣
 export function parseTopology(text: string): ParseResult {

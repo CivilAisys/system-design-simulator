@@ -6,5 +6,6 @@ public enum NodeType {
     SERVICE,
     CACHE,
     CDN,
-    DATABASE
+    DATABASE,
+    OBJECT_STORAGE
 }

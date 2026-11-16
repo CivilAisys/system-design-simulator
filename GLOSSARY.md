@@ -11,7 +11,7 @@
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
-拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN 或 Database。
+拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database 或 Object Storage。
 _Avoid_: component、box
 
 **Edge（邊）**:
@@ -37,6 +37,10 @@ _Avoid_: server、app、backend
 
 **Database（DB）**:
 資料儲存，是請求的終點，沒有下游。
+
+**Object Storage**:
+存放圖片、影片等大型檔案的儲存服務（例如 S3），行為和 Database 相同，只有預設值和名稱不同。
+_Avoid_: blob storage、S3（具體產品名）
 
 ### 流量
 

@@ -3,6 +3,7 @@ import { toTopology } from '@/io/topologyFile'
 import basicWebApp from './basic-web-app.json'
 import cdn from './cdn.json'
 import fanOut from './fan-out.json'
+import mediaStorage from './media-storage.json'
 import overload from './overload.json'
 import readWriteSplit from './read-write-split.json'
 
@@ -19,6 +20,8 @@ export const EXAMPLES: Example[] = [
   { id: 'overload', label: '過載', topology: builtIn(overload) },
   // CDN 擋掉 95% 的 read，origin 只收到 miss 和 write；把 hitRatio 調低，Web API 就會過載
   { id: 'cdn', label: 'CDN', topology: builtIn(cdn) },
+  // 圖片、影片放 Object Storage，metadata 放 Database：兩者都是終點，Object Storage 的容量大得多
+  { id: 'media-storage', label: '媒體儲存', topology: builtIn(mediaStorage) },
 ]
 
 // JSON import 的型別太寬（type 是 string），走和匯入檔案相同的檢查來取得 Topology

@@ -82,8 +82,10 @@ final class TopologyValidator {
             nodeError(node, "CACHE_DOWNSTREAM_COUNT", (node instanceof CdnNode ? "CDN " : "Cache ") + name
                     + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
         }
-        if (node instanceof DatabaseNode && downstream > 0) {
-            nodeError(node, "DATABASE_HAS_OUTPUT", "Database " + name + " 不能有下游連線");
+        // Object Storage 沿用 Database 的錯誤碼，訊息用它自己的 type 名稱
+        if (node instanceof StorageNode && downstream > 0) {
+            nodeError(node, "DATABASE_HAS_OUTPUT",
+                    (node instanceof ObjectStorageNode ? "Object Storage " : "Database ") + name + " 不能有下游連線");
         }
     }
 
@@ -114,7 +116,7 @@ final class TopologyValidator {
                 checkCapacityParams(cache.capacityParams(), where, report);
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
             }
-            case DatabaseNode database -> checkCapacityParams(database.capacityParams(), where, report);
+            case StorageNode storage -> checkCapacityParams(storage.capacityParams(), where, report);
         }
     }
 

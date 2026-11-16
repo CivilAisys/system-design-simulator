@@ -77,7 +77,7 @@
           },
           "type" : {
             "type" : "string",
-            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE" ]
+            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE", "OBJECT_STORAGE" ]
           },
           "name" : {
             "type" : "string"
@@ -111,17 +111,17 @@
           "instances" : {
             "type" : "integer",
             "format" : "int32",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE"
           },
           "concurrency" : {
             "type" : "integer",
             "format" : "int32",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE"
           },
           "serviceTimeMs" : {
             "type" : "number",
             "format" : "double",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE"
           },
           "callMode" : {
             "type" : "string",

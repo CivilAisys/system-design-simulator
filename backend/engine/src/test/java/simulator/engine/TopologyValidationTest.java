@@ -160,6 +160,17 @@ class TopologyValidationTest {
     }
 
     @Test
+    void objectStorageWithOutgoingEdgeIsRejectedLikeDatabase() {
+        SimulationResult result = run(
+                List.of(client("c"), new ObjectStorageNode("s3", "Media", NodeHealth.HEALTHY, CAPACITY),
+                        database("db")),
+                List.of(edge("e1", "c", "s3"), edge("e2", "s3", "db")));
+
+        assertErrors(result, tuple("DATABASE_HAS_OUTPUT", "s3", null));
+        assertThat(result.errors().getFirst().message()).startsWith("Object Storage 「Media」");
+    }
+
+    @Test
     void cacheWithoutDownstreamIsRejected() {
         assertErrors(run(List.of(client("c"), cache("cache")), List.of(edge("e1", "c", "cache"))),
                 tuple("CACHE_DOWNSTREAM_COUNT", "cache", null));
