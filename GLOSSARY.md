@@ -11,7 +11,7 @@
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
-拓撲中的一個元件：Client、Load Balancer、Service、Cache 或 Database。
+拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN 或 Database。
 _Avoid_: component、box
 
 **Edge（邊）**:
@@ -31,6 +31,9 @@ _Avoid_: server、app、backend
 
 **Cache**:
 擋在下游前面的快取，read 命中時不往下送，write 一律往下送。
+
+**CDN**:
+放在 Client 和後端（origin）之間的快取，行為和 Cache 相同，只有預設值和名稱不同。
 
 **Database（DB）**:
 資料儲存，是請求的終點，沒有下游。

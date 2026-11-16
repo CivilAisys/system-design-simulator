@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class SteadyStateSimulatorTest {
 
@@ -220,6 +222,38 @@ class SteadyStateSimulatorTest {
         assertThat(result.nodes().get("cache").status()).isEqualTo(Status.OVERLOADED);
         assertThat(result.nodes().get("cache").droppedRps()).isCloseTo(500, within(EPS));
         assertRates(result.nodes().get("db").arrivalRps(), 90, 50);
+    }
+
+    /** Client → Service → cache → Database，端到端延遲和成功率都經過 cache。Database 容量足夠不影響結果。 */
+    private SimulationResult runThrough(CachingNode cache) {
+        return simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
+                        new ServiceNode("svc", "API", NodeHealth.HEALTHY, HUGE, CallMode.SEQUENTIAL),
+                        cache,
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, HUGE)),
+                List.of(
+                        new Edge("e1", "client", "svc", 1, 1, 1),
+                        new Edge("e2", "svc", "cache", 2, 1, 1),
+                        new Edge("e3", "cache", "db", 3, 1, 1))));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 5, 20})
+    void cdnComputesLikeCacheWithSameParams(int concurrency) {
+        // λ = 1000：concurrency 1、5 時 cache 過載（成功率 < 1），20 時沒有過載（端到端延遲是數字）
+        var params = new CapacityParams(1, concurrency, 10);
+
+        SimulationResult cdn = runThrough(new CdnNode("cache", "CDN", NodeHealth.HEALTHY, params, 0.8));
+        SimulationResult cache = runThrough(new CacheNode("cache", "Redis", NodeHealth.HEALTHY, params, 0.8));
+
+        assertThat(cdn.valid()).isTrue();
+        assertThat(cdn).isEqualTo(cache);
+        if (concurrency == 20) {
+            assertThat(cdn.nodes().get("client").endToEndMs().read().ms()).isNotNull();
+        } else {
+            assertThat(cdn.nodes().get("client").successRps()).isLessThan(1000);
+        }
     }
 
     /** Client → Service，Service 對 a、b 兩個 Database 各呼叫 callsA、callsB 次。 */

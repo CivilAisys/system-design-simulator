@@ -37,7 +37,7 @@ final class SuccessRates {
                     .mapToDouble(edge -> Math.pow(children.get(edge.target()), graph.visits(edge, read)))
                     .reduce(1, (a, b) -> a * b);
             // 只有沒命中的部分（write 是全部）要靠下游成功
-            case CacheNode cache -> {
+            case CachingNode cache -> {
                 Edge edge = edges.getFirst();
                 double miss = graph.visits(edge, read);
                 yield (1 - miss) + miss * children.get(edge.target());

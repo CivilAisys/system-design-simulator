@@ -8,9 +8,9 @@ import simulator.engine.CallMode;
 public record NodeParamsDto(
         @Schema(description = "CLIENT") Double rps,
         @Schema(description = "CLIENT") Double readRatio,
-        @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, DATABASE") Integer instances,
-        @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, DATABASE") Integer concurrency,
-        @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, DATABASE") Double serviceTimeMs,
+        @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE") Integer instances,
+        @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE") Integer concurrency,
+        @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE") Double serviceTimeMs,
         @Schema(description = "SERVICE") CallMode callMode,
-        @Schema(description = "CACHE") Double hitRatio) {
+        @Schema(description = "CACHE, CDN") Double hitRatio) {
 }

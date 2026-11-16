@@ -75,7 +75,7 @@ final class TopologyGraph {
             case ClientNode client -> edge.weight() / totalWeight(source.id());
             case LoadBalancerNode lb -> edge.weight() / totalWeight(source.id());
             case ServiceNode service -> edge.callsPerRequest();
-            case CacheNode cache -> read ? 1 - cache.hitRatio() : 1;
+            case CachingNode cache -> read ? 1 - cache.hitRatio() : 1;
             case DatabaseNode database -> 0;
         };
     }
