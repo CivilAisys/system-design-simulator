@@ -11,7 +11,7 @@
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
-拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database、Object Storage、Read Replica、Rate Limiter 或 External API。
+拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database、Object Storage、Read Replica、Rate Limiter、External API 或 Message Queue。
 _Avoid_: component、box
 
 **Edge（邊）**:
@@ -41,6 +41,17 @@ _Avoid_: slave、secondary
 
 **Replication（複製）**:
 primary 把處理完的寫入非同步地套用到 Read Replica。不算進 Client 的延遲和成功率；replica 跟不上時 replication lag 會持續增加。
+
+**Message Queue（MQ）**:
+非同步的佇列：Client 的請求進到 queue（ack）就算成功，下游的 consumer 之後再處理。能削峰、降低使用者延遲，但下游的總負載不變。
+_Avoid_: broker（broker 是 MQ 本身那台機器）
+
+**Consumer group**:
+Message Queue 的一條下游邊。每個 group 都收到全部訊息，group 內的 consumer 數量用下游節點的 instances 表示。
+
+**Backlog（積壓）**:
+consumer 處理不完、留在 queue 裡的訊息。穩態下用「每秒增加幾筆」表示，不算丟棄。
+_Avoid_: lag（lag 留給 replication）
 
 **Rate Limiter**:
 限制每秒放行的請求數（全域上限，不分 Client），超過的部分拒絕，不往下送。

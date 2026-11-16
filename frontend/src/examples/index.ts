@@ -5,6 +5,7 @@ import cdn from './cdn.json'
 import externalApi from './external-api.json'
 import fanOut from './fan-out.json'
 import mediaStorage from './media-storage.json'
+import messageQueue from './message-queue.json'
 import overload from './overload.json'
 import rateLimiter from './rate-limiter.json'
 import readReplica from './read-replica.json'
@@ -37,6 +38,8 @@ export const EXAMPLES: Example[] = [
   { id: 'read-replica', label: 'Read Replica', topology: builtIn(readReplica) },
   // 熱門貼文的 key 都在同一個 shard：它分到一半的流量而過載，另外兩格還很閒
   { id: 'redis-cluster', label: 'Redis Cluster 熱點 key', topology: builtIn(redisCluster) },
+  // 尖峰 3,000 rps 超過 worker 的 2,000：放進 queue 削峰，使用者只等到 ack，worker 處理不完的留在 queue 裡積壓，不算失敗
+  { id: 'message-queue', label: 'Message Queue 削峰', topology: builtIn(messageQueue) },
 ]
 
 // JSON import 的型別太寬（type 是 string），走和匯入檔案相同的檢查來取得 Topology

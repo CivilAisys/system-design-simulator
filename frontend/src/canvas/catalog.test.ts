@@ -33,6 +33,7 @@ describe('元件面板', () => {
       'OBJECT_STORAGE',
       'RATE_LIMITER',
       'EXTERNAL_API',
+      'MESSAGE_QUEUE',
     ])
   })
 

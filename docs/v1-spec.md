@@ -107,6 +107,7 @@ system-design-simulator/
 | **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
 | **Database** | 資料儲存（終點） | `shards`、`hotShardShare` | 只能連到 Read Replica（複製，4.2.3） | 1 × 100, 10ms（10,000 rps） |
 | **Read Replica** | primary Database 的唯讀副本 | — | 無下游；write 是 primary 複製過來的，read 由 Service 的 READ 邊送來 | 1 × 100, 10ms（10,000 rps） |
+| **Message Queue** | 非同步佇列（broker） | — | 每條下游邊是一個 consumer group，都收到全部訊息；Client 只等到 ack | 1 × 1000, 1ms（≈1M rps） |
 | **Object Storage** | 存放圖片、影片等大型檔案（例如 S3），終點 | — | 無下游，同 Database | 1 × 10000, 20ms（≈500k rps） |
 | **Rate Limiter** | 全域限流 | `limitRps` | 放行 `min(λ, limitRps)`，超過的部分是**拒絕量**，不往下送；必須剛好一個下游 | limitRps=1000 |
 | **External API** | 第三方服務（金流、簡訊、地圖 API 等），終點 | `latencyMs`、`quotaRps` | 無下游；超過 `quotaRps` 的部分是**拒絕量**（HTTP 429） | latencyMs=100, quotaRps=1000 |
@@ -251,6 +252,20 @@ Cache 和 Database 可以分片（CDN、Object Storage 不行），這是能力�
 - **過載**：replica 的丟棄量依比例分給 read 和複製寫入。read 的丟棄照常算進失敗率；複製寫入被丟棄時，節點結果的 `warnings` 有 `REPLICATION_LAG`，畫面顯示「複製跟不上」（replication lag 會持續增加）。警告不影響狀態分級。
 - **配合分片**：primary 有 `shards` 時，replica 自動沿用 primary 的配置（相同的 N 和 `hotShardShare`），自己不能設定。replica 的第 i 個 shard 承擔 primary 第 i 個 shard 處理完的寫入，加上分到第 i 個 shard 的 read，結果也有 `shards` 陣列、畫成 cluster。因為每個 shard 的複製寫入不一定和 read 同比例，節點的 ρ 和狀態取 ρ 較高的那一種 shard，成功率的 `pass(n)` 也逐 shard 依各 class 的處理量計算。
 
+### 4.2.4 Message Queue（簡化版）
+
+引入「非同步」：展示 MQ 能削峰、降低使用者延遲，但下游的總負載不變。
+
+**同步的部分（producer → MQ）**
+- MQ 本身（broker）用 4.2 的 M/M/c 計算，預設 1 × 1000、1 ms（約 100 萬 rps）。broker 過載時會丟棄，算進 Client 的失敗率。
+- Client 的端到端延遲**只算到 MQ 回 ack 為止**；訊息成功進入 queue 就算這個請求成功（相當於 HTTP 202 Accepted）。至少要有一個下游（`NO_DOWNSTREAM`）。
+
+**非同步的部分（MQ → consumer）**
+- MQ 的每條下游邊代表一個 **consumer group**，每個 group 都收到**全部**訊息（pub/sub，類似 Kafka）。同一個 group 內的 consumer 數量用下游節點的 instances 表示。邊上沒有參數可調，畫成虛線。
+- consumer 處理不完時**不丟棄**，訊息留在 queue 裡：超過容量的部分依到達量比例分給各條上游邊，MQ 送來的那份記成那條邊的 `backlogRps`（backlog 每秒增加的筆數），從節點的丟棄量扣掉，節點的 `warnings` 有 `BACKLOG`，畫面顯示「積壓中」。同步送來的那份照常丟棄。
+- consumer 實際處理的量 `min(λ, 容量)` 照常往下游送，所以 consumer 對 DB 的負載會和同步路徑疊加。
+- MQ 下游所有節點的延遲都不算進 Client 的端到端延遲（4.3），成功率（4.3.1）也只看 broker 的 `pass`。同一個節點如果同時在同步和非同步路徑上，它的 W 只有一個，同步路徑照常計算。
+
 ### 4.3 端到端平均延遲
 
 設 `L(n, class)` 為一個 class 的請求從節點 n 開始到完成的平均延遲：
@@ -338,7 +353,7 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 | Cache、CDN 必須剛好一個下游（CDN 沿用同一個錯誤碼，訊息寫 CDN） | `CACHE_DOWNSTREAM_COUNT` |
 | Rate Limiter 必須剛好一個下游 | `RATE_LIMITER_DOWNSTREAM_COUNT` |
 | External API 不能有下游 | `EXTERNAL_API_HAS_OUTPUT` |
-| Client／LB 至少一個下游（Service 可以是終點，代表不依賴其他元件的服務） | `NO_DOWNSTREAM` |
+| Client／LB／Message Queue 至少一個下游（Service 可以是終點，代表不依賴其他元件的服務） | `NO_DOWNSTREAM` |
 | 邊的 source / target 必須存在 | `UNKNOWN_NODE` |
 | 同一對 source → target 只能有一條邊 | `DUPLICATE_EDGE` |
 | 參數範圍（見下方合法範圍） | `INVALID_PARAM` |
@@ -464,7 +479,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
     }
   },
   "edges": {
-    "e1": { "rps": { "read": 900, "write": 100 } }
+    "e1": { "rps": { "read": 900, "write": 100 }, "backlogRps": 0 }
   },
   "summary": {
     "offeredRps": 1000,
@@ -482,7 +497,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 
 驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單，不做任何計算：`nodes`、`edges` 為 `{}`，`summary` 為 `null`。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
 
-**警告**：`warnings` 永遠是陣列，沒有警告時為空；目前只有 Read Replica 的 `REPLICATION_LAG`（4.2.3）。
+**警告**：`warnings` 永遠是陣列，沒有警告時為空；Read Replica 的 `REPLICATION_LAG`（4.2.3）、consumer 的 `BACKLOG`（4.2.4）。邊結果的 `backlogRps` 只有 Message Queue 的下游邊會大於 0（4.2.4）。
 
 **分片的節點**：`shards` 是每個 shard 的結果陣列（`arrivalRps`、`throughputRps`、`droppedRps`、`utilization`、`avgLatencyMs`、`status`），最熱的放第一個；沒有分片的節點為 `null`（4.2.2）。
 
@@ -532,14 +547,14 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 **互動規則**
 - 自訂 React Flow 節點：顯示名稱、類型圖示、ρ 和狀態色；Run 之後才會出現指標。
 - 邊上的 label 顯示 RPS，粗細依流量比例。
-- 節點有警告時（例如 Read Replica 的「複製跟不上」）在節點和指標表的狀態旁顯示。
+- 節點有警告時（Read Replica 的「複製跟不上」、consumer 的「積壓中」）在節點和指標表的狀態旁顯示。Message Queue 的下游邊有積壓時，標籤後面加上「積壓 +X rps/s」。
 - Rate Limiter、External API 節點沒有 ρ，改顯示拒絕量和狀態（「限流中」／「未觸發」、「超過配額」／「配額內」）。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
 - **Cluster 外觀**：`shards` > 1 的 Cache、Database，以及沿用分片 primary 的 Read Replica，在節點裡排出 N 個格子（一行最多 8 格，64 個 shard 是 8 × 8），每格是一個 shard，最熱的在第一格，依該 shard 的狀態（4.4）上色，過載的格子發光。滑鼠移到格子上顯示該 shard 的到達率、ρ、延遲、丟棄量。格子不能單獨選取或編輯，參數在節點的屬性面板設定。`shards = 1` 時外觀不變。Run 之前、或改了 `shards` 還沒重算時，格子是灰色。
 - **Preset**：元件面板的「Redis Cluster」是 `shards = 3` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
 - 指標表在分片節點的名稱旁顯示 shard 數；屬性面板在 `shards` > 1 時顯示 `hotShardShare`，沒設定時顯示平均值 `1/N`；設定過之後可以按「改回平均」拿掉這個參數，之後改 shard 數占比會跟著 `1/N` 走。
 - 指標表「丟棄」和「拒絕」分兩欄；結果面板上方的 summary 在有拒絕時另外列出總拒絕量（丟棄率已經包含它）。
-- **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。非同步的邊（複製）不畫，它不是請求的流向；所以 Read Replica 的流入只有 read，丟棄裡可能含複製寫入。
+- **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。複製的邊不畫，它不是請求的流向（Message Queue 送給 consumer 的訊息照畫）；所以 Read Replica 的流入只有 read，丟棄裡可能含複製寫入。
 - **流量粒子動畫**：Run 之後，邊上有小點沿方向流動，速度或密度依該邊 RPS 調整。
 - **節點發光**：節點外框依狀態（4.4）顯示綠、黃、橘、紅的光暈；`OVERLOADED` 時脈動。
 - **主題**：預設深色，工具列可切換淺色。

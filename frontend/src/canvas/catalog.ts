@@ -6,6 +6,7 @@ import {
   DatabaseBackup,
   Gauge,
   Globe,
+  Inbox,
   Network,
   Server,
   Users,
@@ -59,6 +60,7 @@ export const NODE_TYPES: NodeType[] = [
   'OBJECT_STORAGE',
   'RATE_LIMITER',
   'EXTERNAL_API',
+  'MESSAGE_QUEUE',
 ]
 
 export const NODE_KINDS: Record<NodeType, NodeKind> = {
@@ -209,7 +211,23 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'rejected',
+  },  // 非同步：Client 只等到 ack；每條下游邊是一個 consumer group，都收到全部訊息（spec 4.2.4）
+  MESSAGE_QUEUE: {
+    label: 'Message Queue',
+    icon: Inbox,
+    idPrefix: 'mq',
+    defaults: { instances: 1, concurrency: 1000, serviceTimeMs: 1 },
+    numberParams: CAPACITY_PARAMS,
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: true,
+    // consumer group 的邊沒有參數可調：訊息全部送過去，延遲不算進 Client
+    edgeParams: [],
+    edgeChoiceParams: [],
+    outputEdgeKind: 'ASYNC',
+    nodeMetric: 'utilization',
   },
+
 }
 
 // 元件面板的一個項目：每個 type 一個，另外有 preset（type 不變，只換名稱、圖示和部分預設值，JSON 裡看不出來）

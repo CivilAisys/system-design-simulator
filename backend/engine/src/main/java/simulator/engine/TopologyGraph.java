@@ -70,9 +70,18 @@ final class TopologyGraph {
         return primaries.get(replicaId);
     }
 
-    /** 複製的邊（Database → Read Replica）：非同步，不算進 Client 的端到端延遲和成功率（spec 4.2.3）。 */
-    boolean replicates(Edge edge) {
-        return nodes.get(edge.source()) instanceof DatabaseNode;
+    /**
+     * 非同步的邊，不算進 Client 的端到端延遲和成功率：複製（Database → Read Replica，spec 4.2.3）
+     * 和 Message Queue 送給 consumer group 的訊息（spec 4.2.4）。
+     */
+    boolean isAsync(Edge edge) {
+        Node source = nodes.get(edge.source());
+        return source instanceof DatabaseNode || source instanceof MessageQueueNode;
+    }
+
+    /** Message Queue 送給 consumer group 的邊：consumer 處理不完時訊息留在 queue 裡。 */
+    boolean feedsConsumer(Edge edge) {
+        return nodes.get(edge.source()) instanceof MessageQueueNode;
     }
 
     /** Client／LB 依 weight 比例分流（spec 3.3）。 */
@@ -96,6 +105,8 @@ final class TopologyGraph {
             // Database 只能連到 Read Replica：處理完的 write 全部複製過去，read 不會
             case StorageNode storage -> read ? 0 : 1;
             case ReadReplicaNode replica -> 0;
+            // 每個 consumer group 都收到全部訊息
+            case MessageQueueNode queue -> 1;
             case ExternalApiNode api -> 0;
             case RateLimiterNode limiter -> 1;
         };

@@ -46,6 +46,8 @@ final class SuccessRates {
             case StorageNode storage -> 1;
             // read 的丟棄由 pass(n) 扣掉；複製寫入的丟棄只產生警告
             case ReadReplicaNode replica -> 1;
+            // 訊息進到 queue 就算成功，consumer 的處理是非同步的
+            case MessageQueueNode queue -> 1;
             case ExternalApiNode api -> 1;
             // 放行的請求只送往唯一的下游；被拒絕的部分由 pass(n) 扣掉
             case RateLimiterNode limiter -> children.get(edges.getFirst().target());

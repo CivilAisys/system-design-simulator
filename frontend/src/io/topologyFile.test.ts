@@ -207,7 +207,7 @@ describe('格式錯誤', () => {
 
     it('type 不是已知的類型', () => {
       expect(errorsOf((f) => void (f.nodes[4].type = 'QUEUE'))).toEqual([
-        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、READ_REPLICA、OBJECT_STORAGE、RATE_LIMITER、EXTERNAL_API 其中之一',
+        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、READ_REPLICA、OBJECT_STORAGE、RATE_LIMITER、EXTERNAL_API、MESSAGE_QUEUE 其中之一',
       ])
     })
 
@@ -505,6 +505,20 @@ function withExternalApi() {
   }
 }
 
+// 合法檔案再加一個 Service 送訊息的 Message Queue，consumer 是 LB
+function withMessageQueue() {
+  const file = validFile()
+  const mq = {
+    id: 'mq',
+    type: 'MESSAGE_QUEUE',
+    name: 'Queue',
+    params: { instances: 1, concurrency: 1000, serviceTimeMs: 1 },
+    ui: { x: 900, y: 400 },
+  }
+  const edges = [...file.edges, edge('e6', 'svc', 'mq'), edge('e7', 'mq', 'lb')]
+  return { ...file, nodes: [...file.nodes, mq], edges }
+}
+
 describe('匯出再匯入', () => {
   it.each([
     ['合法檔案', topologyOf(validFile())],
@@ -513,6 +527,7 @@ describe('匯出再匯入', () => {
     ['Object Storage', topologyOf(withObjectStorage())],
     ['Rate Limiter', topologyOf(withRateLimiter())],
     ['External API', topologyOf(withExternalApi())],
+    ['Message Queue', topologyOf(withMessageQueue())],
   ])('%s 得到相同的拓撲', (_, topology) => {
     expect(parseTopology(serializeTopology(topology))).toEqual({ ok: true, topology })
   })

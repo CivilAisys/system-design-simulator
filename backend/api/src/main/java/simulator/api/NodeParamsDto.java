@@ -22,5 +22,6 @@ public record NodeParamsDto(
         Double hotShardShare) {
 
     // 有 M/M/c 處理能力參數的 type
-    static final String CAPACITY_TYPES = "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA";
+    static final String CAPACITY_TYPES =
+            "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA, MESSAGE_QUEUE";
 }

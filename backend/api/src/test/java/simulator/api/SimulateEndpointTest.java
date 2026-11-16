@@ -247,6 +247,21 @@ class SimulateEndpointTest {
         assertThat(body.at("/summary/dropRate").asDouble()).isZero();
     }
 
+    // 「Message Queue 削峰」範例要示範的情境：worker 處理不完時積壓在 queue 裡，使用者的請求照樣成功、延遲很短
+    @Test
+    void messageQueueExampleBuildsBacklogWithoutFailures() throws Exception {
+        JsonNode body = simulate(readExample("message-queue.json"));
+
+        // worker 容量 2 × 50 / 50ms = 2,000，收到 3,000：每秒積壓 1,000，不算丟棄
+        assertThat(body.at("/edges/e3/backlogRps").asDouble()).isCloseTo(1000, within(1e-6));
+        assertThat(body.at("/nodes/svc-2/droppedRps").asDouble()).isCloseTo(0, within(1e-6));
+        assertThat(body.at("/nodes/svc-2/warnings/0").asText()).isEqualTo("BACKLOG");
+        assertThat(body.at("/nodes/db-1/arrivalRps/write").asDouble()).isCloseTo(2000, within(1e-6));
+        assertThat(body.at("/summary/dropRate").asDouble()).isZero();
+        // 使用者只等到 ack：API 50ms 加上 MQ，遠低於 worker 的路徑
+        assertThat(body.at("/summary/avgEndToEndMs/write/ms").asDouble()).isLessThan(60);
+    }
+
     static Stream<String> exampleFiles() throws Exception {
         List<String> files;
         try (Stream<Path> listing = Files.list(examplesDir())) {
@@ -351,7 +366,7 @@ class SimulateEndpointTest {
                 // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
                 Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
-                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, RATE_LIMITER, EXTERNAL_API, READ_REPLICA]"),
+                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, RATE_LIMITER, EXTERNAL_API, READ_REPLICA, MESSAGE_QUEUE]"),
                 Arguments.of("/nodes/0/name", "123", "nodes[0].name, expected a string"),
                 Arguments.of("/nodes", "{}", "nodes, expected an array"));
     }

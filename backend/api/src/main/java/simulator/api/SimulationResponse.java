@@ -118,7 +118,7 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, nullable = true,
                     description = "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）")
             List<ShardResultDto> shards,
-            @Schema(requiredMode = REQUIRED, description = "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）")
+            @Schema(requiredMode = REQUIRED, description = "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）；BACKLOG：consumer 處理不完 Message Queue 的訊息（spec 4.2.4）")
             List<NodeWarning> warnings) {
 
         static NodeResultDto from(NodeResult node) {
@@ -146,10 +146,13 @@ public record SimulationResponse(
     }
 
     @Schema(name = "EdgeResult")
-    public record EdgeResultDto(@Schema(requiredMode = REQUIRED) ClassRatesDto rps) {
+    public record EdgeResultDto(
+            @Schema(requiredMode = REQUIRED) ClassRatesDto rps,
+            @Schema(requiredMode = REQUIRED, description = "Message Queue 的下游邊：consumer 處理不完，queue 每秒增加的訊息數；其他邊為 0")
+            double backlogRps) {
 
         static EdgeResultDto from(EdgeResult edge) {
-            return new EdgeResultDto(ClassRatesDto.from(edge.rps()));
+            return new EdgeResultDto(ClassRatesDto.from(edge.rps()), edge.backlogRps());
         }
     }
 
