@@ -6,8 +6,8 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
-import type { Edge, Node, Topology } from '@/api/client'
-import { canFeed, newEdgeId, newNode, type NodeParams, type PaletteItem } from './catalog'
+import type { Edge, Node, NodeType, Topology } from '@/api/client'
+import { canFeed, newEdgeId, newEdgeRequestClass, newNode, type NodeParams, type PaletteItem } from './catalog'
 import type { SimFlowNode } from './SimNode'
 import { arrowMarker } from './edgeStyle'
 import { copyNodes, pasteClip, type Clip } from './clipboard'
@@ -97,7 +97,9 @@ export function useTopologyEditor(initial: Topology) {
         if (!canConnect(state.edges, c.source, c.target) || !typesFit(state.nodes, c.source, c.target)) {
           return state
         }
-        const edge = toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS })
+        const types = edgeTypes(state.nodes, c.source, c.target)
+        const requestClass = types ? newEdgeRequestClass(...types) : EDGE_DEFAULTS.requestClass
+        const edge = toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS, requestClass })
         return { ...state, edges: [...state.edges, edge] }
       })
     },
@@ -383,8 +385,14 @@ function toFlowEdge(edge: Edge): RpsFlowEdge {
 
 // type 的連線限制（canFeed），例如 Database 只能連到 Read Replica
 function typesFit(nodes: SimFlowNode[], source: string, target: string): boolean {
+  const types = edgeTypes(nodes, source, target)
+  return types == null || canFeed(...types)
+}
+
+// 兩端節點的 type，有一端找不到時為 null
+function edgeTypes(nodes: SimFlowNode[], source: string, target: string): [NodeType, NodeType] | null {
   const type = (id: string) => nodes.find((n) => n.id === id)?.data.node.type
   const sourceType = type(source)
   const targetType = type(target)
-  return sourceType == null || targetType == null || canFeed(sourceType, targetType)
+  return sourceType == null || targetType == null ? null : [sourceType, targetType]
 }

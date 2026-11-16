@@ -13,7 +13,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react'
-import type { Node, NodeType } from '@/api/client'
+import type { Edge, Node, NodeType } from '@/api/client'
 import type { EdgeChoiceParam, EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
 export type NodeParams = Node['params']
@@ -304,6 +304,11 @@ export function newEdgeId(source: string, target: string, usedIds: ReadonlySet<s
 // source 的 type 能不能連到 target 的 type（另外還有 hasOutput／hasInput、重複和環的規則）
 export function canFeed(source: NodeType, target: NodeType): boolean {
   return NODE_KINDS[source].outputTargets?.includes(target) ?? true
+}
+
+// 新邊的 requestClass：Read Replica 是唯讀的，Service 連過去的邊預設只送 read（spec 4.2.3），其他維持 ALL
+export function newEdgeRequestClass(source: NodeType, target: NodeType): Edge['requestClass'] {
+  return source === 'SERVICE' && target === 'READ_REPLICA' ? 'READ' : 'ALL'
 }
 
 // 複製的來源（Database）：連出去的邊是 Read Replica 套用的寫入，不是請求的流向
