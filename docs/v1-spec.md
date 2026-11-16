@@ -270,6 +270,8 @@ Cache 和 Database 可以分片（CDN、Object Storage 不行），這是能力�
 - consumer 處理不完時**不丟棄**，訊息留在 queue 裡：超過容量的部分依到達量比例分給各條上游邊，MQ 送來的那份記成那條邊的 `backlogRps`（backlog 每秒增加的筆數），從節點的丟棄量扣掉，節點的 `warnings` 有 `BACKLOG`，畫面顯示「積壓中」。同步送來的那份照常丟棄。
 - consumer 的狀態照常依 ρ 分級（過載時是 `OVERLOADED`、也可能是瓶頸），「積壓中」是另外加上的警告：處理不完本身就是要看到的問題。
 - consumer 實際處理的量 `min(λ, 容量)` 照常往下游送，所以 consumer 對 DB 的負載會和同步路徑疊加。
+- consumer 處理了、但往下游失敗（例如 DB 過載丟掉 consumer 的寫入）的訊息也**不算丟棄**，同樣留在 queue 裡等重試：用 4.3.1 的成功率 `S` 計算，MQ 送來的 class `c` 每秒有 `rps_c × (pass(consumer) − S(consumer, c))` 筆，加進同一條邊的 `backlogRps`，consumer 也有 `BACKLOG` 警告。所以邊的 `backlogRps` = 處理不完的部分 + 處理了但下游失敗的部分，以訊息數計算（consumer fan-out 時 `S` 已經是「一則訊息的所有子呼叫都成功」的機率，不會乘上 `callsPerRequest`）。下游節點自己的丟棄量照常顯示（例如 DB 過載仍是瓶頸、仍有丟棄）。
+- **簡化假設**：留在 queue 裡的訊息之後會重試，但重試對 consumer 和下游增加的負載不計算。
 - MQ 下游所有節點的延遲都不算進 Client 的端到端延遲（4.3），成功率（4.3.1）也只看 broker 的 `pass`。同一個節點如果同時在同步和非同步路徑上，它的 W 只有一個，同步路徑照常計算。
 
 ### 4.3 端到端平均延遲
@@ -609,7 +611,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - **頻寬**（4.7）：Client 的邊在 RPS 下面一行小字顯示「出 X・入 Y」；結果面板上方的 summary 列出出口、入口頻寬，有 CDN 擋掉流量時加上 origin 出口和擋掉的比例。單位自動換算（B/s、KB/s、MB/s、GB/s…，十進位），括號裡附上 bits（Mbps、Gbps…）。
 - **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每 shard、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB…，十進位）。過載的節點名稱旁標示「過載，偏低」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerShard` 預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。
 - 指標表「丟棄」和「拒絕」分兩欄；結果面板上方的 summary 在有拒絕時另外列出總拒絕量（丟棄率已經包含它）。
-- **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。複製的邊不畫，它不是請求的流向（Message Queue 送給 consumer 的訊息照畫，consumer 處理不完的流進「積壓」終點）；所以 Read Replica 的流入只有 read，丟棄裡可能含複製寫入。
+- **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。複製的邊不畫，它不是請求的流向（Message Queue 送給 consumer 的訊息照畫，consumer 處理不完的流進「積壓」終點；處理了但下游失敗的訊息已經流到下游、在下游的「丟棄」裡，不再畫一次）；所以 Read Replica 的流入只有 read，丟棄裡可能含複製寫入。
 - **流量粒子動畫**：Run 之後，邊上有小點沿方向流動，速度或密度依該邊 RPS 調整。
 - **節點發光**：節點外框依狀態（4.4）顯示綠、黃、橘、紅的光暈；`OVERLOADED` 時脈動。
 - **主題**：預設深色，工具列可切換淺色。

@@ -66,10 +66,6 @@ public final class SteadyStateSimulator implements Simulator {
             if (node instanceof CdnNode cdn) {
                 cdnOffload += processed.read() * cdn.hitRatio() * bytesPerRead;
             }
-            List<Edge> queued = queuedByConsumer.getOrDefault(node.id(), List.of());
-            if (!queued.isEmpty()) {
-                keepInQueue(node.id(), queued, nodeResults, edgeResults);
-            }
 
             for (Edge edge : graph.outgoing(node.id())) {
                 var rps = new ClassRates(processed.read() * graph.visits(edge, true),
@@ -92,6 +88,7 @@ public final class SteadyStateSimulator implements Simulator {
 
         var endToEnd = new EndToEndLatencies(topology, graph, order, nodeResults);
         var success = new SuccessRates(graph, order, nodeResults);
+        queuedByConsumer.forEach((id, queued) -> keepInQueue(id, queued, success, nodeResults, edgeResults));
         sentByClient.forEach((id, sent) -> nodeResults.put(id,
                 NodeResult.client(sent, success.client(id, sent), endToEnd.client(id, sent))));
 
@@ -129,26 +126,36 @@ public final class SteadyStateSimulator implements Simulator {
     }
 
     /**
-     * consumer 處理不完的訊息留在 queue 裡，不算丟棄（spec 4.2.4）：超過容量的部分依到達量的比例分給各條邊，
-     * Message Queue 送來的那份記成那條邊的 backlog 成長率，從節點的丟棄量扣掉；同步送來的那份照常丟棄。
-     * 處理量不變（容量），往下游送的流量也不變。
+     * 沒有完整處理成功的訊息留在 queue 裡，不算丟棄（spec 4.2.4），記成 Message Queue 送來那條邊的 backlog 成長率：
+     * <ul>
+     *   <li>consumer 處理不完：超過容量的部分依到達量的比例分給各條邊，Message Queue 送來的那份從節點的丟棄量扣掉，
+     *       同步送來的那份照常丟棄。處理量不變（容量），往下游送的流量也不變。</li>
+     *   <li>consumer 處理了、但下游失敗：處理量 × (1 − 下游的成功率)，以訊息數計算（fan-out 不放大）。
+     *       下游節點的丟棄照常顯示。</li>
+     * </ul>
      */
-    private static void keepInQueue(String nodeId, List<Edge> queued, Map<String, NodeResult> nodeResults,
-            Map<String, EdgeResult> edgeResults) {
+    private static void keepInQueue(String nodeId, List<Edge> queued, SuccessRates success,
+            Map<String, NodeResult> nodeResults, Map<String, EdgeResult> edgeResults) {
         NodeResult result = nodeResults.get(nodeId);
         double arrival = result.arrivalRps().total();
-        if (result.droppedRps() <= 0 || arrival <= 0) {
-            return;
-        }
-        double excessShare = result.droppedRps() / arrival;
+        double excessShare = arrival > 0 ? result.droppedRps() / arrival : 0;
+        double failedRead = success.failedDownstreamShare(nodeId, true);
+        double failedWrite = success.failedDownstreamShare(nodeId, false);
+        double excess = 0;
         double backlog = 0;
         for (Edge edge : queued) {
             EdgeResult edgeResult = edgeResults.get(edge.id());
-            double edgeBacklog = edgeResult.rps().total() * excessShare;
+            ClassRates rps = edgeResult.rps();
+            double edgeExcess = rps.total() * excessShare;
+            double edgeBacklog = edgeExcess + rps.read() * failedRead + rps.write() * failedWrite;
             edgeResults.put(edge.id(), edgeResult.withBacklog(edgeBacklog));
+            excess += edgeExcess;
             backlog += edgeBacklog;
         }
-        nodeResults.put(nodeId, result.withDropped(result.droppedRps() - backlog).withWarning(NodeWarning.BACKLOG));
+        if (backlog > 0) {
+            nodeResults.put(nodeId, result.withDropped(result.droppedRps() - excess)
+                    .withWarning(NodeWarning.BACKLOG));
+        }
     }
 
     /**

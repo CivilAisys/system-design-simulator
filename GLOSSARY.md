@@ -50,7 +50,7 @@ _Avoid_: broker（broker 是 MQ 本身那台機器）
 Message Queue 的一條下游邊。每個 group 都收到全部訊息，group 內的 consumer 數量用下游節點的 instances 表示。
 
 **Backlog（積壓）**:
-consumer 處理不完、留在 queue 裡的訊息。穩態下用「每秒增加幾筆」表示，不算丟棄。
+沒有處理成功、留在 queue 裡的訊息：consumer 處理不完的，加上 consumer 處理了但下游失敗的。穩態下用「每秒增加幾筆」表示，不算丟棄。
 _Avoid_: lag（lag 留給 replication）
 
 **Rate Limiter**:
