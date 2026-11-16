@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
-import { hasInput, hasOutput, NODE_KINDS } from './catalog'
+import { NODE_KINDS } from './catalog'
 import { formatUtilization } from './format'
 import { STATUS_GLOW, STATUS_TEXT } from './status'
 import { errorsTitle } from './validation'
@@ -19,7 +19,7 @@ export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { node, result, errors, stale } = data
-  const Icon = NODE_KINDS[node.type].icon
+  const { icon: Icon, hasInput, hasOutput } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
 
@@ -45,7 +45,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
           )}
         />
       )}
-      {hasInput(node.type) && <Handle type="target" position={Position.Left} />}
+      {hasInput && <Handle type="target" position={Position.Left} />}
       <div className="flex items-center gap-2">
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         <span className="font-medium">{node.name}</span>
@@ -56,7 +56,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
           {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{status}</span>}
         </div>
       )}
-      {hasOutput(node.type) && <Handle type="source" position={Position.Right} />}
+      {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>
   )
 }

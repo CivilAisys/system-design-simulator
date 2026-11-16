@@ -13,10 +13,10 @@ import { NumberField } from './NumberField'
 import {
   checkNodeParam,
   EDGE_PARAM_SPECS,
-  edgeNumberParams,
-  NODE_NUMBER_PARAMS,
+  NODE_CHOICE_SPECS,
   NODE_PARAM_SPECS,
   nodeParam,
+  type NodeChoiceParam,
 } from './params'
 import type { SimFlowNode } from './SimNode'
 import type { RpsFlowEdge } from './RpsEdge'
@@ -65,7 +65,7 @@ type NodePropertiesProps = {
 function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProps) {
   const nameId = useId()
   const node = flowNode.data.node
-  const { label, icon: Icon } = NODE_KINDS[node.type]
+  const { label, icon: Icon, numberParams, choiceParams } = NODE_KINDS[node.type]
   const utilization = result?.utilization ?? null
 
   return (
@@ -75,7 +75,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
         <Label htmlFor={nameId}>名稱</Label>
         <Input id={nameId} value={node.name} onChange={(event) => onUpdate(node.id, { name: event.target.value })} />
       </div>
-      {NODE_NUMBER_PARAMS[node.type].map((param) => (
+      {numberParams.map((param) => (
         <NumberField
           key={param}
           spec={NODE_PARAM_SPECS[param]}
@@ -84,26 +84,14 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
         />
       ))}
-      {node.type === 'SERVICE' && (
-        <div className="grid gap-1.5">
-          <Label>callMode</Label>
-          <Select
-            value={node.params.callMode}
-            // 選項只有下面兩個 SelectItem
-            onValueChange={(value) =>
-              onUpdate(node.id, { params: { callMode: value as NonNullable<NodeParams['callMode']> } })
-            }
-          >
-            <SelectTrigger className="w-full" aria-label="callMode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="SEQUENTIAL">SEQUENTIAL（依序）</SelectItem>
-              <SelectItem value="PARALLEL">PARALLEL（平行）</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      {choiceParams.map((param) => (
+        <ChoiceField
+          key={param}
+          param={param}
+          value={node.params[param]}
+          onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
+        />
+      ))}
       {/* Client 沒有容量，ρ 不適用；Run 之前也還沒有值 */}
       {utilization !== null && (
         <div className="grid gap-1.5">
@@ -114,6 +102,37 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           <Progress value={Math.min(utilization, 1) * 100} aria-label="ρ" />
         </div>
       )}
+    </div>
+  )
+}
+
+type ChoiceFieldProps = {
+  param: NodeChoiceParam
+  value: NodeParams[NodeChoiceParam]
+  onChange: (value: NonNullable<NodeParams[NodeChoiceParam]>) => void
+}
+
+function ChoiceField({ param, value, onChange }: ChoiceFieldProps) {
+  const { label, options } = NODE_CHOICE_SPECS[param]
+  return (
+    <div className="grid gap-1.5">
+      <Label>{label}</Label>
+      <Select
+        value={value}
+        // 選項只有 options 裡的值
+        onValueChange={(selected) => onChange(selected as NonNullable<NodeParams[NodeChoiceParam]>)}
+      >
+        <SelectTrigger className="w-full" aria-label={label}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }
@@ -135,7 +154,7 @@ function EdgeProperties({ edge: flowEdge, nodes, onUpdate }: EdgePropertiesProps
   return (
     <div className="grid gap-4">
       <PanelHeader title={`${source.name} → ${target.name}`} edgeId={edge.id} />
-      {edgeNumberParams(source.type).map((param) => (
+      {NODE_KINDS[source.type].edgeParams.map((param) => (
         <NumberField
           key={param}
           spec={EDGE_PARAM_SPECS[param]}

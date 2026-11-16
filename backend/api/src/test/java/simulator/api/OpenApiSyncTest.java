@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -45,5 +47,33 @@ class OpenApiSyncTest {
         assertThat(file).as("openapi.json is missing, " + REGENERATE).exists();
         assertThat(mapper.readTree(file.toFile())).as("openapi.json is out of date, " + REGENERATE)
                 .isEqualTo(current);
+    }
+
+    /**
+     * 有預設值的欄位就是選填（spec 3.6）：不能同時列在 required 裡，否則前端產生的型別會要求一定要給。
+     * 之後新增的選填欄位只要在 {@code @Schema} 寫上 {@code defaultValue}，這個測試就會一起檢查。
+     */
+    @Test
+    void fieldsWithDefaultsAreOptional() throws Exception {
+        JsonNode schemas = mapper.readTree(Path.of(System.getProperty("openapi.file")).toFile())
+                .at("/components/schemas");
+        List<String> defaulted = new ArrayList<>();
+        List<String> requiredWithDefault = new ArrayList<>();
+        schemas.properties().forEach(schema -> {
+            List<String> required = new ArrayList<>();
+            schema.getValue().path("required").forEach(name -> required.add(name.asText()));
+            schema.getValue().path("properties").properties().forEach(property -> {
+                if (property.getValue().has("default")) {
+                    String field = schema.getKey() + "." + property.getKey();
+                    defaulted.add(field);
+                    if (required.contains(property.getKey())) {
+                        requiredWithDefault.add(field);
+                    }
+                }
+            });
+        });
+
+        assertThat(defaulted).contains("Edge.weight", "Edge.callsPerRequest", "Edge.latencyMs");
+        assertThat(requiredWithDefault).isEmpty();
     }
 }

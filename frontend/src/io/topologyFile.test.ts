@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Topology } from '@/api/client'
 import { initialTopology } from '@/canvas/initialTopology'
+import { NODE_CHOICE_SPECS, NODE_PARAM_SPECS } from '@/canvas/params'
 import { parseTopology, serializeTopology, toTopology } from './topologyFile'
 
 // 每種類型各一個節點，邊涵蓋三種出邊參數（weight、callsPerRequest、只有 latencyMs）
@@ -96,6 +97,34 @@ describe('合法的檔案', () => {
       edges: [{ id: 'e1', source: 'client', target: 'lb' }],
     })
     expect(topology.edges).toEqual([{ id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 }])
+  })
+
+  // 還沒有真正的選填節點參數（#63 的 shards 會是第一個），先暫時把 hitRatio 和 callMode 當成選填來示範
+  describe('選填的節點參數', () => {
+    beforeEach(() => {
+      NODE_PARAM_SPECS.hitRatio.optional = true
+      NODE_CHOICE_SPECS.callMode.optional = true
+    })
+    afterEach(() => {
+      delete NODE_PARAM_SPECS.hitRatio.optional
+      delete NODE_CHOICE_SPECS.callMode.optional
+    })
+
+    it('省略時用該類型的預設值', () => {
+      const file = validFile()
+      delete (file.nodes[2].params as { callMode?: string }).callMode
+      delete (file.nodes[3].params as { hitRatio?: number }).hitRatio
+
+      const [, , svc, cache] = topologyOf(file).nodes
+      expect(svc.params.callMode).toBe('SEQUENTIAL')
+      expect(cache.params.hitRatio).toBe(0.8)
+    })
+
+    it('給了錯的型別仍然是格式錯誤', () => {
+      expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { hitRatio: '0.5' }))).toEqual([
+        'nodes[3]（id "cache"）：缺少數值參數 params.hitRatio（或數值太大）',
+      ])
+    })
   })
 
   it('超出參數範圍的值照樣讀入，留給 Run 在錯誤分頁回報', () => {

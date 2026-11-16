@@ -1,13 +1,16 @@
-import type { Edge, NodeType } from '@/api/client'
+import type { Edge } from '@/api/client'
 import type { NodeParams } from './catalog'
 
 export type NodeNumberParam = 'rps' | 'readRatio' | 'instances' | 'concurrency' | 'serviceTimeMs' | 'hitRatio'
+export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
 
 export type NumberSpec = {
   label: string
   unit?: string
   integer?: boolean
+  // 0.3.0 起新增的參數都是選填：匯入的檔案省略時用該類型的預設值，舊檔照樣讀得進來（spec 3.6）
+  optional?: boolean
   min: number
   // true 時 min 本身不合法（例如 weight > 0）
   minExclusive?: boolean
@@ -15,6 +18,13 @@ export type NumberSpec = {
   // slider 只是方便拖曳的常用範圍，Input 可以輸入範圍外但合法的值。
   // 跨好幾個數量級的參數用對數刻度，否則小數值根本拖不到
   slider: { min: number; max: number; scale: 'linear' | 'log'; step?: number }
+}
+
+export type ChoiceSpec = {
+  label: string
+  // 規則同 NumberSpec.optional
+  optional?: boolean
+  options: { value: NonNullable<NodeParams[NodeChoiceParam]>; label: string }[]
 }
 
 // instances × concurrency 的上限（spec 4.5）：看乘積，不是各自檢查
@@ -73,28 +83,15 @@ export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {
   },
 }
 
-const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
-
-// 屬性面板只列出該類型有意義的參數（callMode 不是數值，另外處理）
-export const NODE_NUMBER_PARAMS: Record<NodeType, NodeNumberParam[]> = {
-  CLIENT: ['rps', 'readRatio'],
-  LOAD_BALANCER: CAPACITY_PARAMS,
-  SERVICE: CAPACITY_PARAMS,
-  CACHE: [...CAPACITY_PARAMS, 'hitRatio'],
-  DATABASE: CAPACITY_PARAMS,
-}
-
-// spec 3.4：weight 只對 Client／LB 的出邊有意義，callsPerRequest 只對 Service 的出邊有意義
-export function edgeNumberParams(sourceType: NodeType): EdgeNumberParam[] {
-  switch (sourceType) {
-    case 'CLIENT':
-    case 'LOAD_BALANCER':
-      return ['weight', 'latencyMs']
-    case 'SERVICE':
-      return ['callsPerRequest', 'latencyMs']
-    default:
-      return ['latencyMs']
-  }
+// 下拉選單的參數，選項的 value 就是 API 的 enum 值
+export const NODE_CHOICE_SPECS: Record<NodeChoiceParam, ChoiceSpec> = {
+  callMode: {
+    label: 'callMode',
+    options: [
+      { value: 'SEQUENTIAL', label: 'SEQUENTIAL（依序）' },
+      { value: 'PARALLEL', label: 'PARALLEL（平行）' },
+    ],
+  },
 }
 
 export function nodeParam(params: NodeParams, param: NodeNumberParam): number {
