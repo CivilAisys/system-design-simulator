@@ -30,6 +30,31 @@ export function formatMs(ms: number | null | undefined): string {
   return ms == null ? DASH : `${ms.toFixed(1)} ms`
 }
 
+// 頻寬用十進位單位（1 MB = 1,000,000 bytes），和網路速率的 Gbps 一致
+const BYTE_UNITS = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s', 'PB/s']
+const BIT_UNITS = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps', 'Pbps']
+
+function formatScaled(value: number, units: string[]): string {
+  let scaled = value
+  let unit = 0
+  // 999.5 以上四捨五入會變成「1000」，改用下一個單位
+  while (scaled >= 999.5 && unit < units.length - 1) {
+    scaled /= 1000
+    unit++
+  }
+  // 最小單位顯示整數；其他保留 3 位有效數字
+  const digits = unit === 0 || scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2
+  return `${scaled.toFixed(digits)} ${units[unit]}`
+}
+
+export function formatBytesPerSec(bytesPerSec: number): string {
+  return formatScaled(bytesPerSec, BYTE_UNITS)
+}
+
+export function formatBitsPerSec(bytesPerSec: number): string {
+  return formatScaled(bytesPerSec * 8, BIT_UNITS)
+}
+
 export function formatPercent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`
 }

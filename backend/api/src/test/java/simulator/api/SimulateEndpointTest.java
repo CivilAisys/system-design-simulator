@@ -98,7 +98,7 @@ class SimulateEndpointTest {
 
         JsonNode summary = body.get("summary");
         assertThat(fieldNames(summary)).containsExactlyInAnyOrder("offeredRps", "successRps", "rejectedRps",
-                "dropRate", "avgEndToEndMs", "bottleneckNodeId");
+                "dropRate", "avgEndToEndMs", "bottleneckNodeId", "bandwidth", "cdnOffloadBytesPerSec");
         assertThat(summary.get("offeredRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("successRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("dropRate").asDouble()).isZero();
@@ -160,11 +160,17 @@ class SimulateEndpointTest {
         // read 19000 只有 5% miss 往下送，write 1000 全部穿透；Web API 容量 2 × 200 / 50ms = 8000
         assertRates(shielded.at("/nodes/svc-1/arrivalRps"), 950, 1000);
         assertThat(shielded.at("/nodes/svc-1/status").asText()).isEqualTo("OK");
+        // 每個 read 回應 100 KB：CDN 命中的 95% 不必從 origin 送出
+        assertThat(shielded.at("/summary/bandwidth/egressBytesPerSec").asDouble())
+                .isCloseTo(19_000 * 100_000.0, within(1e-3));
+        assertThat(shielded.at("/summary/cdnOffloadBytesPerSec").asDouble())
+                .isCloseTo(19_000 * 0.95 * 100_000, within(1e-3));
 
         set(example, "/nodes/1/params/hitRatio", mapper.getNodeFactory().numberNode(0));
         JsonNode unshielded = simulate(mapper.writeValueAsBytes(example));
         assertRates(unshielded.at("/nodes/svc-1/arrivalRps"), 19000, 1000);
         assertThat(unshielded.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(unshielded.at("/summary/cdnOffloadBytesPerSec").asDouble()).isZero();
     }
 
     // 「Rate Limiter」範例要示範的情境：限流讓原本會過載的 API 回到穩態，拒絕的部分算進丟棄率
@@ -403,6 +409,34 @@ class SimulateEndpointTest {
         assertThat(body.at("/edges/e1/rps/read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(body.at("/edges/e2/rps/read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(body.at("/nodes/db-1/arrivalRps/read").asDouble()).isCloseTo(900, within(1e-6));
+    }
+
+    @Test
+    void omittedTransferSizesUseDefaults() throws Exception {
+        // straight-topology.json 的 Client 沒有 readResponseBytes、writeRequestBytes：用預設的 10000、1000
+        JsonNode body = mapper.readTree(postTopology(straightTopology())
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/summary/bandwidth/egressBytesPerSec").asDouble()).isCloseTo(900 * 10_000, within(1e-6));
+        assertThat(body.at("/summary/bandwidth/ingressBytesPerSec").asDouble()).isCloseTo(100 * 1_000, within(1e-6));
+        assertThat(body.at("/edges/e1/bandwidth/egressBytesPerSec").asDouble()).isCloseTo(900 * 10_000, within(1e-6));
+        assertThat(body.at("/edges/e2/bandwidth").isNull()).isTrue();
+    }
+
+    @Test
+    void clientTransferSizesSetBandwidth() throws Exception {
+        ObjectNode topology = straightTopology();
+        set(topology, "/nodes/0/params/readResponseBytes", mapper.getNodeFactory().numberNode(2_000));
+        set(topology, "/nodes/0/params/writeRequestBytes", mapper.getNodeFactory().numberNode(500));
+
+        JsonNode body = mapper.readTree(postTopology(topology)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/summary/bandwidth/egressBytesPerSec").asDouble()).isCloseTo(900 * 2_000, within(1e-6));
+        assertThat(body.at("/summary/bandwidth/ingressBytesPerSec").asDouble()).isCloseTo(100 * 500, within(1e-6));
+        assertThat(body.at("/summary/cdnOffloadBytesPerSec").asDouble()).isZero();
     }
 
     @Test

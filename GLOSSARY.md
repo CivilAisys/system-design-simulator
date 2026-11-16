@@ -117,6 +117,13 @@ Service 的邊只給哪個 Request class 走：ALL、READ 或 WRITE。用來把 
 **Drop rate（失敗率）**:
 沒有成功完成的請求占 offered rps 的比例。
 
+**Bandwidth（使用者端頻寬）**:
+Client 和系統之間每秒傳輸的資料量。出口是 read 回應送給使用者（read rps × 回應大小），入口是 write 從使用者上傳（write rps × 上傳大小）。內部呼叫的流量不估算。
+_Avoid_: throughput（那是請求數）
+
+**Origin offload（CDN 擋掉的 origin 頻寬）**:
+出口頻寬裡由 CDN 命中直接送出、不必從後端（origin）送出的部分。
+
 ### 負載與延遲
 
 **Worker**:

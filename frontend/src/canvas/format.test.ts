@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   DASH,
+  formatBitsPerSec,
+  formatBytesPerSec,
   formatClassRates,
   formatMs,
   formatOptionalRps,
@@ -74,5 +76,33 @@ describe('formatPercent', () => {
     expect(formatPercent(1)).toBe('100.0%')
     expect(formatPercent(0.9876)).toBe('98.8%')
     expect(formatPercent(0.0004)).toBe('0.0%')
+  })
+})
+
+describe('formatBytesPerSec', () => {
+  it('用十進位單位，保留 3 位有效數字', () => {
+    expect(formatBytesPerSec(0)).toBe('0 B/s')
+    expect(formatBytesPerSec(512)).toBe('512 B/s')
+    expect(formatBytesPerSec(1_500)).toBe('1.50 KB/s')
+    expect(formatBytesPerSec(90_000_000)).toBe('90.0 MB/s')
+    expect(formatBytesPerSec(1.806e9)).toBe('1.81 GB/s')
+    expect(formatBytesPerSec(123_400_000_000_000)).toBe('123 TB/s')
+  })
+
+  it('四捨五入到 1000 時換下一個單位', () => {
+    expect(formatBytesPerSec(999.7)).toBe('1.00 KB/s')
+    expect(formatBytesPerSec(999_700)).toBe('1.00 MB/s')
+  })
+
+  it('超過最大單位時不再換算', () => {
+    expect(formatBytesPerSec(2e18)).toBe('2000 PB/s')
+  })
+})
+
+describe('formatBitsPerSec', () => {
+  it('bytes 乘 8 換成 bps', () => {
+    expect(formatBitsPerSec(90_000_000)).toBe('720 Mbps')
+    expect(formatBitsPerSec(1.9e9)).toBe('15.2 Gbps')
+    expect(formatBitsPerSec(100)).toBe('800 bps')
   })
 })

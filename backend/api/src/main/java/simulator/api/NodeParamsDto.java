@@ -8,6 +8,10 @@ import simulator.engine.CallMode;
 public record NodeParamsDto(
         @Schema(description = "CLIENT") Double rps,
         @Schema(description = "CLIENT") Double readRatio,
+        @Schema(description = "CLIENT：每個 read 回應的大小（bytes），只用來估算頻寬，省略時為 10000")
+        Double readResponseBytes,
+        @Schema(description = "CLIENT：每個 write 上傳的大小（bytes），只用來估算頻寬，省略時為 1000")
+        Double writeRequestBytes,
         @Schema(description = CAPACITY_TYPES) Integer instances,
         @Schema(description = CAPACITY_TYPES) Integer concurrency,
         @Schema(description = CAPACITY_TYPES) Double serviceTimeMs,

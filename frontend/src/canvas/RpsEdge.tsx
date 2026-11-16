@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import type { EdgeKind } from './catalog'
 import { edgeStyle } from './edgeStyle'
 import { particles } from './flow'
-import { formatRps } from './format'
+import { formatBytesPerSec, formatRps } from './format'
 
 export type RpsEdgeData = {
   edge: Edge
@@ -76,6 +76,13 @@ export function RpsEdge({
             {/* consumer 處理不完：queue 每秒增加的訊息數 */}
             {result && result.backlogRps > 0 && (
               <span className="ml-1 font-semibold text-orange-500">積壓 +{formatRps(result.backlogRps)}/s</span>
+            )}
+            {/* 只有 Client 的邊有：使用者端頻寬（spec 4.7） */}
+            {result?.bandwidth && (
+              <div className="text-[10px] text-muted-foreground tabular-nums">
+                出 {formatBytesPerSec(result.bandwidth.egressBytesPerSec)}・入{' '}
+                {formatBytesPerSec(result.bandwidth.ingressBytesPerSec)}
+              </div>
             )}
           </div>
         </EdgeLabelRenderer>

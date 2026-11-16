@@ -27,6 +27,8 @@ final class TopologyValidator {
     static final int MAX_CALLS_PER_REQUEST = 10_000;
     static final double MAX_WEIGHT = 1e6;
     static final int MAX_SHARDS = 64;
+    // 每個請求的回應或上傳大小（bytes），1 TB
+    static final double MAX_BYTES = 1e12;
     // hotShardShare 的下限 1/N 容許浮點誤差，前端 params.ts 用同一個值
     static final double SHARE_TOLERANCE = 1e-12;
 
@@ -149,6 +151,8 @@ final class TopologyValidator {
             case ClientNode client -> {
                 requireBetween(client.rps(), 0, MAX_RPS, where, "rps", report);
                 requireBetween(client.readRatio(), 0, 1, where, "readRatio", report);
+                requireBetween(client.readResponseBytes(), 0, MAX_BYTES, where, "readResponseBytes", report);
+                requireBetween(client.writeRequestBytes(), 0, MAX_BYTES, where, "writeRequestBytes", report);
             }
             case LoadBalancerNode lb -> checkCapacityParams(lb.capacityParams(), where, report);
             case ServiceNode service -> checkCapacityParams(service.capacityParams(), where, report);

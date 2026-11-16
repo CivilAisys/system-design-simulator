@@ -4,6 +4,8 @@ import type { NodeParams } from './catalog'
 export type NodeNumberParam =
   | 'rps'
   | 'readRatio'
+  | 'readResponseBytes'
+  | 'writeRequestBytes'
   | 'instances'
   | 'concurrency'
   | 'serviceTimeMs'
@@ -48,10 +50,24 @@ function upperLimitSpec(label: string): NumberSpec {
   return { label, unit: 'rps', min: 0, minExclusive: true, max: 1e12, slider: { min: 1, max: 1_000_000, scale: 'log' } }
 }
 
+// Client 的回應、上傳大小，只用來估算頻寬（spec 4.7），舊檔沒有這個欄位；上限 1 TB
+function bytesSpec(label: string): NumberSpec {
+  return {
+    label,
+    unit: 'bytes',
+    optional: true,
+    min: 0,
+    max: 1e12,
+    slider: { min: 100, max: 10_000_000, scale: 'log' },
+  }
+}
+
 // 合法範圍要和 spec 4.5 的 INVALID_PARAM 一致
 export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
   rps: { label: 'rps', unit: 'rps', min: 0, max: 1e12, slider: { min: 1, max: 1_000_000, scale: 'log' } },
   readRatio: { label: 'readRatio', min: 0, max: 1, slider: { min: 0, max: 1, scale: 'linear', step: 0.01 } },
+  readResponseBytes: bytesSpec('readResponseBytes'),
+  writeRequestBytes: bytesSpec('writeRequestBytes'),
   instances: {
     label: 'instances',
     integer: true,

@@ -53,7 +53,10 @@ class ParamRangeTest {
 
     static Stream<ClientNode> invalidClients() {
         return Stream.of(client(-1, 0.9), client(Double.NaN, 0.9), client(Double.POSITIVE_INFINITY, 0.9),
-                client(1.1e12, 0.9), client(100, -0.1), client(100, 1.1), client(100, Double.NaN));
+                client(1.1e12, 0.9), client(100, -0.1), client(100, 1.1), client(100, Double.NaN),
+                new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9, -1, 1000),
+                new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9, 1000, 1.1e12),
+                new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9, Double.NaN, 1000));
     }
 
     static Stream<CapacityParams> invalidCapacityParams() {
@@ -228,13 +231,13 @@ class ParamRangeTest {
 
     @Test
     void extremeValuesWithinTheLimitsRunFastAndStayFinite() {
-        // 每個上限都踩到：最多 worker、使用率接近 1、最短處理時間、最大 rps／calls／weight／latency
+        // 每個上限都踩到：最多 worker、使用率接近 1、最短處理時間、最大 rps／calls／weight／latency／bytes
         var maxed = new CapacityParams(1000, 1000, 1e-6);
         // 最多 worker 且使用率接近 1 時 Erlang C 算最久；容量 1e12 剛好是 rps 上限
         var busiest = new CapacityParams(1000, 1000, 0.001);
         List<Node> nodes = List.of(
-                new ClientNode("c1", "A", NodeHealth.HEALTHY, 1e12, 0.5),
-                new ClientNode("c2", "B", NodeHealth.HEALTHY, 1e12, 0.5),
+                new ClientNode("c1", "A", NodeHealth.HEALTHY, 1e12, 0.5, 1e12, 1e12),
+                new ClientNode("c2", "B", NodeHealth.HEALTHY, 1e12, 0.5, 1e12, 1e12),
                 new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, maxed),
                 new ServiceNode("s", "API", NodeHealth.HEALTHY, maxed, CallMode.PARALLEL),
                 new CacheNode("cache", "Redis", NodeHealth.HEALTHY, maxed, 0),
