@@ -21,7 +21,8 @@ export function ShardGrid({ count: requested, shards, stale }: ShardGridProps) {
   const count = Math.min(Math.floor(requested), MAX_CELLS)
   const results = shards?.length === count ? shards : undefined
   // 平均分配時每格一樣，第一格不算「最熱」
-  const hottest = results != null && results.length > 1 && totalRps(results[0].arrivalRps) > totalRps(results[1].arrivalRps)
+  const hottest =
+    results != null && results.length > 1 && totalRps(results[0].arrivalRps) > totalRps(results[1].arrivalRps)
   return (
     <div
       className={cn('mt-2 grid w-fit gap-0.5', stale && 'opacity-30')}
