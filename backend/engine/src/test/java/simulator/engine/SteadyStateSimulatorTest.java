@@ -248,7 +248,11 @@ class SteadyStateSimulatorTest {
         SimulationResult cache = runThrough(new CacheNode("cache", "Redis", NodeHealth.HEALTHY, params, 0.8));
 
         assertThat(cdn.valid()).isTrue();
-        assertThat(cdn).isEqualTo(cache);
+        assertThat(cdn.nodes()).isEqualTo(cache.nodes());
+        assertThat(cdn.edges()).isEqualTo(cache.edges());
+        // 只有 CDN 命中才算擋掉 origin 頻寬（spec 4.7），Cache 的命中仍由 origin 送出
+        assertThat(cdn.summary()).usingRecursiveComparison().ignoringFields("cdnOffloadBytesPerSec")
+                .isEqualTo(cache.summary());
         if (concurrency == 20) {
             assertThat(cdn.nodes().get("client").endToEndMs().read().ms()).isNotNull();
         } else {

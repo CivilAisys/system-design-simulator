@@ -30,6 +30,10 @@ public final class SteadyStateSimulator implements Simulator {
         Map<String, ClassRates> sentByClient = new HashMap<>();
         // consumer → Message Queue 送給它的邊
         Map<String, List<Edge>> queuedByConsumer = new HashMap<>();
+        // 每個節點收到的 read 對應的回應大小總和（bytes/s），用來算 CDN 擋掉多少 origin 頻寬（spec 4.7）
+        Map<String, Double> readBytes = new HashMap<>();
+        var bandwidth = Bandwidth.ZERO;
+        double cdnOffload = 0;
         List<Node> order = graph.topologicalOrder();
         for (Node node : order) {
             ClassRates arrival = arrivals.get(node.id());
@@ -53,6 +57,12 @@ public final class SteadyStateSimulator implements Simulator {
                 case ExternalApiNode api -> admit(node.id(), api.quotaRps(), api.latencyMs(), Status.OVER_QUOTA,
                         Status.WITHIN_QUOTA, arrival, nodeResults);
             };
+            double bytesPerRead = node instanceof ClientNode client
+                    ? client.readResponseBytes()
+                    : arrival.read() > 0 ? readBytes.getOrDefault(node.id(), 0.0) / arrival.read() : 0;
+            if (node instanceof CdnNode cdn) {
+                cdnOffload += processed.read() * cdn.hitRatio() * bytesPerRead;
+            }
             List<Edge> queued = queuedByConsumer.getOrDefault(node.id(), List.of());
             if (!queued.isEmpty()) {
                 keepInQueue(node.id(), queued, nodeResults, edgeResults);
@@ -61,7 +71,15 @@ public final class SteadyStateSimulator implements Simulator {
             for (Edge edge : graph.outgoing(node.id())) {
                 var rps = new ClassRates(processed.read() * graph.visits(edge, true),
                         processed.write() * graph.visits(edge, false));
-                edgeResults.put(edge.id(), new EdgeResult(rps));
+                if (node instanceof ClientNode client) {
+                    var edgeBandwidth = new Bandwidth(rps.read() * client.readResponseBytes(),
+                            rps.write() * client.writeRequestBytes());
+                    bandwidth = bandwidth.plus(edgeBandwidth);
+                    edgeResults.put(edge.id(), new EdgeResult(rps, 0, edgeBandwidth));
+                } else {
+                    edgeResults.put(edge.id(), new EdgeResult(rps));
+                }
+                readBytes.merge(edge.target(), rps.read() * bytesPerRead, Double::sum);
                 arrivals.merge(edge.target(), rps, ClassRates::plus);
                 if (graph.feedsConsumer(edge)) {
                     queuedByConsumer.computeIfAbsent(edge.target(), id -> new ArrayList<>()).add(edge);
@@ -75,7 +93,8 @@ public final class SteadyStateSimulator implements Simulator {
                 NodeResult.client(sent, success.client(id, sent), endToEnd.client(id, sent))));
 
         return new SimulationResult(true, List.of(), inNodeOrder(topology, nodeResults),
-                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd));
+                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd, bandwidth,
+                        Math.min(cdnOffload, bandwidth.egressBytesPerSec())));
     }
 
     private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
@@ -122,7 +141,7 @@ public final class SteadyStateSimulator implements Simulator {
         for (Edge edge : queued) {
             EdgeResult edgeResult = edgeResults.get(edge.id());
             double edgeBacklog = edgeResult.rps().total() * excessShare;
-            edgeResults.put(edge.id(), new EdgeResult(edgeResult.rps(), edgeBacklog));
+            edgeResults.put(edge.id(), edgeResult.withBacklog(edgeBacklog));
             backlog += edgeBacklog;
         }
         nodeResults.put(nodeId, result.withDropped(result.droppedRps() - backlog).withWarning(NodeWarning.BACKLOG));
@@ -169,7 +188,7 @@ public final class SteadyStateSimulator implements Simulator {
     }
 
     private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults,
-            EndToEndLatencies endToEnd) {
+            EndToEndLatencies endToEnd, Bandwidth bandwidth, double cdnOffload) {
         double offered = 0;
         double succeeded = 0;
         double rejected = 0;
@@ -192,7 +211,8 @@ public final class SteadyStateSimulator implements Simulator {
         }
         // 沒有流量時沒有東西被丟
         double dropRate = offered > 0 ? cleanRatio(1 - succeeded / offered) : 0;
-        return new Summary(offered, succeeded, rejected, dropRate, endToEnd.average(clients), bottleneck);
+        return new Summary(offered, succeeded, rejected, dropRate, endToEnd.average(clients), bottleneck,
+                bandwidth, cdnOffload);
     }
 
     /**

@@ -1,9 +1,16 @@
 import { lazy, Suspense } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { isComputed, totalRps, type SimulationResult, type Topology, type ValidationError } from '@/api/client'
+import {
+  isComputed,
+  totalRps,
+  type SimulationResult,
+  type Summary,
+  type Topology,
+  type ValidationError,
+} from '@/api/client'
 import type { Theme } from '@/theme'
 import { cn } from '@/lib/utils'
-import { formatPercent, formatRps } from '@/canvas/format'
+import { formatBitsPerSec, formatBytesPerSec, formatPercent, formatRps } from '@/canvas/format'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 import { ErrorList } from './ErrorList'
 import { MetricsTable } from './MetricsTable'
@@ -57,6 +64,7 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
               <span className="mr-2 text-muted-foreground">平均端到端延遲</span>
               <EndToEndLatencyText latencies={computed.summary.avgEndToEndMs} topology={topology} />
             </p>
+            <BandwidthText summary={computed.summary} />
           </>
         )}
       </div>
@@ -82,6 +90,36 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
         )}
       </TabsContent>
     </Tabs>
+  )
+}
+
+// 使用者端頻寬（spec 4.7）：出口是 read 回應，入口是 write 上傳；有 CDN 擋掉流量時另外列出 origin 要送出的部分
+function BandwidthText({ summary }: { summary: Summary }) {
+  const { egressBytesPerSec: egress, ingressBytesPerSec: ingress } = summary.bandwidth
+  const offload = summary.cdnOffloadBytesPerSec
+  return (
+    <p className="text-sm tabular-nums">
+      <span className="mr-2 text-muted-foreground">頻寬 出口</span>
+      <Rate bytesPerSec={egress} />
+      <span className="mx-2 text-muted-foreground">入口</span>
+      <Rate bytesPerSec={ingress} />
+      {offload > 0 && (
+        <>
+          <span className="mx-2 text-muted-foreground">origin 出口</span>
+          <Rate bytesPerSec={egress - offload} />
+          <span className="ml-1 text-muted-foreground">（CDN 擋掉 {formatPercent(offload / egress)}）</span>
+        </>
+      )}
+    </p>
+  )
+}
+
+function Rate({ bytesPerSec }: { bytesPerSec: number }) {
+  return (
+    <>
+      {formatBytesPerSec(bytesPerSec)}
+      <span className="ml-1 text-muted-foreground">({formatBitsPerSec(bytesPerSec)})</span>
+    </>
   )
 }
 

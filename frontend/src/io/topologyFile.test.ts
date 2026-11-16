@@ -9,7 +9,13 @@ function validFile() {
   return {
     version: 1,
     nodes: [
-      { id: 'client', type: 'CLIENT', name: 'Users', params: { rps: 1000, readRatio: 0.9 }, ui: { x: 0, y: 0 } },
+      {
+        id: 'client',
+        type: 'CLIENT',
+        name: 'Users',
+        params: { rps: 1000, readRatio: 0.9, readResponseBytes: 50_000, writeRequestBytes: 2_000 },
+        ui: { x: 0, y: 0 },
+      },
       {
         id: 'lb',
         type: 'LOAD_BALANCER',
@@ -119,10 +125,13 @@ describe('合法的檔案', () => {
       const file = validFile()
       delete (file.nodes[2].params as { callMode?: string }).callMode
       remove(file.nodes[3].params, 'shards')
+      remove(file.nodes[0].params, 'readResponseBytes')
+      remove(file.nodes[0].params, 'writeRequestBytes')
 
-      const [, , svc, cache] = topologyOf(file).nodes
+      const [client, , svc, cache] = topologyOf(file).nodes
       expect(svc.params.callMode).toBe('SEQUENTIAL')
       expect(cache.params.shards).toBe(1)
+      expect(client.params).toMatchObject({ readResponseBytes: 10_000, writeRequestBytes: 1_000 })
     })
 
     it('hotShardShare 省略時不補，代表平均分配', () => {

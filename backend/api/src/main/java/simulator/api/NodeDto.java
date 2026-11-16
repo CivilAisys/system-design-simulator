@@ -37,7 +37,9 @@ public record NodeDto(
         NodeHealth health = state == null ? NodeHealth.HEALTHY : state;
         return switch (Required.of(type, where + " type")) {
             case CLIENT -> new ClientNode(id, name, health,
-                    require(params.rps(), "rps"), require(params.readRatio(), "readRatio"));
+                    require(params.rps(), "rps"), require(params.readRatio(), "readRatio"),
+                    orDefault(params.readResponseBytes(), ClientNode.DEFAULT_READ_RESPONSE_BYTES),
+                    orDefault(params.writeRequestBytes(), ClientNode.DEFAULT_WRITE_REQUEST_BYTES));
             case LOAD_BALANCER -> new LoadBalancerNode(id, name, health, capacityParams());
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
@@ -64,6 +66,10 @@ public record NodeDto(
     /** {@code shards} 省略時為 1（不分片），{@code hotShardShare} 省略時平均分配。 */
     private ShardLayout shardLayout() {
         return new ShardLayout(params.shards() == null ? 1 : params.shards(), params.hotShardShare());
+    }
+
+    private static double orDefault(Double value, double fallback) {
+        return value == null ? fallback : value;
     }
 
     private <T> T require(T value, String param) {

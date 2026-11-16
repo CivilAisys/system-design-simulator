@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import simulator.engine.Bandwidth;
 import simulator.engine.ClassLatencies;
 import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
@@ -149,10 +150,25 @@ public record SimulationResponse(
     public record EdgeResultDto(
             @Schema(requiredMode = REQUIRED) ClassRatesDto rps,
             @Schema(requiredMode = REQUIRED, description = "Message Queue 的下游邊：consumer 處理不完，queue 每秒增加的訊息數；其他邊為 0")
-            double backlogRps) {
+            double backlogRps,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 的邊有：這條邊的使用者端頻寬（spec 4.7）")
+            BandwidthDto bandwidth) {
 
         static EdgeResultDto from(EdgeResult edge) {
-            return new EdgeResultDto(ClassRatesDto.from(edge.rps()), edge.backlogRps());
+            return new EdgeResultDto(ClassRatesDto.from(edge.rps()), edge.backlogRps(),
+                    edge.bandwidth() == null ? null : BandwidthDto.from(edge.bandwidth()));
+        }
+    }
+
+    @Schema(name = "Bandwidth", description = "使用者端頻寬，單位 bytes/s（spec 4.7）")
+    public record BandwidthDto(
+            @Schema(requiredMode = REQUIRED, description = "read 回應送給使用者：read rps × readResponseBytes")
+            double egressBytesPerSec,
+            @Schema(requiredMode = REQUIRED, description = "write 從使用者上傳：write rps × writeRequestBytes")
+            double ingressBytesPerSec) {
+
+        static BandwidthDto from(Bandwidth bandwidth) {
+            return new BandwidthDto(bandwidth.egressBytesPerSec(), bandwidth.ingressBytesPerSec());
         }
     }
 
@@ -163,11 +179,15 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, description = "各節點拒絕量的總和") double rejectedRps,
             @Schema(requiredMode = REQUIRED, description = "1 − successRps / offeredRps（丟棄和拒絕都算），限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0") double dropRate,
             @Schema(requiredMode = REQUIRED) ClassLatenciesDto avgEndToEndMs,
-            @Schema(requiredMode = REQUIRED, nullable = true) String bottleneckNodeId) {
+            @Schema(requiredMode = REQUIRED, nullable = true) String bottleneckNodeId,
+            @Schema(requiredMode = REQUIRED, description = "各 Client 的使用者端頻寬總和") BandwidthDto bandwidth,
+            @Schema(requiredMode = REQUIRED, description = "egressBytesPerSec 裡由 CDN 命中送出、不必從 origin 送出的部分")
+            double cdnOffloadBytesPerSec) {
 
         static SummaryDto from(Summary summary) {
             return new SummaryDto(summary.offeredRps(), summary.successRps(), summary.rejectedRps(), summary.dropRate(),
-                    ClassLatenciesDto.from(summary.avgEndToEndMs()), summary.bottleneckNodeId());
+                    ClassLatenciesDto.from(summary.avgEndToEndMs()), summary.bottleneckNodeId(),
+                    BandwidthDto.from(summary.bandwidth()), summary.cdnOffloadBytesPerSec());
         }
     }
 }

@@ -114,6 +114,16 @@
             "format" : "double",
             "description" : "CLIENT"
           },
+          "readResponseBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CLIENT：每個 read 回應的大小（bytes），只用來估算頻寬，省略時為 10000"
+          },
+          "writeRequestBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CLIENT：每個 write 上傳的大小（bytes），只用來估算頻寬，省略時為 1000"
+          },
           "instances" : {
             "type" : "integer",
             "format" : "int32",
@@ -203,6 +213,23 @@
         },
         "required" : [ "edges", "nodes", "version" ]
       },
+      "Bandwidth" : {
+        "type" : "object",
+        "description" : "使用者端頻寬，單位 bytes/s（spec 4.7）",
+        "properties" : {
+          "egressBytesPerSec" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "read 回應送給使用者：read rps × readResponseBytes"
+          },
+          "ingressBytesPerSec" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "write 從使用者上傳：write rps × writeRequestBytes"
+          }
+        },
+        "required" : [ "egressBytesPerSec", "ingressBytesPerSec" ]
+      },
       "ClassLatencies" : {
         "type" : "object",
         "properties" : {
@@ -239,9 +266,17 @@
             "type" : "number",
             "format" : "double",
             "description" : "Message Queue 的下游邊：consumer 處理不完，queue 每秒增加的訊息數；其他邊為 0"
+          },
+          "bandwidth" : {
+            "description" : "只有 Client 的邊有：這條邊的使用者端頻寬（spec 4.7）",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/Bandwidth"
+            }, {
+              "type" : "null"
+            } ]
           }
         },
-        "required" : [ "backlogRps", "rps" ]
+        "required" : [ "backlogRps", "bandwidth", "rps" ]
       },
       "EndToEndLatency" : {
         "type" : "object",
@@ -434,9 +469,18 @@
           },
           "bottleneckNodeId" : {
             "type" : [ "string", "null" ]
+          },
+          "bandwidth" : {
+            "$ref" : "#/components/schemas/Bandwidth",
+            "description" : "各 Client 的使用者端頻寬總和"
+          },
+          "cdnOffloadBytesPerSec" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "egressBytesPerSec 裡由 CDN 命中送出、不必從 origin 送出的部分"
           }
         },
-        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "dropRate", "offeredRps", "rejectedRps", "successRps" ]
+        "required" : [ "avgEndToEndMs", "bandwidth", "bottleneckNodeId", "cdnOffloadBytesPerSec", "dropRate", "offeredRps", "rejectedRps", "successRps" ]
       },
       "ValidationError" : {
         "type" : "object",

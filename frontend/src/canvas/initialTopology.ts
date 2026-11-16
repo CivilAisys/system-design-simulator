@@ -8,7 +8,7 @@ export const initialTopology: Topology = {
       id: 'client-1',
       type: 'CLIENT',
       name: 'Users',
-      params: { rps: 1000, readRatio: 0.9 },
+      params: { rps: 1000, readRatio: 0.9, readResponseBytes: 10_000, writeRequestBytes: 1_000 },
       ui: { x: 0, y: 0 },
     },
     {
