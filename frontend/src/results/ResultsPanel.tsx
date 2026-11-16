@@ -10,10 +10,9 @@ import {
   type ValidationError,
 } from '@/api/client'
 import type { Theme } from '@/theme'
-import { cn } from '@/lib/utils'
-import { formatBitsPerSec, formatBytesPerSec, formatDays, formatPercent, formatRps } from '@/canvas/format'
-import { EndToEndLatencyText } from './EndToEndLatencyText'
+import { formatBitsPerSec, formatBytesPerSec, formatDays, formatPercent } from '@/canvas/format'
 import { ErrorList } from './ErrorList'
+import { KpiStrip } from './KpiStrip'
 import { MetricsTable } from './MetricsTable'
 import { StorageTable } from './StorageTable'
 
@@ -48,30 +47,13 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
         </TabsList>
         {computed && (
           <>
-            <p className="text-sm tabular-nums">
-              <span className="mr-2 text-muted-foreground">成功</span>
-              {formatRps(computed.summary.successRps)}
-              <span className="mx-2 text-muted-foreground">丟棄率</span>
-              <span className={cn(computed.summary.dropRate > 0 && 'text-destructive')}>
-                {formatPercent(computed.summary.dropRate)}
-              </span>
-              {/* 有 Rate Limiter 或 External API 拒絕請求時才顯示，丟棄率已經包含它 */}
-              {computed.summary.rejectedRps > 0 && (
-                <>
-                  <span className="mx-2 text-muted-foreground">拒絕</span>
-                  {formatRps(computed.summary.rejectedRps)}
-                </>
-              )}
-            </p>
-            <p className="text-sm">
-              <span className="mr-2 text-muted-foreground">平均端到端延遲</span>
-              <EndToEndLatencyText latencies={computed.summary.avgEndToEndMs} topology={topology} />
-            </p>
             <BandwidthText summary={computed.summary} />
             <DiskFullText topology={topology} result={computed} />
           </>
         )}
       </div>
+      {/* 重點數字在每個分頁都看得到；驗證錯誤時沒有數字可顯示 */}
+      {computed && <KpiStrip topology={topology} result={computed} />}
       <TabsContent value="metrics" className="min-h-0 overflow-auto">
         {computed ? <MetricsTable topology={topology} result={computed} /> : empty}
       </TabsContent>

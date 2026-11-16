@@ -48,6 +48,10 @@
     --color-over-bg: var(--status-over-bg);
     --color-over-ink: var(--status-over-ink);
     --color-over-row: var(--status-over-row);
+    --color-strong-bg: var(--strong-bg);
+    --color-strong-ink: var(--strong-ink);
+    --color-strong-muted: var(--strong-muted);
+    --color-strong-accent: var(--strong-accent);
     --color-traffic: var(--category-traffic);
     --color-traffic-bg: var(--category-traffic-bg);
     --color-compute: var(--category-compute);
@@ -97,6 +101,7 @@
    shadcn 的變數對應：background 是工具列和兩側面板（chrome），muted 是輸入框和分頁底色（panel），
    border／input 是兩階外框（line／line2），primary 是紫色強調色：Run、選取外框、流量粒子、slider、開關都用它。
    狀態色四級（OK／WARN／CRITICAL／OVERLOADED）各有主色、淡底、深色文字和節點光暈，CRITICAL 設計稿沒畫，用同一套規則補上橘色。
+   strong 是結果面板強調的瓶頸卡片（深色主題暗紅底、淺色主題深藍底）。
    元件類別色（流量藍、運算紫、資料粉、非同步青）有圖示色和方塊底色，兩個主題同一組色相 */
 :root {
     --canvas: #f4f5fa;
@@ -150,6 +155,10 @@
     --status-over-ink: #b91c1c;
     --status-over-glow: 0 0 0 5px #fecaca, 0 8px 24px #ef444440;
     --status-over-row: #fff5f5;
+    --strong-bg: #1b1f3b;
+    --strong-ink: #ffffff;
+    --strong-muted: #c4c7dc;
+    --strong-accent: #fca5a5;
     --category-traffic: #075985;
     --category-traffic-bg: #e0f2fe;
     --category-compute: #4327d6;
@@ -210,6 +219,10 @@
     --status-over-ink: #fecaca;
     --status-over-glow: 0 0 0 2px #f8717199, 0 0 32px #f8717166;
     --status-over-row: #1a0d14;
+    --strong-bg: #2a1017;
+    --strong-ink: #fecaca;
+    --strong-muted: #f0a3a3;
+    --strong-accent: #fca5a5;
     --category-traffic: #7dd3fc;
     --category-traffic-bg: #0c2a3d;
     --category-compute: #c4b5fd;
