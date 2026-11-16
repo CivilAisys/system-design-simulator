@@ -178,9 +178,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
         // 底色跟著狀態（STATUS_BADGE 的淡底和深色文字）
         <div className={cn('grid gap-2.5 rounded-xl bg-muted p-3.5', status && STATUS_BADGE[status])}>
           <div className="flex items-baseline justify-between text-sm">
-            <span>
-              <ParamLabel label="使用率" labelEn="ρ" />
-            </span>
+            <ParamLabel label="使用率" labelEn="ρ" />
             <span className={cn('font-heading text-[22px] font-bold', status && STATUS_TEXT[status])}>
               {formatUtilization(utilization)}
             </span>

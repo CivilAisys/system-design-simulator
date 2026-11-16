@@ -56,6 +56,8 @@ export function NumberField({ spec, value, onChange, check = (next) => checkNumb
       <Input
         id={id}
         inputMode="decimal"
+        // 否則名稱取自 Label，會連英文一起念
+        aria-label={spec.label}
         value={draft}
         onChange={(event) => onInput(event.target.value)}
         onBlur={() => setDraft(syncDraft(draft, value))}
