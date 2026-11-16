@@ -234,8 +234,8 @@ class SteadyStateSimulatorTest {
                         new DatabaseNode("db", "DB", NodeHealth.HEALTHY, HUGE)),
                 List.of(
                         new Edge("e1", "client", "svc", 1, 1, 1),
-                        new Edge("e2", "svc", "cache", 2, 1, 1),
-                        new Edge("e3", "cache", "db", 3, 1, 1))));
+                        new Edge("e2", "svc", "cache", 1, 1, 2),
+                        new Edge("e3", "cache", "db", 1, 1, 3))));
     }
 
     @ParameterizedTest
@@ -265,7 +265,7 @@ class SteadyStateSimulatorTest {
                         storage),
                 List.of(
                         new Edge("e1", "client", "svc", 1, 1, 1),
-                        new Edge("e2", "svc", "storage", 2, 1, 1))));
+                        new Edge("e2", "svc", "storage", 1, 1, 2))));
     }
 
     @ParameterizedTest
