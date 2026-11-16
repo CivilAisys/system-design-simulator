@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import { ChevronDown, Download, Loader2, Moon, Play, Redo2, Sun, Undo2, Upload } from 'lucide-react'
+import { ChevronDown, Download, Loader2, Moon, Network, Play, Redo2, Sun, Undo2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -171,15 +171,22 @@ function Simulator() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-3 border-b px-4 py-2">
-        <h1 className="shrink-0 font-heading text-base font-semibold">System Design Simulator</h1>
-        <Button onClick={run} disabled={running} size="sm" className="shrink-0">
+      <header className="flex items-center gap-3 border-b px-4 py-2.5">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span aria-hidden className="flex size-7.5 items-center justify-center rounded-[10px] bg-primary text-primary-foreground">
+            <Network className="size-4" />
+          </span>
+          <h1 className="font-heading text-base font-bold tracking-tight">System Design Simulator</h1>
+        </div>
+        <Button onClick={run} disabled={running} size="sm" className="shrink-0 font-semibold">
           {running ? <Loader2 className="animate-spin" /> : <Play />}
           Run
         </Button>
         <div className="flex shrink-0 items-center gap-2">
-          <Switch id="auto-run" checked={autoRun} onCheckedChange={setAutoRun} size="sm" />
-          <Label htmlFor="auto-run">Auto-run</Label>
+          <Switch id="auto-run" checked={autoRun} onCheckedChange={setAutoRun} />
+          <Label htmlFor="auto-run" className="text-[13px] text-secondary-foreground">
+            Auto-run
+          </Label>
         </div>
         {stale && (
           <Badge variant="outline" className="shrink-0" title="拓撲在上次 Run 之後改過，按 Run 重新計算">
@@ -192,27 +199,32 @@ function Simulator() {
             {message}
           </span>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={undo}
-            disabled={!editor.canUndo}
-            aria-label="復原"
-            title="復原（Ctrl/⌘+Z）"
-          >
-            <Undo2 />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={redo}
-            disabled={!editor.canRedo}
-            aria-label="重做"
-            title="重做（Ctrl/⌘+Shift+Z）"
-          >
-            <Redo2 />
-          </Button>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/* 復原、重做併成一組膠囊 */}
+          <div className="flex items-center gap-0.5 rounded-full border bg-muted p-0.5">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              onClick={undo}
+              disabled={!editor.canUndo}
+              aria-label="復原"
+              title="復原（Ctrl/⌘+Z）"
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              onClick={redo}
+              disabled={!editor.canRedo}
+              aria-label="重做"
+              title="重做（Ctrl/⌘+Shift+Z）"
+            >
+              <Redo2 />
+            </Button>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -252,7 +264,7 @@ function Simulator() {
           </DropdownMenu>
         </div>
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon-sm"
           className="shrink-0"
           onClick={toggleTheme}

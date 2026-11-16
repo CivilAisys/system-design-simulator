@@ -53,7 +53,11 @@ export function RpsEdge({
           系統設定減少動態效果時隱藏（SVG 動畫不受 CSS animation 控制） */}
       {moving &&
         Array.from({ length: moving.count }, (_, i) => (
-          <circle key={i} r={3} className="pointer-events-none fill-(--flow-particle) motion-reduce:hidden">
+          <circle
+            key={i}
+            r={3.5}
+            className="pointer-events-none fill-(--flow-particle) [filter:var(--flow-particle-glow)] motion-reduce:hidden"
+          >
             <animateMotion
               dur={`${moving.durationS}s`}
               begin={`${(-i * moving.durationS) / moving.count}s`}
@@ -66,20 +70,22 @@ export function RpsEdge({
         <EdgeLabelRenderer>
           <div
             className={cn(
-              'nodrag nopan pointer-events-none absolute rounded bg-background/80 px-1.5 py-0.5 text-xs whitespace-nowrap text-foreground',
+              'nodrag nopan pointer-events-none absolute border border-input bg-card px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-secondary-foreground',
+              // 只有一行時是膠囊，多了積壓、頻寬的第二行就改成圓角矩形
+              result?.backlogRps || result?.bandwidth ? 'rounded-xl' : 'rounded-full',
               stale && 'opacity-50',
             )}
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
           >
-            {classTag && <span className={cn('font-semibold', result && 'mr-1')}>{classTag}</span>}
+            {classTag && <span className={cn('font-bold text-foreground', result && 'mr-1')}>{classTag}</span>}
             {result && formatRps(totalRps(result.rps))}
             {/* 沒有處理成功的訊息：queue 每秒增加的筆數。放第二行，不拉長標籤 */}
             {result && result.backlogRps > 0 && (
-              <div className="font-semibold text-orange-500">積壓 +{formatRps(result.backlogRps)}/s</div>
+              <div className="text-critical-ink">積壓 +{formatRps(result.backlogRps)}/s</div>
             )}
             {/* 只有 Client 的邊有：使用者端頻寬（spec 4.7） */}
             {result?.bandwidth && (
-              <div className="text-[10px] text-muted-foreground tabular-nums">
+              <div className="text-[10px] font-medium text-muted-foreground">
                 出 {formatBytesPerSec(result.bandwidth.egressBytesPerSec)}・入{' '}
                 {formatBytesPerSec(result.bandwidth.ingressBytesPerSec)}
               </div>

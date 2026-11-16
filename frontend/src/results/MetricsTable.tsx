@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { totalRps, type ComputedResult, type Topology } from '@/api/client'
 import { DASH, formatClassRates, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
-import { STATUS_BADGE, STATUS_LABEL, WARNING_LABEL, WARNING_TITLE } from '@/canvas/status'
+import { STATUS_BADGE, STATUS_FILL, STATUS_LABEL, WARNING_LABEL, WARNING_TITLE } from '@/canvas/status'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 
 type MetricsTableProps = {
@@ -50,8 +50,8 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
             metrics.avgLatencyMs == null && status === 'OVERLOADED' ? '過載，穩態延遲無定義' : undefined
 
           return (
-            <TableRow key={node.id}>
-              <TableCell className="font-medium">
+            <TableRow key={node.id} className={cn(status === 'OVERLOADED' && 'bg-over-row')}>
+              <TableCell className="font-semibold text-foreground">
                 {node.name}
                 {/* 分片的節點：ρ 和狀態是最熱的 shard，容量是所有 shard 的加總 */}
                 {metrics.shards && (
@@ -85,12 +85,19 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
               <TableCell className="text-right tabular-nums">{formatRps(metrics.rejectedRps)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatOptionalRps(metrics.successRps)}</TableCell>
               <TableCell>
-                {status ? <Badge className={STATUS_BADGE[status]}>{STATUS_LABEL[status]}</Badge> : DASH}
+                {status ? (
+                  <Badge className={STATUS_BADGE[status]}>
+                    <span aria-hidden className={cn('size-1.5 rounded-full', STATUS_FILL[status])} />
+                    {STATUS_LABEL[status]}
+                  </Badge>
+                ) : (
+                  DASH
+                )}
                 {metrics.warnings.map((warning) => (
                   <Badge
                     key={warning}
                     variant="outline"
-                    className="ml-1 text-orange-600 dark:text-orange-400"
+                    className="ml-1 text-critical-ink"
                     title={WARNING_TITLE[warning]}
                   >
                     {WARNING_LABEL[warning]}
