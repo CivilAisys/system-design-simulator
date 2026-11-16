@@ -10,5 +10,6 @@ public enum NodeType {
     OBJECT_STORAGE,
     RATE_LIMITER,
     EXTERNAL_API,
-    READ_REPLICA
+    READ_REPLICA,
+    MESSAGE_QUEUE
 }

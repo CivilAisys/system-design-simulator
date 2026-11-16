@@ -83,7 +83,7 @@
           },
           "type" : {
             "type" : "string",
-            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE", "OBJECT_STORAGE", "RATE_LIMITER", "EXTERNAL_API", "READ_REPLICA" ]
+            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE", "OBJECT_STORAGE", "RATE_LIMITER", "EXTERNAL_API", "READ_REPLICA", "MESSAGE_QUEUE" ]
           },
           "name" : {
             "type" : "string"
@@ -117,17 +117,17 @@
           "instances" : {
             "type" : "integer",
             "format" : "int32",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA, MESSAGE_QUEUE"
           },
           "concurrency" : {
             "type" : "integer",
             "format" : "int32",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA, MESSAGE_QUEUE"
           },
           "serviceTimeMs" : {
             "type" : "number",
             "format" : "double",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA, MESSAGE_QUEUE"
           },
           "callMode" : {
             "type" : "string",
@@ -234,9 +234,14 @@
         "properties" : {
           "rps" : {
             "$ref" : "#/components/schemas/ClassRates"
+          },
+          "backlogRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "Message Queue 的下游邊：consumer 處理不完，queue 每秒增加的訊息數；其他邊為 0"
           }
         },
-        "required" : [ "rps" ]
+        "required" : [ "backlogRps", "rps" ]
       },
       "EndToEndLatency" : {
         "type" : "object",
@@ -327,10 +332,10 @@
           },
           "warnings" : {
             "type" : "array",
-            "description" : "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）",
+            "description" : "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）；BACKLOG：consumer 處理不完 Message Queue 的訊息（spec 4.2.4）",
             "items" : {
               "type" : "string",
-              "enum" : [ "REPLICATION_LAG" ]
+              "enum" : [ "REPLICATION_LAG", "BACKLOG" ]
             }
           }
         },

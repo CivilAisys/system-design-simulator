@@ -25,6 +25,12 @@ public record NodeResult(
         List<ShardResult> shards,
         List<NodeWarning> warnings) {
 
+    /** 換掉丟棄量（consumer 處理不完的訊息改記成 backlog）。 */
+    NodeResult withDropped(double dropped) {
+        return new NodeResult(arrivalRps, throughputRps, dropped, rejectedRps, successRps, endToEndMs, capacityRps,
+                utilization, avgQueueMs, avgLatencyMs, status, shards, warnings);
+    }
+
     /** 加上一個警告。 */
     NodeResult withWarning(NodeWarning warning) {
         var all = new ArrayList<>(warnings);

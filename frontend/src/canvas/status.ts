@@ -77,11 +77,13 @@ export const STATUS_LABEL: Record<Status, string> = {
   WITHIN_QUOTA: '配額內',
 }
 
-// 節點警告（spec 4.2.3），不影響狀態分級，節點和指標表都顯示
+// 節點警告（spec 4.2.3、4.2.4），不影響狀態分級，節點和指標表都顯示
 export const WARNING_LABEL: Record<NodeWarning, string> = {
   REPLICATION_LAG: '複製跟不上',
+  BACKLOG: '積壓中',
 }
 
 export const WARNING_TITLE: Record<NodeWarning, string> = {
   REPLICATION_LAG: 'Read Replica 過載，丟掉了一部分複製寫入：replication lag 會持續增加',
+  BACKLOG: 'consumer 處理不完 Message Queue 送來的訊息，超過容量的部分留在 queue 裡，backlog 持續增加',
 }

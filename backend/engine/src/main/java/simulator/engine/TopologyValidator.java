@@ -88,7 +88,7 @@ final class TopologyValidator {
         if (node instanceof ClientNode && upstreams.containsKey(node.id())) {
             nodeError(node, "CLIENT_HAS_INPUT", "Client " + name + " 不能有上游連線");
         }
-        if (TopologyGraph.splitsByWeight(node) && downstream == 0) {
+        if ((TopologyGraph.splitsByWeight(node) || node instanceof MessageQueueNode) && downstream == 0) {
             nodeError(node, "NO_DOWNSTREAM", name + " 沒有下游，請求沒有地方送");
         }
         // CDN 沿用 Cache 的錯誤碼，訊息用它自己的 type 名稱
@@ -108,6 +108,14 @@ final class TopologyValidator {
             nodeError(node, "DATABASE_HAS_OUTPUT", node instanceof ObjectStorageNode
                     ? "Object Storage " + name + " 不能有下游連線"
                     : "Database " + name + " 只能連到 Read Replica");
+        }
+        if (node instanceof MessageQueueNode) {
+            long nonService = graph.outgoing(node.id()).stream()
+                    .filter(edge -> !(graph.node(edge.target()) instanceof ServiceNode)).count();
+            if (nonService > 0) {
+                nodeError(node, "QUEUE_CONSUMER_TYPE",
+                        "Message Queue " + name + " 只能連到 Service（consumer group），目前有 " + nonService + " 個不是");
+            }
         }
         if (node instanceof ReadReplicaNode) {
             int primaryCount = primaries.getOrDefault(node.id(), Set.of()).size();
@@ -154,6 +162,7 @@ final class TopologyValidator {
                 checkShards(storage.shards(), where, report);
             }
             case ReadReplicaNode replica -> checkCapacityParams(replica.capacityParams(), where, report);
+            case MessageQueueNode queue -> checkCapacityParams(queue.capacityParams(), where, report);
             case ExternalApiNode api -> {
                 requireBetween(api.latencyMs(), 0, MAX_LATENCY_MS, where, "latencyMs", report);
                 requirePositiveRps(api.quotaRps(), where, "quotaRps", report);

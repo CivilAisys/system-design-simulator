@@ -28,6 +28,8 @@ public final class SteadyStateSimulator implements Simulator {
         Map<String, EdgeResult> edgeResults = new HashMap<>();
         // Client 的結果要等端到端延遲與成功率算完才能建立
         Map<String, ClassRates> sentByClient = new HashMap<>();
+        // consumer → Message Queue 送給它的邊
+        Map<String, List<Edge>> queuedByConsumer = new HashMap<>();
         List<Node> order = graph.topologicalOrder();
         for (Node node : order) {
             ClassRates arrival = arrivals.get(node.id());
@@ -47,15 +49,23 @@ public final class SteadyStateSimulator implements Simulator {
                 case RateLimiterNode limiter -> admit(node.id(), limiter.limitRps(), 0, Status.LIMITING,
                         Status.NOT_LIMITING, arrival, nodeResults);
                 case ReadReplicaNode replica -> replicate(replica, graph.primaryOf(replica.id()), arrival, nodeResults);
+                case MessageQueueNode queue -> process(queue.capacityParams(), arrival, node.id(), nodeResults);
                 case ExternalApiNode api -> admit(node.id(), api.quotaRps(), api.latencyMs(), Status.OVER_QUOTA,
                         Status.WITHIN_QUOTA, arrival, nodeResults);
             };
+            List<Edge> queued = queuedByConsumer.getOrDefault(node.id(), List.of());
+            if (!queued.isEmpty()) {
+                keepInQueue(node.id(), queued, nodeResults, edgeResults);
+            }
 
             for (Edge edge : graph.outgoing(node.id())) {
                 var rps = new ClassRates(processed.read() * graph.visits(edge, true),
                         processed.write() * graph.visits(edge, false));
                 edgeResults.put(edge.id(), new EdgeResult(rps));
                 arrivals.merge(edge.target(), rps, ClassRates::plus);
+                if (graph.feedsConsumer(edge)) {
+                    queuedByConsumer.computeIfAbsent(edge.target(), id -> new ArrayList<>()).add(edge);
+                }
             }
         }
 
@@ -93,6 +103,29 @@ public final class SteadyStateSimulator implements Simulator {
                 null, null, 0.0, latencyMs, exceeded ? over : within, null,
                 List.of()));
         return passed;
+    }
+
+    /**
+     * consumer 處理不完的訊息留在 queue 裡，不算丟棄（spec 4.2.4）：超過容量的部分依到達量的比例分給各條邊，
+     * Message Queue 送來的那份記成那條邊的 backlog 成長率，從節點的丟棄量扣掉；同步送來的那份照常丟棄。
+     * 處理量不變（容量），往下游送的流量也不變。
+     */
+    private static void keepInQueue(String nodeId, List<Edge> queued, Map<String, NodeResult> nodeResults,
+            Map<String, EdgeResult> edgeResults) {
+        NodeResult result = nodeResults.get(nodeId);
+        double arrival = result.arrivalRps().total();
+        if (result.droppedRps() <= 0 || arrival <= 0) {
+            return;
+        }
+        double excessShare = result.droppedRps() / arrival;
+        double backlog = 0;
+        for (Edge edge : queued) {
+            EdgeResult edgeResult = edgeResults.get(edge.id());
+            double edgeBacklog = edgeResult.rps().total() * excessShare;
+            edgeResults.put(edge.id(), new EdgeResult(edgeResult.rps(), edgeBacklog));
+            backlog += edgeBacklog;
+        }
+        nodeResults.put(nodeId, result.withDropped(result.droppedRps() - backlog).withWarning(NodeWarning.BACKLOG));
     }
 
     /**

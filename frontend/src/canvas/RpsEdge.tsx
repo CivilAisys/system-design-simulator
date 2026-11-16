@@ -73,6 +73,10 @@ export function RpsEdge({
           >
             {classTag && <span className={cn('font-semibold', result && 'mr-1')}>{classTag}</span>}
             {result && formatRps(totalRps(result.rps))}
+            {/* consumer 處理不完：queue 每秒增加的訊息數 */}
+            {result && result.backlogRps > 0 && (
+              <span className="ml-1 font-semibold text-orange-500">積壓 +{formatRps(result.backlogRps)}/s</span>
+            )}
           </div>
         </EdgeLabelRenderer>
       )}

@@ -10,6 +10,7 @@ import simulator.engine.ClientNode;
 import simulator.engine.DatabaseNode;
 import simulator.engine.ExternalApiNode;
 import simulator.engine.LoadBalancerNode;
+import simulator.engine.MessageQueueNode;
 import simulator.engine.Node;
 import simulator.engine.NodeHealth;
 import simulator.engine.ObjectStorageNode;
@@ -47,6 +48,7 @@ public record NodeDto(
             case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams());
             case RATE_LIMITER -> new RateLimiterNode(id, name, health, require(params.limitRps(), "limitRps"));
             case READ_REPLICA -> new ReadReplicaNode(id, name, health, capacityParams());
+            case MESSAGE_QUEUE -> new MessageQueueNode(id, name, health, capacityParams());
             case EXTERNAL_API -> new ExternalApiNode(id, name, health,
                     require(params.latencyMs(), "latencyMs"), require(params.quotaRps(), "quotaRps"));
         };
