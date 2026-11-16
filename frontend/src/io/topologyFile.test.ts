@@ -208,7 +208,7 @@ describe('格式錯誤', () => {
       ])
     })
 
-    it.each(['BOTH', 'read', 1])('requestClass 不是 ALL、READ、WRITE：%s', (value) => {
+    it.each(['BOTH', 'read', 1, null])('requestClass 不是 ALL、READ、WRITE：%s', (value) => {
       expect(errorsOf((f) => void Object.assign(f.edges[3], { requestClass: value }))).toEqual([
         'edges[3]（id "e4"）：requestClass 必須是 ALL、READ、WRITE 其中之一',
       ])

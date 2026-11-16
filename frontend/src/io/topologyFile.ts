@@ -209,14 +209,15 @@ function toEdge(
     }
     numbers[field] = value
   }
-  // 省略時為 ALL：每個 class 都會走這條邊
-  const requestClass = raw.requestClass ?? 'ALL'
+  // 省略時為 ALL：每個 class 都會走這條邊。和數值欄位一樣，給了 null 是格式錯誤
+  const requestClass = raw.requestClass === undefined ? 'ALL' : raw.requestClass
   const classes = EDGE_CHOICE_SPECS.requestClass.options.map((option) => option.value)
-  if (!classes.includes(requestClass as Edge['requestClass'])) {
+  const known = classes.find((value) => value === requestClass)
+  if (known == null) {
     fail(`requestClass 必須是 ${classes.join('、')} 其中之一`)
     return null
   }
-  return { id, source, target, ...numbers, requestClass: requestClass as Edge['requestClass'] }
+  return { id, source, target, ...numbers, requestClass: known }
 }
 
 function endpoint(
