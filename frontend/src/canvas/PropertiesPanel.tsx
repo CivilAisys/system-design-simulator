@@ -7,9 +7,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { NODE_KINDS } from './catalog'
+import { cn } from '@/lib/utils'
+import { NODE_KINDS, shownShards } from './catalog'
+import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
+import { workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
+import { ParamLabel } from './ParamLabel'
 import {
   checkNodeParam,
   EDGE_CHOICE_SPECS,
@@ -21,6 +25,7 @@ import {
   type ChoiceSpec,
 } from './params'
 import type { SimFlowNode } from './SimNode'
+import { STATUS_BADGE, STATUS_FILL, STATUS_TEXT } from './status'
 import type { RpsFlowEdge } from './RpsEdge'
 import type { EdgePatch, NodePatch } from './useTopologyEditor'
 
@@ -70,8 +75,9 @@ type NodePropertiesProps = {
 function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProps) {
   const nameId = useId()
   const node = flowNode.data.node
-  const { label, icon: Icon, numberParams, choiceParams } = NODE_KINDS[node.type]
+  const { label, icon, category, numberParams, choiceParams } = NODE_KINDS[node.type]
   const utilization = result?.utilization ?? null
+  const status = result?.status ?? null
 
   // 分片時才有熱點：省略時平均分配，顯示平均值；改了之後就是明確的占比。緊接在 shards 後面顯示
   const hotShareField = (node.params.shards ?? 1) > 1 && (
@@ -103,7 +109,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
 
   return (
     <div className="grid gap-4">
-      <PanelHeader title={label} icon={<Icon className="size-4 text-muted-foreground" />} nodeId={node.id} />
+      <PanelHeader title={label} icon={<CategoryIcon icon={icon} category={category} />} nodeId={node.id} />
       <div className="grid gap-1.5">
         <Label htmlFor={nameId}>名稱</Label>
         <Input id={nameId} value={node.name} onChange={(event) => onUpdate(node.id, { name: event.target.value })} />
@@ -117,6 +123,15 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
             onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
           />
           {param === 'shards' && hotShareField}
+          {param === 'instances' && (
+            <p className="-mt-3 text-xs text-muted-foreground">
+              {workersHint(
+                nodeParam(node.params, 'instances'),
+                nodeParam(node.params, 'concurrency'),
+                shownShards(node, flowNode.data.mirroredShards),
+              )}
+            </p>
+          )}
         </Fragment>
       ))}
       {/* 磁碟容量選填：沒設定時不估算磁碟幾天後會滿（spec 4.8） */}
@@ -138,8 +153,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
               check={(value) => checkNodeParam(node.params, 'diskGbPerShard', value)}
               onChange={(value) => onUpdate(node.id, { params: { diskGbPerShard: value } })}
             />
-            <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
-              <span>每個 shard 的磁碟容量</span>
+            <div className="flex justify-end text-xs">
               <Button
                 variant="link"
                 size="sm"
@@ -161,12 +175,19 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
       ))}
       {/* Client 沒有容量，ρ 不適用；Run 之前也還沒有值 */}
       {utilization !== null && (
-        <div className="grid gap-1.5">
+        // 底色跟著狀態（STATUS_BADGE 的淡底和深色文字）
+        <div className={cn('grid gap-2.5 rounded-xl bg-muted p-3.5', status && STATUS_BADGE[status])}>
           <div className="flex items-baseline justify-between text-sm">
-            <span>ρ</span>
-            <span className="tabular-nums">{formatUtilization(utilization)}</span>
+            <ParamLabel label="使用率" labelEn="ρ" />
+            <span className={cn('font-heading text-[22px] font-bold', status && STATUS_TEXT[status])}>
+              {formatUtilization(utilization)}
+            </span>
           </div>
-          <Progress value={Math.min(utilization, 1) * 100} aria-label="ρ" />
+          <Progress
+            value={Math.min(utilization, 1) * 100}
+            aria-label="使用率"
+            indicatorClassName={status ? STATUS_FILL[status] : undefined}
+          />
         </div>
       )}
     </div>
@@ -180,10 +201,12 @@ type ChoiceFieldProps<V extends string> = {
 }
 
 function ChoiceField<V extends string>({ spec, value, onChange }: ChoiceFieldProps<V>) {
-  const { label, options } = spec
+  const { label, labelEn, options } = spec
   return (
     <div className="grid gap-1.5">
-      <Label>{label}</Label>
+      <Label>
+        <ParamLabel label={label} labelEn={labelEn} />
+      </Label>
       <Select
         value={value}
         // 選項只有 options 裡的值
@@ -254,7 +277,7 @@ function PanelHeader({ title, icon, nodeId, edgeId }: PanelHeaderProps) {
   return (
     <div className="flex items-center gap-2">
       {icon}
-      <h2 className="min-w-0 flex-1 truncate font-heading text-sm font-semibold" title={title}>
+      <h2 className="min-w-0 flex-1 truncate font-heading text-[15px] font-bold" title={title}>
         {title}
       </h2>
       <Button

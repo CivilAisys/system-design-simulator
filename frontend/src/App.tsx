@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import { ChevronDown, Download, Loader2, Moon, Play, Redo2, Sun, Undo2, Upload } from 'lucide-react'
+import { ChevronDown, Download, Loader2, Moon, Network, Play, Redo2, Sun, Undo2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
 import { findFreePosition } from '@/canvas/placement'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
+import { isAlerting } from '@/canvas/status'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
 import { EXAMPLES } from '@/examples'
 import { restoreTopology, saveTopology, type Restored } from '@/io/autosave'
@@ -171,15 +172,22 @@ function Simulator() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-3 border-b px-4 py-2">
-        <h1 className="shrink-0 font-heading text-base font-semibold">System Design Simulator</h1>
-        <Button onClick={run} disabled={running} size="sm" className="shrink-0">
+      <header className="flex items-center gap-3 border-b px-4 py-2.5">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span aria-hidden className="flex size-7.5 items-center justify-center rounded-[10px] bg-primary text-primary-foreground">
+            <Network className="size-4" />
+          </span>
+          <h1 className="font-heading text-base font-bold tracking-tight">System Design Simulator</h1>
+        </div>
+        <Button onClick={run} disabled={running} size="sm" className="shrink-0 font-semibold">
           {running ? <Loader2 className="animate-spin" /> : <Play />}
           Run
         </Button>
         <div className="flex shrink-0 items-center gap-2">
-          <Switch id="auto-run" checked={autoRun} onCheckedChange={setAutoRun} size="sm" />
-          <Label htmlFor="auto-run">Auto-run</Label>
+          <Switch id="auto-run" checked={autoRun} onCheckedChange={setAutoRun} />
+          <Label htmlFor="auto-run" className="text-[13px] text-secondary-foreground">
+            Auto-run
+          </Label>
         </div>
         {stale && (
           <Badge variant="outline" className="shrink-0" title="拓撲在上次 Run 之後改過，按 Run 重新計算">
@@ -192,27 +200,30 @@ function Simulator() {
             {message}
           </span>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={undo}
-            disabled={!editor.canUndo}
-            aria-label="復原"
-            title="復原（Ctrl/⌘+Z）"
-          >
-            <Undo2 />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={redo}
-            disabled={!editor.canRedo}
-            aria-label="重做"
-            title="重做（Ctrl/⌘+Shift+Z）"
-          >
-            <Redo2 />
-          </Button>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/* 復原、重做併成一組膠囊 */}
+          <div className="flex items-center gap-0.5 rounded-full border bg-muted p-0.5">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={undo}
+              disabled={!editor.canUndo}
+              aria-label="復原"
+              title="復原（Ctrl/⌘+Z）"
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={redo}
+              disabled={!editor.canRedo}
+              aria-label="重做"
+              title="重做（Ctrl/⌘+Shift+Z）"
+            >
+              <Redo2 />
+            </Button>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -252,8 +263,8 @@ function Simulator() {
           </DropdownMenu>
         </div>
         <Button
-          variant="ghost"
-          size="icon-sm"
+          variant="outline"
+          size="icon"
           className="shrink-0"
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? '切換為淺色' : '切換為深色'}
@@ -263,7 +274,18 @@ function Simulator() {
       </header>
       <SidebarProvider className="min-h-0 flex-1">
         <Palette onAdd={addAtCenter} />
-        <main ref={canvasRef} className="min-w-0 flex-1">
+        <main ref={canvasRef} className="relative min-w-0 flex-1">
+          {/* 通知放在畫布右上角：sonner 預設 fixed 貼著視窗，會蓋住屬性面板和工具列，
+              改成 absolute 跟著畫布（結果面板拉高時也留在畫布裡）。
+              sonner 的寬度固定 356px，畫布窄時縮成畫布寬度，不往左蓋到元件面板 */}
+          <Toaster
+            theme={theme}
+            position="top-right"
+            offset={16}
+            closeButton
+            style={{ position: 'absolute', width: 'min(356px, calc(100% - 32px))' }}
+            toastOptions={{ style: { width: '100%' } }}
+          />
           <Canvas
             nodes={editor.nodes}
             edges={editor.edges}
@@ -302,7 +324,6 @@ function Simulator() {
           onFocusError={focusError}
         />
       </section>
-      <Toaster theme={theme} position="top-right" />
     </div>
   )
 }
@@ -386,7 +407,7 @@ function useBottleneckToast() {
     const id = isComputed(result) ? result.summary.bottleneckNodeId : null
     const metrics = id == null ? undefined : result.nodes[id]
     // 驗證錯誤或沒有瓶頸時，上一次的通知會和這次的結果互相矛盾
-    if (id == null || !metrics?.status || metrics.status === 'OK') {
+    if (id == null || !metrics || !isAlerting(metrics.status)) {
       clear()
       return
     }

@@ -16,7 +16,7 @@ export function formatClassRates({ read, write }: ClassRates): string {
   return `read ${formatRpsNumber(read)}・write ${formatRpsNumber(write)}`
 }
 
-function formatRpsNumber(rps: number): string {
+export function formatRpsNumber(rps: number): string {
   // 不到 0.5 的正數四捨五入會變成 0，看起來像沒有流量
   if (rps > 0 && rps < 0.5) return '< 1'
   return Math.round(rps).toLocaleString()
@@ -76,4 +76,10 @@ export function formatBitsPerSec(bytesPerSec: number): string {
 
 export function formatPercent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`
+}
+
+// 成功率 = 1 − dropRate。丟棄很少時取一位小數會變成「100.0%」，看起來像沒有丟棄
+export function formatSuccessRate(dropRate: number): string {
+  const text = formatPercent(1 - dropRate)
+  return dropRate > 0 && text === '100.0%' ? '> 99.9%' : text
 }

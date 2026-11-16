@@ -10,6 +10,7 @@ import {
   formatOptionalRps,
   formatPercent,
   formatRps,
+  formatSuccessRate,
   formatUtilization,
 } from './format'
 
@@ -91,6 +92,20 @@ describe('formatPercent', () => {
     expect(formatPercent(1)).toBe('100.0%')
     expect(formatPercent(0.9876)).toBe('98.8%')
     expect(formatPercent(0.0004)).toBe('0.0%')
+  })
+})
+
+describe('formatSuccessRate', () => {
+  it('顯示 1 − dropRate', () => {
+    expect(formatSuccessRate(0)).toBe('100.0%')
+    expect(formatSuccessRate(0.005)).toBe('99.5%')
+    expect(formatSuccessRate(1)).toBe('0.0%')
+  })
+
+  it('有丟棄但四捨五入成 100.0% 時不顯示 100.0%', () => {
+    expect(formatSuccessRate(0.0004)).toBe('> 99.9%')
+    expect(formatSuccessRate(0.0005)).toBe('> 99.9%')
+    expect(formatSuccessRate(0.0006)).toBe('99.9%')
   })
 })
 

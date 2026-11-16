@@ -7,7 +7,7 @@ import { totalRps, type NodeResult, type SimulationResult, type Topology } from 
 import type { Theme } from '@/theme'
 import { formatRps } from '@/canvas/format'
 import { isReplicationSource } from '@/canvas/catalog'
-import { NEUTRAL_HEX, STATUS_HEX } from '@/canvas/status'
+import { SANKEY_COLORS, SANKEY_STATUS_COLOR, type SankeyColors } from '@/canvas/status'
 
 // 只載入用到的部分，避免把整個 ECharts 打包進來
 echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
@@ -18,10 +18,10 @@ type SankeyOption = echarts.ComposeOption<SankeySeriesOption | TooltipComponentO
 // id 用 \u0000 開頭，不會和使用者的節點 id 撞在一起
 // consumer 處理不完、留在 queue 裡的訊息（spec 4.2.4）也是一個終點，數值是到達 − 處理 − 丟棄。
 // 邊的 backlog 還包含 consumer 處理了、但下游失敗的訊息，那些已經流到下游、算在下游的丟棄裡，不再畫一次
-const SINKS = [
-  { id: '\u0000dropped', name: '丟棄', color: STATUS_HEX.OVERLOADED, rps: (node: NodeResult) => node.droppedRps },
-  { id: '\u0000rejected', name: '拒絕', color: NEUTRAL_HEX, rps: (node: NodeResult) => node.rejectedRps },
-  { id: '\u0000backlog', name: '積壓', color: STATUS_HEX.CRITICAL, rps: queuedExcess },
+const SINKS: { id: string; name: string; color: keyof SankeyColors; rps: (node: NodeResult) => number }[] = [
+  { id: '\u0000dropped', name: '丟棄', color: 'over', rps: (node) => node.droppedRps },
+  { id: '\u0000rejected', name: '拒絕', color: 'neutral', rps: (node) => node.rejectedRps },
+  { id: '\u0000backlog', name: '積壓', color: 'critical', rps: queuedExcess },
 ]
 
 // 浮點誤差可能留下極小的值
@@ -66,8 +66,7 @@ export function FlowSankey({ topology, result, theme }: FlowSankeyProps) {
 }
 
 function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme): SankeyOption {
-  const dark = theme === 'dark'
-  const textColor = dark ? '#e5e5e5' : '#171717'
+  const colors = SANKEY_COLORS[theme]
   // 流量和邊上的 label 用同一個數字：read + write
   const types = new Map(topology.nodes.map((node) => [node.id, node.type]))
   const edgeLinks = topology.edges.flatMap((edge) => {
@@ -108,12 +107,12 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
       .map((node) => {
         const status = result.nodes[node.id]?.status
         // 用 id 對應連線，名稱重複也不會混在一起
-        return { id: node.id, name: node.name, itemStyle: { color: status ? STATUS_HEX[status] : NEUTRAL_HEX } }
+        return { id: node.id, name: node.name, itemStyle: { color: colors[status ? SANKEY_STATUS_COLOR[status] : 'neutral'] } }
       }),
     ...SINKS.filter((sink) => linked.has(sink.id)).map((sink) => ({
       id: sink.id,
       name: sink.name,
-      itemStyle: { color: sink.color },
+      itemStyle: { color: colors[sink.color] },
     })),
   ]
   const names = new Map([
@@ -125,9 +124,9 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
     tooltip: {
       trigger: 'item',
       // ECharts 預設白底，深色主題要自己給
-      backgroundColor: dark ? '#262626' : '#ffffff',
-      borderColor: dark ? '#404040' : '#e5e5e5',
-      textStyle: { color: textColor },
+      backgroundColor: colors.tooltip,
+      borderColor: colors.tooltipBorder,
+      textStyle: { color: colors.text },
       formatter: (params) => {
         const item = Array.isArray(params) ? params[0] : params
         if (item?.dataType !== 'edge') return `${item?.name ?? ''}：${formatRps(Number(item?.value ?? 0))}`
@@ -150,7 +149,7 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
         nodeGap: 16,
         emphasis: { focus: 'adjacency' },
         // 預設標籤是用來對應連線的 id，要明確指定顯示 name
-        label: { color: textColor, formatter: '{b}' },
+        label: { color: colors.text, formatter: '{b}' },
         lineStyle: { color: 'gradient', opacity: 0.35 },
       },
     ],

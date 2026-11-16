@@ -7,6 +7,9 @@ export type ClassLatencies = components['schemas']['ClassLatencies']
 export type RequestClass = keyof ClassLatencies
 export const REQUEST_CLASSES: RequestClass[] = ['read', 'write']
 
+// 「近似」標記的說明，指標表和重點數字共用
+export const APPROXIMATE_TITLE = '平行呼叫取各下游平均值的最大值，會低估真實延遲'
+
 // ms 為 null 時的說明（spec 4.3）。路徑、過載節點和原因都由後端判斷，這裡只把 id 換成名稱
 export function undefinedReasonText(latency: EndToEndLatency, requestClass: RequestClass, topology: Topology): string {
   switch (latency.undefinedReason) {

@@ -1,10 +1,14 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
-import { NODE_KINDS } from './catalog'
+import { NODE_KINDS, shownShards } from './catalog'
+import { CATEGORY_DOT } from './category'
+import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
+import { instanceRack } from './instanceRack'
+import { Rack } from './Rack'
 import { ShardGrid } from './ShardGrid'
-import { STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
+import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
 
 export type SimNodeData = {
@@ -22,17 +26,21 @@ export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { node, result, errors, stale, mirroredShards } = data
-  const { icon: Icon, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
+  const { icon, category, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
-  const shards = node.params.shards ?? mirroredShards ?? 1
+  const shards = shownShards(node, mirroredShards)
+  const rack = instanceRack(node, shards)
 
   return (
     <div
       title={errors && errorsTitle(errors, stale)}
       className={cn(
-        'relative min-w-36 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm',
-        selected && 'border-primary',
+        'relative min-w-36 rounded-card border border-input bg-card px-3 py-2.5 text-card-foreground',
+        // 沒有上游的節點（Client）是流量的來源，不是機器：虛線外框、沒有陰影
+        hasInput ? 'shadow-(--node-shadow)' : 'border-dashed',
+        // 選取用強調色的外圈，和狀態色的外框、光暈分開
+        selected && 'outline-2 outline-offset-6 outline-primary',
       )}
     >
       {/* 外框和光暈單獨一層，過載脈動時只有光暈閃，文字不跟著閃。
@@ -41,7 +49,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         <div
           aria-hidden
           className={cn(
-            'pointer-events-none absolute -inset-px rounded-lg',
+            'pointer-events-none absolute -inset-px rounded-card',
             errors ? 'ring-2 ring-destructive shadow-lg shadow-destructive/40' : status && STATUS_GLOW[status],
             stale
               ? 'opacity-30'
@@ -50,26 +58,41 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         />
       )}
       {hasInput && <Handle type="target" position={Position.Left} />}
-      <div className="flex items-center gap-2">
-        <Icon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="font-medium">{node.name}</span>
-      </div>
-      {result && (
-        <div className="mt-1 flex items-baseline justify-between gap-3 text-xs">
-          <span className="text-muted-foreground">
-            {nodeMetric === 'rejected'
-              ? `拒絕 ${formatRps(result.rejectedRps)}`
-              : `ρ ${formatUtilization(result.utilization)}`}
-          </span>
-          {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
+      <div className="flex items-center gap-2.5">
+        <CategoryIcon icon={icon} category={category} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold">{node.name}</div>
+          {result && (
+            <div className="mt-0.5 flex items-center justify-between gap-3 text-xs">
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                {status && <span aria-hidden className={cn('size-2 rounded-full', STATUS_FILL[status])} />}
+                {nodeMetric === 'rejected'
+                  ? `拒絕 ${formatRps(result.rejectedRps)}`
+                  : `ρ ${formatUtilization(result.utilization)}`}
+              </span>
+              {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
+            </div>
+          )}
         </div>
-      )}
+        {rack && <Rack rack={rack} status={status} stale={stale} />}
+      </div>
       {result?.warnings.map((warning) => (
-        <p key={warning} className="mt-1 text-xs font-semibold text-orange-500" title={WARNING_TITLE[warning]}>
+        <p key={warning} className="mt-1 text-xs font-semibold text-critical-ink" title={WARNING_TITLE[warning]}>
           ⚠ {WARNING_LABEL[warning]}
         </p>
       ))}
       {shards > 1 && <ShardGrid count={shards} shards={result?.shards} stale={stale} />}
+      {/* 畫在狀態外框之後，不被外框蓋住 */}
+      {rack && (
+        <span
+          className={cn(
+            'pointer-events-none absolute -top-2.5 -right-2.5 rounded-full border-2 border-canvas px-1.75 py-px text-[11px] font-bold text-card',
+            CATEGORY_DOT[category],
+          )}
+        >
+          {rack.label}
+        </span>
+      )}
       {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>
   )

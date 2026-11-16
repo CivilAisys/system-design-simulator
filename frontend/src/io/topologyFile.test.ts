@@ -245,7 +245,7 @@ describe('格式錯誤', () => {
 
     it('type 不是已知的類型', () => {
       expect(errorsOf((f) => void (f.nodes[4].type = 'QUEUE'))).toEqual([
-        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、READ_REPLICA、OBJECT_STORAGE、RATE_LIMITER、EXTERNAL_API、MESSAGE_QUEUE 其中之一',
+        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、CDN、RATE_LIMITER、SERVICE、EXTERNAL_API、CACHE、DATABASE、READ_REPLICA、OBJECT_STORAGE、MESSAGE_QUEUE 其中之一',
       ])
     })
 

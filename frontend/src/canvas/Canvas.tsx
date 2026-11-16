@@ -9,7 +9,6 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
 import { totalRps, type Edge, type NodeType, type SimulationResult } from '@/api/client'
 import { NODE_KINDS, PALETTE, type PaletteItem } from './catalog'
 import { SimNode, type SimFlowNode } from './SimNode'
@@ -134,8 +133,9 @@ export function Canvas({
       fitView
       proOptions={{ hideAttribution: true }}
     >
-      <Background />
-      <Controls />
+      {/* 點陣格線，顏色在 index.css 跟著主題 */}
+      <Background gap={22} size={1.2} />
+      <Controls orientation="horizontal" />
     </ReactFlow>
   )
 }
