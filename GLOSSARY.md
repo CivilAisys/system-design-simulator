@@ -59,8 +59,8 @@ _Avoid_: input rps、load
 一個 Node 每秒實際處理完的請求數，過載時等於容量。
 
 **Dropped（丟棄量）**:
-到達但超出容量、沒被處理的請求數。
-_Avoid_: lost、rejected、failed
+到達但超出容量、沒被處理的請求數。Rate Limiter 刻意擋下的是拒絕量，不是丟棄量。
+_Avoid_: lost、failed
 
 **Rejected（拒絕量）**:
 Rate Limiter 超過上限、刻意擋下的請求數。和丟棄量是不同的指標，但兩者都算進丟棄率。

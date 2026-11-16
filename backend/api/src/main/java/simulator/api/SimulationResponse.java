@@ -102,7 +102,8 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
             @Schema(requiredMode = REQUIRED) double throughputRps,
             @Schema(requiredMode = REQUIRED, description = "超過容量、沒被處理的請求數") double droppedRps,
-            @Schema(requiredMode = REQUIRED, description = "Rate Limiter 超過 limitRps 拒絕的請求數，其他節點為 0") double rejectedRps,
+            @Schema(requiredMode = REQUIRED, description = "Rate Limiter 超過 limitRps 拒絕的請求數，其他節點為 0")
+            double rejectedRps,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有：這個 Client 的請求每秒有幾個完整成功（spec 4.3.1）")
             Double successRps,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有")

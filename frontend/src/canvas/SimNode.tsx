@@ -19,7 +19,7 @@ export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { node, result, errors, stale } = data
-  const { icon: Icon, hasInput, hasOutput } = NODE_KINDS[node.type]
+  const { icon: Icon, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
 
@@ -52,9 +52,8 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       </div>
       {result && (
         <div className="mt-1 flex items-baseline justify-between gap-3 text-xs">
-          {/* Rate Limiter 沒有 ρ，改顯示拒絕量 */}
           <span className="text-muted-foreground">
-            {node.type === 'RATE_LIMITER'
+            {nodeMetric === 'rejected'
               ? `拒絕 ${formatRps(result.rejectedRps)}`
               : `ρ ${formatUtilization(result.utilization)}`}
           </span>

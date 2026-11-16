@@ -25,6 +25,8 @@ type NodeKind = {
   edgeParams: EdgeNumberParam[]
   // 出邊的種類，依 source 的 type 決定
   outputEdgeKind: EdgeKind
+  // Run 之後節點上顯示的指標：ρ，或沒有 ρ 的 Rate Limiter 改顯示拒絕量
+  nodeMetric: 'utilization' | 'rejected'
 }
 
 const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
@@ -54,6 +56,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     // weight 只對 Client／LB 的出邊有意義，callsPerRequest 只對 Service 的出邊有意義
     edgeParams: ['weight', 'latencyMs'],
     outputEdgeKind: 'SYNC',
+    nodeMetric: 'utilization',
   },
   LOAD_BALANCER: {
     label: 'Load Balancer',
@@ -66,6 +69,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasOutput: true,
     edgeParams: ['weight', 'latencyMs'],
     outputEdgeKind: 'SYNC',
+    nodeMetric: 'utilization',
   },
   SERVICE: {
     label: 'Service',
@@ -78,6 +82,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasOutput: true,
     edgeParams: ['callsPerRequest', 'latencyMs'],
     outputEdgeKind: 'SYNC',
+    nodeMetric: 'utilization',
   },
   CACHE: {
     label: 'Cache',
@@ -90,6 +95,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasOutput: true,
     edgeParams: ['latencyMs'],
     outputEdgeKind: 'SYNC',
+    nodeMetric: 'utilization',
   },
   // 計算和 Cache 相同（spec 3.3），只有預設值、圖示和名稱不同
   CDN: {
@@ -103,6 +109,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasOutput: true,
     edgeParams: ['latencyMs'],
     outputEdgeKind: 'SYNC',
+    nodeMetric: 'utilization',
   },
   DATABASE: {
     label: 'Database',
@@ -115,6 +122,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasOutput: false,
     edgeParams: ['latencyMs'],
     outputEdgeKind: 'SYNC',
+    nodeMetric: 'utilization',
   },
   // 計算和 Database 相同（spec 3.3），只有預設值、圖示和名稱不同
   OBJECT_STORAGE: {
@@ -128,6 +136,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasOutput: false,
     edgeParams: ['latencyMs'],
     outputEdgeKind: 'SYNC',
+    nodeMetric: 'utilization',
   },
   // 沒有 M/M/c：只有全域上限 limitRps，超過的部分拒絕（spec 3.3）
   RATE_LIMITER: {
@@ -141,6 +150,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasOutput: true,
     edgeParams: ['latencyMs'],
     outputEdgeKind: 'SYNC',
+    nodeMetric: 'rejected',
   },
 }
 
