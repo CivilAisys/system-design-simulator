@@ -7,7 +7,7 @@ import { totalRps, type NodeResult, type SimulationResult, type Topology } from 
 import type { Theme } from '@/theme'
 import { formatRps } from '@/canvas/format'
 import { isReplicationSource } from '@/canvas/catalog'
-import { SANKEY_COLORS, sankeyStatusColor, type SankeyColors } from '@/canvas/status'
+import { SANKEY_COLORS, SANKEY_STATUS_COLOR, type SankeyColors } from '@/canvas/status'
 
 // 只載入用到的部分，避免把整個 ECharts 打包進來
 echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
@@ -107,7 +107,7 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
       .map((node) => {
         const status = result.nodes[node.id]?.status
         // 用 id 對應連線，名稱重複也不會混在一起
-        return { id: node.id, name: node.name, itemStyle: { color: sankeyStatusColor(colors, status) } }
+        return { id: node.id, name: node.name, itemStyle: { color: colors[status ? SANKEY_STATUS_COLOR[status] : 'neutral'] } }
       }),
     ...SINKS.filter((sink) => linked.has(sink.id)).map((sink) => ({
       id: sink.id,

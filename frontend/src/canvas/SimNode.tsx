@@ -33,7 +33,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       className={cn(
         'relative min-w-36 rounded-card border border-input bg-card px-3 py-2.5 text-card-foreground shadow-(--node-shadow)',
         // 選取用強調色的外圈，和狀態色的外框、光暈分開
-        selected && 'outline-2 outline-offset-4 outline-primary',
+        selected && 'outline-2 outline-offset-6 outline-primary',
       )}
     >
       {/* 外框和光暈單獨一層，過載脈動時只有光暈閃，文字不跟著閃。

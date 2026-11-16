@@ -22,7 +22,7 @@ import {
   type ChoiceSpec,
 } from './params'
 import type { SimFlowNode } from './SimNode'
-import { STATUS_FILL, STATUS_TEXT } from './status'
+import { STATUS_BADGE, STATUS_FILL, STATUS_TEXT } from './status'
 import type { RpsFlowEdge } from './RpsEdge'
 import type { EdgePatch, NodePatch } from './useTopologyEditor'
 
@@ -164,11 +164,10 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
       ))}
       {/* Client 沒有容量，ρ 不適用；Run 之前也還沒有值 */}
       {utilization !== null && (
-        <div className="grid gap-2.5 rounded-xl bg-muted p-3.5">
+        // 底色跟著狀態（STATUS_BADGE 的淡底和深色文字）
+        <div className={cn('grid gap-2.5 rounded-xl bg-muted p-3.5', status && STATUS_BADGE[status])}>
           <div className="flex items-baseline justify-between text-sm">
-            <span>
-              使用率<span className="ml-1 text-xs text-muted-foreground">ρ</span>
-            </span>
+            <span>ρ</span>
             <span className={cn('font-heading text-[22px] font-bold', status && STATUS_TEXT[status])}>
               {formatUtilization(utilization)}
             </span>

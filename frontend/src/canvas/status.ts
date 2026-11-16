@@ -41,7 +41,7 @@ export const STATUS_BADGE: Record<Status, string> = {
 }
 
 // 實心的狀態色：分片節點裡每個 shard 的格子（spec 第 6 節，過載的格子發光）、狀態圓點和 ρ 的進度條。
-// Rate Limiter、External API 不會分片，也沒有 ρ
+// 灰色那幾種是 Rate Limiter、External API 的狀態圓點：它們不會分片，也沒有 ρ
 export const STATUS_FILL: Record<Status, string> = {
   OK: 'bg-ok',
   WARN: 'bg-warn',
@@ -80,20 +80,16 @@ export const SANKEY_COLORS = {
 
 export type SankeyColors = (typeof SANKEY_COLORS)[Theme]
 
-export function sankeyStatusColor(colors: SankeyColors, status: Status | null | undefined): string {
-  switch (status) {
-    case 'OK':
-      return colors.ok
-    case 'WARN':
-      return colors.warn
-    case 'CRITICAL':
-      return colors.critical
-    case 'OVERLOADED':
-    case 'OVER_QUOTA':
-      return colors.over
-    default:
-      return colors.neutral
-  }
+// Sankey 節點依狀態取 SANKEY_COLORS 裡的哪個顏色
+export const SANKEY_STATUS_COLOR: Record<Status, keyof SankeyColors> = {
+  OK: 'ok',
+  WARN: 'warn',
+  CRITICAL: 'critical',
+  OVERLOADED: 'over',
+  LIMITING: 'neutral',
+  NOT_LIMITING: 'neutral',
+  OVER_QUOTA: 'over',
+  WITHIN_QUOTA: 'neutral',
 }
 
 // 顯示的文字：ρ 分級沿用英文代碼，Rate Limiter 和 External API 的狀態用中文

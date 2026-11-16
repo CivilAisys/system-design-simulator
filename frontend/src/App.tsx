@@ -205,7 +205,6 @@ function Simulator() {
             <Button
               variant="ghost"
               size="icon-sm"
-              className="size-7"
               onClick={undo}
               disabled={!editor.canUndo}
               aria-label="復原"
@@ -216,7 +215,6 @@ function Simulator() {
             <Button
               variant="ghost"
               size="icon-sm"
-              className="size-7"
               onClick={redo}
               disabled={!editor.canRedo}
               aria-label="重做"
@@ -265,7 +263,7 @@ function Simulator() {
         </div>
         <Button
           variant="outline"
-          size="icon-sm"
+          size="icon"
           className="shrink-0"
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? '切換為淺色' : '切換為深色'}

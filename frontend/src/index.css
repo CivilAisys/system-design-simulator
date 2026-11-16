@@ -127,7 +127,7 @@
     --status-ok: #10b981;
     --status-ok-bg: #d1fae5;
     --status-ok-ink: #047857;
-    --status-ok-glow: none;
+    --status-ok-glow: 0 0 #0000;
     --status-warn: #f59e0b;
     --status-warn-bg: #fef3c7;
     --status-warn-ink: #92400e;
@@ -147,8 +147,9 @@
     --canvas: #0c1324;
     --canvas-dot: #1c2846;
     --edge: #3b4a75;
-    --flow-particle-glow: drop-shadow(0 0 4px #a78bfa);
-    --node-shadow: none;
+    --flow-particle-glow: drop-shadow(0 0 6px #a78bfa);
+    /* 要用透明的陰影，不能寫 none：Tailwind 把它串進 box-shadow 的清單，none 會讓整個宣告失效 */
+    --node-shadow: 0 0 #0000;
     --background: #0a0f1d;
     --foreground: #eef2fa;
     --card: #121a2e;
