@@ -1,11 +1,12 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
 import { cn } from '@/lib/utils'
-import type { Node, NodeResult, Status } from '@/api/client'
+import type { Node, NodeResult } from '@/api/client'
 import { NODE_KINDS, shownShards } from './catalog'
 import { CATEGORY_DOT } from './category'
 import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
-import { instanceRack, type InstanceRack } from './instanceRack'
+import { instanceRack } from './instanceRack'
+import { Rack } from './Rack'
 import { ShardGrid } from './ShardGrid'
 import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
@@ -95,40 +96,4 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>
   )
-}
-
-type RackProps = {
-  rack: InstanceRack
-  status: Status | null
-  stale?: boolean
-}
-
-// 多台機器：節點右側的小機櫃，一台一條橫槽、縱向疊放，用節點的狀態色。
-// 和分片格子（節點底部橫排的方格）用位置、方向和形狀區分。還沒有結果時用淡灰，過期時跟著畫淡
-function Rack({ rack, status, stale }: RackProps) {
-  return (
-    <div
-      aria-hidden
-      className={cn('flex shrink-0 flex-col gap-0.5 rounded-sm border border-input p-0.5', stale && 'opacity-30')}
-    >
-      {Array.from({ length: rack.slots }, (_, i) => (
-        <div
-          key={i}
-          className={cn('h-0.75 w-3.5 rounded-[1px]', status ? RACK_SLOT[status] : 'bg-muted-foreground/25')}
-        />
-      ))}
-    </div>
-  )
-}
-
-// 槽太小，不用 STATUS_FILL 過載時的陰影。能設定 instances 的元件只會有 ρ 分級的狀態
-const RACK_SLOT: Record<Status, string> = {
-  OK: 'bg-ok',
-  WARN: 'bg-warn',
-  CRITICAL: 'bg-critical',
-  OVERLOADED: 'bg-over',
-  LIMITING: 'bg-muted-foreground/40',
-  NOT_LIMITING: 'bg-muted-foreground/40',
-  OVER_QUOTA: 'bg-muted-foreground/40',
-  WITHIN_QUOTA: 'bg-muted-foreground/40',
 }

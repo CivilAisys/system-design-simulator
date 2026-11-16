@@ -47,7 +47,7 @@ export const STATUS_BADGE: Record<Status, string> = {
   WITHIN_QUOTA: 'bg-muted text-muted-foreground',
 }
 
-// 實心的狀態色：分片節點裡每個 shard 的格子（spec 第 6 節，過載的格子發光）、狀態圓點和 ρ 的進度條。
+// 實心的狀態色：分片節點裡每個 shard 的格子（spec 第 6 節，過載的格子發光）、多台機器的機櫃槽、狀態圓點和 ρ 的進度條。
 // 灰色那幾種是 Rate Limiter、External API 的狀態圓點：它們不會分片，也沒有 ρ
 export const STATUS_FILL: Record<Status, string> = {
   OK: 'bg-ok',
