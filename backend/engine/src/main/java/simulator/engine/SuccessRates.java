@@ -43,6 +43,8 @@ final class SuccessRates {
                 yield (1 - miss) + miss * children.get(edge.target());
             }
             case StorageNode storage -> 1;
+            // 放行的請求只送往唯一的下游；被拒絕的部分由 pass(n) 扣掉
+            case RateLimiterNode limiter -> children.get(edges.getFirst().target());
         };
         return pass(node) * downstream;
     }

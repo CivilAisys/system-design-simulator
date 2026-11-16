@@ -67,7 +67,8 @@ final class TopologyGraph {
 
     /**
      * 上游的一個請求平均往這條邊送幾次（spec 3.3、3.4）：Client／LB 依 weight 比例分流，
-     * Service 呼叫 callsPerRequest 次，Cache 的 read 只有沒命中的部分往下送。流量和端到端延遲共用這條規則。
+     * Service 呼叫 callsPerRequest 次，Cache 的 read 只有沒命中的部分往下送，Rate Limiter 放行的請求全部送往唯一的下游。
+     * 流量和端到端延遲共用這條規則。
      */
     double visits(Edge edge, boolean read) {
         Node source = nodes.get(edge.source());
@@ -77,6 +78,7 @@ final class TopologyGraph {
             case ServiceNode service -> edge.callsPerRequest();
             case CachingNode cache -> read ? 1 - cache.hitRatio() : 1;
             case StorageNode storage -> 0;
+            case RateLimiterNode limiter -> 1;
         };
     }
 

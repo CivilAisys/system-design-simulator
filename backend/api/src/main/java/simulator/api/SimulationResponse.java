@@ -101,7 +101,9 @@ public record SimulationResponse(
     public record NodeResultDto(
             @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
             @Schema(requiredMode = REQUIRED) double throughputRps,
-            @Schema(requiredMode = REQUIRED) double droppedRps,
+            @Schema(requiredMode = REQUIRED, description = "超過容量、沒被處理的請求數") double droppedRps,
+            @Schema(requiredMode = REQUIRED, description = "Rate Limiter 超過 limitRps 拒絕的請求數，其他節點為 0")
+            double rejectedRps,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有：這個 Client 的請求每秒有幾個完整成功（spec 4.3.1）")
             Double successRps,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "只有 Client 有")
@@ -114,8 +116,8 @@ public record SimulationResponse(
 
         static NodeResultDto from(NodeResult node) {
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
-                    node.droppedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()), node.capacityRps(),
-                    node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status());
+                    node.droppedRps(), node.rejectedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()),
+                    node.capacityRps(), node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status());
         }
     }
 
@@ -131,12 +133,13 @@ public record SimulationResponse(
     public record SummaryDto(
             @Schema(requiredMode = REQUIRED) double offeredRps,
             @Schema(requiredMode = REQUIRED, description = "各 Client 完整成功的請求數總和") double successRps,
-            @Schema(requiredMode = REQUIRED, description = "1 − successRps / offeredRps，限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0") double dropRate,
+            @Schema(requiredMode = REQUIRED, description = "各 Rate Limiter 拒絕量的總和") double rejectedRps,
+            @Schema(requiredMode = REQUIRED, description = "1 − successRps / offeredRps（丟棄和拒絕都算），限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0") double dropRate,
             @Schema(requiredMode = REQUIRED) ClassLatenciesDto avgEndToEndMs,
             @Schema(requiredMode = REQUIRED, nullable = true) String bottleneckNodeId) {
 
         static SummaryDto from(Summary summary) {
-            return new SummaryDto(summary.offeredRps(), summary.successRps(), summary.dropRate(),
+            return new SummaryDto(summary.offeredRps(), summary.successRps(), summary.rejectedRps(), summary.dropRate(),
                     ClassLatenciesDto.from(summary.avgEndToEndMs()), summary.bottleneckNodeId());
         }
     }

@@ -7,5 +7,6 @@ public enum NodeType {
     CACHE,
     CDN,
     DATABASE,
-    OBJECT_STORAGE
+    OBJECT_STORAGE,
+    RATE_LIMITER
 }

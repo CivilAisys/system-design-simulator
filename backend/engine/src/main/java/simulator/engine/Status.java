@@ -1,11 +1,13 @@
 package simulator.engine;
 
-/** 依使用率 ρ 分級的節點狀態。 */
+/** 節點狀態：前四個依使用率 ρ 分級；Rate Limiter 沒有 ρ，只分限流中／未觸發（spec 4.4）。 */
 public enum Status {
     OK,
     WARN,
     CRITICAL,
-    OVERLOADED;
+    OVERLOADED,
+    LIMITING,
+    NOT_LIMITING;
 
     public static Status of(double utilization) {
         if (utilization >= 1.0) {

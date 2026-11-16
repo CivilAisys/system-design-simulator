@@ -11,7 +11,7 @@
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
-拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database 或 Object Storage。
+拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database、Object Storage 或 Rate Limiter。
 _Avoid_: component、box
 
 **Edge（邊）**:
@@ -35,6 +35,9 @@ _Avoid_: server、app、backend
 **CDN**:
 放在 Client 和後端（origin）之間的快取，行為和 Cache 相同，只有預設值和名稱不同。
 
+**Rate Limiter**:
+限制每秒放行的請求數（全域上限，不分 Client），超過的部分拒絕，不往下送。
+
 **Database（DB）**:
 資料儲存，是請求的終點，沒有下游。
 
@@ -56,8 +59,12 @@ _Avoid_: input rps、load
 一個 Node 每秒實際處理完的請求數，過載時等於容量。
 
 **Dropped（丟棄量）**:
-到達但超出容量、沒被處理的請求數。
-_Avoid_: lost、rejected、failed
+到達但超出容量、沒被處理的請求數。Rate Limiter 刻意擋下的是拒絕量，不是丟棄量。
+_Avoid_: lost、failed
+
+**Rejected（拒絕量）**:
+Rate Limiter 超過上限、刻意擋下的請求數。和丟棄量是不同的指標，但兩者都算進丟棄率。
+_Avoid_: dropped、throttled
 
 **Fan-out**:
 Service 對每個下游各發出 `callsPerRequest` 次呼叫，使下游的流量變成子呼叫，而不是使用者請求。

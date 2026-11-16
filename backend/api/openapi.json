@@ -77,7 +77,7 @@
           },
           "type" : {
             "type" : "string",
-            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE", "OBJECT_STORAGE" ]
+            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE", "OBJECT_STORAGE", "RATE_LIMITER" ]
           },
           "name" : {
             "type" : "string"
@@ -132,6 +132,11 @@
             "type" : "number",
             "format" : "double",
             "description" : "CACHE, CDN"
+          },
+          "limitRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "RATE_LIMITER"
           }
         }
       },
@@ -246,7 +251,13 @@
           },
           "droppedRps" : {
             "type" : "number",
-            "format" : "double"
+            "format" : "double",
+            "description" : "超過容量、沒被處理的請求數"
+          },
+          "rejectedRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "Rate Limiter 超過 limitRps 拒絕的請求數，其他節點為 0"
           },
           "successRps" : {
             "type" : [ "number", "null" ],
@@ -279,10 +290,10 @@
           },
           "status" : {
             "type" : [ "string", "null" ],
-            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED" ]
+            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED", "LIMITING", "NOT_LIMITING" ]
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "status", "successRps", "throughputRps", "utilization" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "rejectedRps", "status", "successRps", "throughputRps", "utilization" ]
       },
       "SimulationResult" : {
         "type" : "object",
@@ -331,10 +342,15 @@
             "format" : "double",
             "description" : "各 Client 完整成功的請求數總和"
           },
+          "rejectedRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "各 Rate Limiter 拒絕量的總和"
+          },
           "dropRate" : {
             "type" : "number",
             "format" : "double",
-            "description" : "1 − successRps / offeredRps，限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0"
+            "description" : "1 − successRps / offeredRps（丟棄和拒絕都算），限制在 [0, 1]，浮點誤差造成的極小值歸零；沒有流量時為 0"
           },
           "avgEndToEndMs" : {
             "$ref" : "#/components/schemas/ClassLatencies"
@@ -343,7 +359,7 @@
             "type" : [ "string", "null" ]
           }
         },
-        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "dropRate", "offeredRps", "successRps" ]
+        "required" : [ "avgEndToEndMs", "bottleneckNodeId", "dropRate", "offeredRps", "rejectedRps", "successRps" ]
       },
       "ValidationError" : {
         "type" : "object",

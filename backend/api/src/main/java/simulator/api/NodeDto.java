@@ -12,6 +12,7 @@ import simulator.engine.LoadBalancerNode;
 import simulator.engine.Node;
 import simulator.engine.NodeHealth;
 import simulator.engine.ObjectStorageNode;
+import simulator.engine.RateLimiterNode;
 import simulator.engine.ServiceNode;
 
 /** {@code state} 省略時為 HEALTHY；{@code ui} 只給前端用，後端忽略。 */
@@ -40,6 +41,7 @@ public record NodeDto(
             case CDN -> new CdnNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
             case DATABASE -> new DatabaseNode(id, name, health, capacityParams());
             case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams());
+            case RATE_LIMITER -> new RateLimiterNode(id, name, health, require(params.limitRps(), "limitRps"));
         };
     }
 

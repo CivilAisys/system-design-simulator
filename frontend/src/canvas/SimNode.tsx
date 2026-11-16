@@ -2,8 +2,8 @@ import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
-import { formatUtilization } from './format'
-import { STATUS_GLOW, STATUS_TEXT } from './status'
+import { formatRps, formatUtilization } from './format'
+import { STATUS_GLOW, STATUS_LABEL, STATUS_TEXT } from './status'
 import { errorsTitle } from './validation'
 
 export type SimNodeData = {
@@ -19,7 +19,7 @@ export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { node, result, errors, stale } = data
-  const { icon: Icon, hasInput, hasOutput } = NODE_KINDS[node.type]
+  const { icon: Icon, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
 
@@ -52,8 +52,12 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       </div>
       {result && (
         <div className="mt-1 flex items-baseline justify-between gap-3 text-xs">
-          <span className="text-muted-foreground">ρ {formatUtilization(result.utilization)}</span>
-          {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{status}</span>}
+          <span className="text-muted-foreground">
+            {nodeMetric === 'rejected'
+              ? `拒絕 ${formatRps(result.rejectedRps)}`
+              : `ρ ${formatUtilization(result.utilization)}`}
+          </span>
+          {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
         </div>
       )}
       {hasOutput && <Handle type="source" position={Position.Right} />}

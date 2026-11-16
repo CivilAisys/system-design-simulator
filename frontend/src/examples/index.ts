@@ -5,6 +5,7 @@ import cdn from './cdn.json'
 import fanOut from './fan-out.json'
 import mediaStorage from './media-storage.json'
 import overload from './overload.json'
+import rateLimiter from './rate-limiter.json'
 import readWriteSplit from './read-write-split.json'
 
 export type Example = { id: string; label: string; topology: Topology }
@@ -22,6 +23,8 @@ export const EXAMPLES: Example[] = [
   { id: 'cdn', label: 'CDN', topology: builtIn(cdn) },
   // 圖片、影片放 Object Storage，metadata 放 Database：兩者都是終點，Object Storage 的容量大得多
   { id: 'media-storage', label: '媒體儲存', topology: builtIn(mediaStorage) },
+  // 12,000 rps 會壓垮容量 8,000 的 API：Rate Limiter 只放行 6,000，其餘拒絕，API 回到穩態
+  { id: 'rate-limiter', label: 'Rate Limiter', topology: builtIn(rateLimiter) },
 ]
 
 // JSON import 的型別太寬（type 是 string），走和匯入檔案相同的檢查來取得 Topology

@@ -185,7 +185,7 @@ describe('格式錯誤', () => {
 
     it('type 不是已知的類型', () => {
       expect(errorsOf((f) => void (f.nodes[4].type = 'QUEUE'))).toEqual([
-        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、OBJECT_STORAGE 其中之一',
+        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、OBJECT_STORAGE、RATE_LIMITER 其中之一',
       ])
     })
 
@@ -415,12 +415,34 @@ function withObjectStorage() {
   return file
 }
 
+// 合法檔案再加一個 Rate Limiter 擋在 Client 和 LB 之間
+function withRateLimiter() {
+  const file = validFile()
+  const limiter = {
+    id: 'limiter',
+    type: 'RATE_LIMITER',
+    name: 'Limiter',
+    params: { limitRps: 500 },
+    ui: { x: 0, y: 0 },
+  }
+  return {
+    ...file,
+    nodes: [...file.nodes, limiter],
+    edges: [
+      { id: 'e1', source: 'client', target: 'limiter', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+      ...file.edges.slice(1),
+      { id: 'e6', source: 'limiter', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+    ],
+  }
+}
+
 describe('匯出再匯入', () => {
   it.each([
     ['合法檔案', topologyOf(validFile())],
     ['開啟時的畫布', initialTopology],
     ['CDN', topologyOf(withCdn())],
     ['Object Storage', topologyOf(withObjectStorage())],
+    ['Rate Limiter', topologyOf(withRateLimiter())],
   ])('%s 得到相同的拓撲', (_, topology) => {
     expect(parseTopology(serializeTopology(topology))).toEqual({ ok: true, topology })
   })

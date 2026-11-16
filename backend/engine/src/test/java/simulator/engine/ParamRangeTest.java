@@ -118,6 +118,18 @@ class ParamRangeTest {
         assertInvalidParam(result, "cache", null, "hitRatio");
     }
 
+    @ParameterizedTest
+    @ValueSource(doubles = {0, -1, 1.1e12, Double.NaN, Double.POSITIVE_INFINITY})
+    void invalidRateLimiterLimitIsRejected(double limitRps) {
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(client(100, 0.9),
+                        new RateLimiterNode("rl", "Limiter", NodeHealth.HEALTHY, limitRps),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
+                List.of(new Edge("e1", "c", "rl", 1, 1, 1), new Edge("e2", "rl", "db", 1, 1, 1))));
+
+        assertInvalidParam(result, "rl", null, "limitRps");
+    }
+
     @Test
     void serviceEdgeWithLessThanOneCallIsRejected() {
         assertInvalidParam(run(client(100, 0.9),
