@@ -1,9 +1,8 @@
 import type { Edge, Node, NodeType, Topology } from '@/api/client'
-import { hasInput, hasOutput, NODE_KINDS, NODE_TYPES, type NodeParams } from '@/canvas/catalog'
-import { NODE_NUMBER_PARAMS, NODE_PARAM_SPECS } from '@/canvas/params'
+import { NODE_KINDS, NODE_TYPES, type NodeParams } from '@/canvas/catalog'
+import { NODE_CHOICE_SPECS, NODE_PARAM_SPECS } from '@/canvas/params'
 
 const SUPPORTED_VERSION = 1
-const CALL_MODES = ['SEQUENTIAL', 'PARALLEL']
 // 匯入的檔案沒有 ui 座標時，這些節點排成一列，放在有座標的節點下方
 const FALLBACK_SPACING = 280
 
@@ -108,14 +107,17 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     return null
   }
 
+  // 選填參數省略時用該類型的預設值（spec 3.6）
+  const kind = NODE_KINDS[type]
   const kept: NodeParams = {}
-  for (const param of NODE_NUMBER_PARAMS[type]) {
-    const value = params[param]
+  for (const param of kind.numberParams) {
+    const spec = NODE_PARAM_SPECS[param]
+    const value = params[param] === undefined && spec.optional ? kind.defaults[param] : params[param]
     if (!isFiniteNumber(value)) {
       fail(`缺少數值參數 params.${param}（或數值太大）`)
       return null
     }
-    if (NODE_PARAM_SPECS[param].integer) {
+    if (spec.integer) {
       const error = checkInteger(value)
       if (error) {
         fail(`params.${param} ${error}`)
@@ -124,12 +126,15 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     }
     kept[param] = value
   }
-  if (type === 'SERVICE') {
-    if (typeof params.callMode !== 'string' || !CALL_MODES.includes(params.callMode)) {
-      fail(`params.callMode 必須是 ${CALL_MODES.join(' 或 ')}`)
+  for (const param of kind.choiceParams) {
+    const spec = NODE_CHOICE_SPECS[param]
+    const value = params[param] === undefined && spec.optional ? kind.defaults[param] : params[param]
+    const option = spec.options.find((o) => o.value === value)
+    if (!option) {
+      fail(`params.${param} 必須是 ${spec.options.map((o) => o.value).join(' 或 ')}`)
       return null
     }
-    kept.callMode = params.callMode as NodeParams['callMode']
+    kept[param] = option.value
   }
 
   let position: Node['ui']
@@ -178,11 +183,11 @@ function toEdge(
   }
   const sourceType = declared.get(source)
   const targetType = declared.get(target)
-  if (sourceType != null && !hasOutput(sourceType)) {
+  if (sourceType != null && !NODE_KINDS[sourceType].hasOutput) {
     fail(`${NODE_KINDS[sourceType].label} 不能有下游（source 是 "${source}"）`)
     return null
   }
-  if (targetType != null && !hasInput(targetType)) {
+  if (targetType != null && !NODE_KINDS[targetType].hasInput) {
     fail(`${NODE_KINDS[targetType].label} 不能有上游（target 是 "${target}"）`)
     return null
   }

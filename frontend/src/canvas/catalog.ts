@@ -1,16 +1,33 @@
 import { Database, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
+import type { EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
 export type NodeParams = Node['params']
 
+// 非同步的邊（之後的 replication、Message Queue 的 consumer）不算進 Client 的端到端延遲，畫成虛線
+export type EdgeKind = 'SYNC' | 'ASYNC'
+
+// 一種 Node type 在前端的全部定義。新增 type 時只要在 NODE_TYPES 和 NODE_KINDS 各加一筆（spec 3.6）
 type NodeKind = {
   label: string
   icon: LucideIcon
   // 新節點的 id 前綴
   idPrefix: string
-  // spec 3.3 的預設值
+  // spec 3.3 的預設值，涵蓋 numberParams 和 choiceParams 的每個參數
   defaults: NodeParams
+  // 屬性面板依序列出的參數，也是匯入時讀取的參數
+  numberParams: NodeNumberParam[]
+  choiceParams: NodeChoiceParam[]
+  // 能不能有上游／下游（spec 4.5），畫布上沒有對應的 handle
+  hasInput: boolean
+  hasOutput: boolean
+  // 出邊在屬性面板顯示的參數（spec 3.4）
+  edgeParams: EdgeNumberParam[]
+  // 出邊的種類，依 source 的 type 決定
+  outputEdgeKind: EdgeKind
 }
+
+const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
 
 // 左側元件面板的順序
 export const NODE_TYPES: NodeType[] = ['CLIENT', 'LOAD_BALANCER', 'SERVICE', 'CACHE', 'DATABASE']
@@ -21,40 +38,62 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     icon: Users,
     idPrefix: 'client',
     defaults: { rps: 1000, readRatio: 0.9 },
+    numberParams: ['rps', 'readRatio'],
+    choiceParams: [],
+    hasInput: false,
+    hasOutput: true,
+    // weight 只對 Client／LB 的出邊有意義，callsPerRequest 只對 Service 的出邊有意義
+    edgeParams: ['weight', 'latencyMs'],
+    outputEdgeKind: 'SYNC',
   },
   LOAD_BALANCER: {
     label: 'Load Balancer',
     icon: Network,
     idPrefix: 'lb',
     defaults: { instances: 1, concurrency: 1000, serviceTimeMs: 1 },
+    numberParams: CAPACITY_PARAMS,
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: true,
+    edgeParams: ['weight', 'latencyMs'],
+    outputEdgeKind: 'SYNC',
   },
   SERVICE: {
     label: 'Service',
     icon: Server,
     idPrefix: 'svc',
     defaults: { instances: 2, concurrency: 200, serviceTimeMs: 50, callMode: 'SEQUENTIAL' },
+    numberParams: CAPACITY_PARAMS,
+    choiceParams: ['callMode'],
+    hasInput: true,
+    hasOutput: true,
+    edgeParams: ['callsPerRequest', 'latencyMs'],
+    outputEdgeKind: 'SYNC',
   },
   CACHE: {
     label: 'Cache',
     icon: Zap,
     idPrefix: 'cache',
     defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8 },
+    numberParams: [...CAPACITY_PARAMS, 'hitRatio'],
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: true,
+    edgeParams: ['latencyMs'],
+    outputEdgeKind: 'SYNC',
   },
   DATABASE: {
     label: 'Database',
     icon: Database,
     idPrefix: 'db',
     defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+    numberParams: CAPACITY_PARAMS,
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: false,
+    edgeParams: ['latencyMs'],
+    outputEdgeKind: 'SYNC',
   },
-}
-
-// Client 沒有上游、Database 沒有下游（spec 4.5），畫布上直接不給對應的 handle
-export function hasInput(type: NodeType): boolean {
-  return type !== 'CLIENT'
-}
-
-export function hasOutput(type: NodeType): boolean {
-  return type !== 'DATABASE'
 }
 
 // 拖到畫布或點擊元件面板時建立的節點：id 和名稱都取同類型中第一個沒被用掉的編號

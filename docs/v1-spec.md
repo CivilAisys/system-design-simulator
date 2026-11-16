@@ -124,6 +124,26 @@ system-design-simulator/
 ### 3.5 節點健康狀況（預留）
 - `state`（Health）：階段一只有 `HEALTHY`。階段二加入 `DOWN`、`DEGRADED`。
 
+### 3.6 新增元件時要改的地方
+
+0.3.0 起新增的 Node type 和欄位都照這一節做。
+
+**新欄位一律選填**：省略時套用預設值，所以舊檔照樣能匯入，拓撲格式的 `"version"` 維持 1（ADR 0001）。給了但型別不對，仍然是格式錯誤（4.5、HTTP 400）。三個地方要一致，寫法照 Edge 的 `weight`：
+
+| 地方 | 寫法 | 示範的測試 |
+|---|---|---|
+| 後端反序列化 | DTO 欄位用包裝型別（`Double`、`Integer`），`@Schema(defaultValue = …)`；轉成 engine 物件時 `null` 換成預設值 | `SimulateEndpointTest.missingEdgeFieldsDefaultToOne`；型別錯誤見 `wrongTypeIsBadRequest` |
+| OpenAPI | 不標 `requiredMode = REQUIRED`，有 `default` | `OpenApiSyncTest.fieldsWithDefaultsAreOptional` 檢查有預設值的欄位都不在 `required` |
+| 前端匯入 | 節點參數在 `params.ts` 的 spec 標 `optional: true`，省略時用該類型 `defaults` 裡的值；邊的欄位在 `topologyFile.ts` 的 `toEdge` 補 | `topologyFile.test.ts` 的「選填的節點參數」、「邊省略的數值參數用預設值 1」 |
+
+**新增一種 Node type**：
+
+- 後端 api：`NodeType` 加一個值；`NodeParamsDto` 加該類型的參數（`description` 寫上用到它的 type）；`NodeDto.toNode` 建出 engine 的節點。改完跑 `./gradlew :api:generateOpenApi` 更新 `openapi.json`，前端的型別跟著重新產生。
+- 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則），`instanceof` 的判斷則要自己找（例如 `TopologyValidator` 的上下游限制、`EndToEndLatencies`）。
+- 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類，元件面板、畫布、屬性面板和匯入都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
+- 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。
+- 文件：本 spec 的 3.3（元件表）、4.5（驗證規則）、5（API 範例有需要時），`GLOSSARY.md` 的新名詞，並在 `frontend/src/examples/` 加一個用到它的內建範例。
+
 ---
 
 ## 4. 穩態計算

@@ -67,9 +67,13 @@ export function Canvas({
       })),
     [nodes, result, errors, stale],
   )
+  // 邊的種類看 source 的 type。拖動節點時 nodes 每一幀都在變，只在 id 或 type 變了才重算，邊不用跟著重畫
+  const typeKey = JSON.stringify(nodes.map((n) => [n.id, n.data.node.type]))
+  const typeById = useMemo(() => new Map<string, NodeType>(JSON.parse(typeKey)), [typeKey])
   const shownEdges = useMemo<RpsFlowEdge[]>(
     () =>
       edges.map((e) => {
+        const sourceType = typeById.get(e.source)
         const edgeResult = result?.edges[e.id]
         const edgeErrors = errors.edges.get(e.id)
         return {
@@ -77,6 +81,7 @@ export function Canvas({
           markerEnd: arrowMarker(edgeColor(e.selected, edgeErrors != null)),
           data: {
             ...e.data,
+            kind: sourceType && NODE_KINDS[sourceType].outputEdgeKind,
             result: edgeResult,
             flow: edgeResult && flowRatio(totalRps(edgeResult.rps), maxRps),
             errors: edgeErrors,
@@ -84,7 +89,7 @@ export function Canvas({
           },
         }
       }),
-    [edges, result, maxRps, errors, stale],
+    [edges, typeById, result, maxRps, errors, stale],
   )
 
   function onDragOver(event: DragEvent) {
