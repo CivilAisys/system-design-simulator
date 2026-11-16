@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { NODE_KINDS } from './catalog'
+import { NODE_KINDS, shownShards } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
 import { workersHint } from './instanceStack'
@@ -127,7 +127,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
               {workersHint(
                 nodeParam(node.params, 'instances'),
                 nodeParam(node.params, 'concurrency'),
-                node.params.shards ?? flowNode.data.mirroredShards ?? 1,
+                shownShards(node, flowNode.data.mirroredShards),
               )}
             </p>
           )}

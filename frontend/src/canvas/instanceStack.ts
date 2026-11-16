@@ -14,11 +14,17 @@ export function instanceStack(node: Node, shards: number): InstanceStack | null 
   if (!NODE_KINDS[node.type].numberParams.includes('instances') || shards > 1 || instances < 2) {
     return null
   }
-  return { layers: Math.min(instances - 1, 2), label: `×${instances}` }
+  return { layers: Math.min(instances - 1, 2), label: `×${withCommas(instances)}` }
 }
 
 // 屬性面板機器數下方的提示；分片時 instances、concurrency 是每個 shard 的（spec 4.2.2）
 export function workersHint(instances: number, concurrency: number, shards: number): string {
-  const total = `共 ${instances} 台 × ${concurrency} 並行 ＝ ${instances * concurrency} 個 worker`
+  const workers = withCommas(instances * concurrency)
+  const total = `共 ${withCommas(instances)} 台 × ${withCommas(concurrency)} 並行 ＝ ${workers} 個 worker`
   return shards > 1 ? `每個 shard ${total}` : total
+}
+
+// 台數和 worker 數加千分位（instances × concurrency 最多 1,000,000）
+function withCommas(value: number): string {
+  return value.toLocaleString()
 }

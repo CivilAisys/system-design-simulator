@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
-import { NODE_KINDS } from './catalog'
+import { NODE_KINDS, shownShards } from './catalog'
 import { CATEGORY_DOT } from './category'
 import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
@@ -31,7 +31,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { icon, category, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
-  const shards = node.params.shards ?? mirroredShards ?? 1
+  const shards = shownShards(node, mirroredShards)
   const stack = instanceStack(node, shards)
 
   return (
@@ -47,12 +47,13 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
     >
       {/* 多台機器：節點後面往右下錯開的卡片。不攔截滑鼠，選取範圍和連接點不變 */}
       {stack &&
-        Array.from({ length: stack.layers }, (_, i) => (
+        // 同一個 z-index 依 DOM 順序畫，最遠的那層先畫，近的蓋在它上面
+        Array.from({ length: stack.layers }, (_, i) => stack.layers - i).map((depth) => (
           <div
-            key={i}
+            key={depth}
             aria-hidden
             className="pointer-events-none absolute inset-0 -z-10 rounded-card border border-input bg-card"
-            style={{ translate: `${(i + 1) * STACK_OFFSET}px ${(i + 1) * STACK_OFFSET}px`, opacity: 1 - i * 0.35 }}
+            style={{ translate: `${depth * STACK_OFFSET}px ${depth * STACK_OFFSET}px`, opacity: 1.35 - depth * 0.35 }}
           />
         ))}
       {/* 外框和光暈單獨一層，過載脈動時只有光暈閃，文字不跟著閃。
@@ -97,7 +98,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       {stack && (
         <span
           className={cn(
-            'absolute -top-2.5 -right-2.5 rounded-full border-2 border-canvas px-1.75 py-px text-[11px] font-bold text-card',
+            'pointer-events-none absolute -top-2.5 -right-2.5 rounded-full border-2 border-canvas px-1.75 py-px text-[11px] font-bold text-card',
             CATEGORY_DOT[category],
           )}
         >

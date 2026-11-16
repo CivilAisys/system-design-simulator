@@ -27,6 +27,7 @@ describe('instanceStack', () => {
     expect(instanceStack(node('SERVICE', { instances: 3 }), 1)).toEqual({ layers: 2, label: '×3' })
     expect(instanceStack(node('SERVICE', { instances: 10 }), 1)).toEqual({ layers: 2, label: '×10' })
     expect(instanceStack(node('SERVICE', { instances: 200 }), 1)).toEqual({ layers: 2, label: '×200' })
+    expect(instanceStack(node('SERVICE', { instances: 5000 }), 1)).toEqual({ layers: 2, label: '×5,000' })
   })
 
   it('能設定機器數的元件都會疊', () => {
@@ -61,6 +62,10 @@ describe('instanceStack', () => {
 describe('workersHint', () => {
   it('列出台數、並行數和 worker 總數', () => {
     expect(workersHint(2, 180, 1)).toBe('共 2 台 × 180 並行 ＝ 360 個 worker')
+  })
+
+  it('大數字加千分位', () => {
+    expect(workersHint(1000, 1000, 1)).toBe('共 1,000 台 × 1,000 並行 ＝ 1,000,000 個 worker')
   })
 
   it('分片時是每個 shard 的', () => {
