@@ -593,7 +593,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 
 | 區塊 | 元件 |
 |---|---|
-| 左側元件面板 | shadcn Sidebar（拖到畫布） |
+| 左側元件面板 | shadcn Sidebar（拖到畫布，放在滑鼠放開的位置；點一下則放在畫面中央，被占了就往外找最近一個不重疊的位置） |
 | 右側屬性面板 | shadcn Input、Slider、Progress（ρ） |
 | 下方結果 | shadcn Tabs、Table、Badge（狀態）；ECharts Sankey |
 | 工具列 | shadcn Button、Switch、DropdownMenu |

@@ -21,6 +21,7 @@ import type { PaletteItem } from '@/canvas/catalog'
 import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
+import { ESTIMATED_NODE_SIZE, findFreePosition } from '@/canvas/placement'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
 import { EXAMPLES } from '@/examples'
@@ -135,13 +136,20 @@ function Simulator() {
     loadTopology(parsed.topology, `已匯入 ${file.name}`)
   }
 
-  // 點擊元件面板時放在目前畫面的中央
+  // 點擊元件面板時放在目前畫面的中央；被占了就往外找最近的空位
   function addAtCenter(item: PaletteItem) {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) {
       return
     }
-    editor.addNode(item, screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }))
+    const center = screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+    // 剛新增、還沒畫出來的節點量不到大小，用估計值
+    const occupied = editor.nodes.map((node) => ({
+      ...node.position,
+      width: node.measured?.width ?? ESTIMATED_NODE_SIZE.width,
+      height: node.measured?.height ?? ESTIMATED_NODE_SIZE.height,
+    }))
+    editor.addNode(item, findFreePosition(center, occupied))
   }
 
   // 錯誤指到的節點：節點錯誤是它本身，邊錯誤是邊的兩端。
