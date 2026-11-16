@@ -209,14 +209,18 @@ public final class SteadyStateSimulator implements Simulator {
                     * SECONDS_PER_DAY;
             double total = daily * sizing.retentionDays();
             int replicaCount = replicas.getOrDefault(node.id(), 0);
-            Double daysUntilFull = sizing.diskGbPerShard() == null || daily <= 0
-                    ? null
-                    : sizing.diskGbPerShard() * BYTES_PER_GB / (daily / shards);
+            Double daysUntilFull = sizing.diskGbPerShard() == null ? null
+                    : finiteOrNull(sizing.diskGbPerShard() * BYTES_PER_GB / (daily / shards));
             boolean fillsDisk = daysUntilFull != null && daysUntilFull < sizing.retentionDays();
             estimates.put(node.id(), new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
-                    total / shards, daysUntilFull, fillsDisk));
+                    total / shards, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerShard()));
         }
         return estimates;
+    }
+
+    /** 沒有寫入（除以 0）或寫入量極小時天數不是有限值，JSON 放不下，當成不會滿。 */
+    private static Double finiteOrNull(double days) {
+        return Double.isFinite(days) ? days : null;
     }
 
     /** 處理完的 write：丟棄依 read／write 比例發生（spec 4.2）。 */

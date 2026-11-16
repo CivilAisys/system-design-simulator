@@ -183,15 +183,18 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, description = "連到這個 Database 的 Read Replica 數") int replicas,
             @Schema(requiredMode = REQUIRED, description = "totalBytes × (1 + replicas)") double totalWithReplicasBytes,
             @Schema(requiredMode = REQUIRED, description = "totalBytes ÷ shards（資料平均分布）") double perShardBytes,
-            @Schema(requiredMode = REQUIRED, nullable = true, description = "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard 或沒有寫入時為 null")
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard、沒有寫入或寫入量小到天數超出範圍時為 null")
             Double daysUntilFull,
             @Schema(requiredMode = REQUIRED, description = "磁碟在保留期內就會滿（daysUntilFull < retentionDays）")
-            boolean fillsDisk) {
+            boolean fillsDisk,
+            @Schema(requiredMode = REQUIRED, description = "計算時用的 retentionDays") double retentionDays,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "計算時用的 diskGbPerShard，沒有設定時為 null")
+            Double diskGbPerShard) {
 
         static StorageEstimateDto from(StorageEstimate estimate) {
             return new StorageEstimateDto(estimate.dailyBytes(), estimate.totalBytes(), estimate.replicas(),
                     estimate.totalWithReplicasBytes(), estimate.perShardBytes(), estimate.daysUntilFull(),
-                    estimate.fillsDisk());
+                    estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerShard());
         }
     }
 

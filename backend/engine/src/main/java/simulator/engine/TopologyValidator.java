@@ -27,7 +27,7 @@ final class TopologyValidator {
     static final int MAX_CALLS_PER_REQUEST = 10_000;
     static final double MAX_WEIGHT = 1e6;
     static final int MAX_SHARDS = 64;
-    // 每個請求的回應或上傳大小（bytes），1 TB
+    // 每個請求的回應、上傳大小或每次 write 新增的資料量（bytes），1 TB
     static final double MAX_BYTES = 1e12;
     static final double MAX_RETENTION_DAYS = 100_000;
     // 每個 shard 的磁碟容量（GB），1 EB
@@ -190,7 +190,6 @@ final class TopologyValidator {
                 report);
     }
 
-    /** instances × concurrency 的上限是對每個 shard 的限制，已經在 checkCapacityParams 檢查。 */
     private static void checkSizing(StorageSizing sizing, String where, Consumer<String> report) {
         requireBetween(sizing.bytesPerWrite(), 0, MAX_BYTES, where, "bytesPerWrite", report);
         requireBetween(sizing.retentionDays(), 0, MAX_RETENTION_DAYS, where, "retentionDays", report);
@@ -200,7 +199,8 @@ final class TopologyValidator {
         }
     }
 
-        private static void checkShards(ShardLayout shards, String where, Consumer<String> report) {
+    /** instances × concurrency 的上限是對每個 shard 的限制，已經在 checkCapacityParams 檢查。 */
+    private static void checkShards(ShardLayout shards, String where, Consumer<String> report) {
         if (shards.count() < 1 || shards.count() > MAX_SHARDS) {
             report.accept(invalid(where, "shards", "介於 1 和 " + MAX_SHARDS + " 之間", shards.count()));
             return;

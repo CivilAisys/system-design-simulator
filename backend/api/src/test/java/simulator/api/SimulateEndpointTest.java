@@ -455,7 +455,7 @@ class SimulateEndpointTest {
         JsonNode storage = body.at("/storage/db-1");
         assertThat(fieldNames(body.get("storage"))).containsExactly("db-1");
         assertThat(fieldNames(storage)).containsExactlyInAnyOrder("dailyBytes", "totalBytes", "replicas",
-                "totalWithReplicasBytes", "perShardBytes", "daysUntilFull", "fillsDisk");
+                "totalWithReplicasBytes", "perShardBytes", "daysUntilFull", "fillsDisk", "retentionDays", "diskGbPerShard");
         assertThat(storage.get("dailyBytes").asDouble()).isCloseTo(100 * 1_000 * 86_400.0, within(1e-3));
         assertThat(storage.get("totalBytes").asDouble()).isCloseTo(100 * 1_000 * 86_400.0 * 365, within(1.0));
         assertThat(storage.get("daysUntilFull").isNull()).isTrue();

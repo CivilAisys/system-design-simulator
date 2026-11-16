@@ -116,6 +116,23 @@ class StorageEstimateTest {
     }
 
     @Test
+    void tinyWritesDoNotOverflowDaysUntilFull() {
+        // 每天增加不到 1e-290 bytes：天數超過 double 的範圍
+        StorageEstimate estimate = run(db(AMPLE, 1, new StorageSizing(1e-300, 30, 1e9))).storage().get("db");
+
+        assertThat(estimate.daysUntilFull()).isNull();
+        assertThat(estimate.fillsDisk()).isFalse();
+    }
+
+    @Test
+    void estimateCarriesTheSizingItUsed() {
+        StorageEstimate estimate = run(db(AMPLE, 1, new StorageSizing(2_000, 30, 100.0))).storage().get("db");
+
+        assertThat(estimate.retentionDays()).isEqualTo(30);
+        assertThat(estimate.diskGbPerShard()).isEqualTo(100.0);
+    }
+
+    @Test
     void objectStorageUsesItsOwnDefaults() {
         StorageEstimate estimate = run(new ObjectStorageNode("db", "S3", NodeHealth.HEALTHY, AMPLE))
                 .storage().get("db");

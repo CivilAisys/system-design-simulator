@@ -40,7 +40,6 @@ export function StorageTable({ topology, result }: StorageTableProps) {
       <TableBody>
         {rows.map((node) => {
           const estimate = result.storage[node.id]
-          const { retentionDays, diskGbPerShard } = node.params
           // 過載時被丟棄的 write 不算進儲存量
           const overloaded = result.nodes[node.id]?.status === 'OVERLOADED'
           return (
@@ -59,7 +58,7 @@ export function StorageTable({ topology, result }: StorageTableProps) {
               <TableCell className="text-right tabular-nums">{formatBytes(estimate.dailyBytes)}</TableCell>
               <TableCell className="text-right tabular-nums">
                 {formatBytes(estimate.totalBytes)}
-                <div className="text-xs text-muted-foreground">保留 {retentionDays?.toLocaleString()} 天</div>
+                <div className="text-xs text-muted-foreground">保留 {estimate.retentionDays.toLocaleString()} 天</div>
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {formatBytes(estimate.totalWithReplicasBytes)}
@@ -69,7 +68,11 @@ export function StorageTable({ topology, result }: StorageTableProps) {
               </TableCell>
               <TableCell className="text-right tabular-nums">{formatBytes(estimate.perShardBytes)}</TableCell>
               <TableCell className={cn('text-right tabular-nums', estimate.fillsDisk && 'text-destructive')}>
-                <DiskCell daysUntilFull={estimate.daysUntilFull} diskGb={diskGbPerShard} fillsDisk={estimate.fillsDisk} />
+                <DiskCell
+                  daysUntilFull={estimate.daysUntilFull}
+                  diskGb={estimate.diskGbPerShard}
+                  fillsDisk={estimate.fillsDisk}
+                />
               </TableCell>
             </TableRow>
           )
@@ -85,10 +88,10 @@ function DiskCell({
   fillsDisk,
 }: {
   daysUntilFull: number | null
-  diskGb: number | undefined
+  diskGb: number | null
   fillsDisk: boolean
 }) {
-  if (diskGb === undefined) return DASH
+  if (diskGb == null) return DASH
   // 有磁碟容量但沒有寫入：資料不會增加
   if (daysUntilFull == null) return '不會滿'
   return (

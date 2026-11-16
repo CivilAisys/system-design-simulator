@@ -496,14 +496,24 @@
           "daysUntilFull" : {
             "type" : [ "number", "null" ],
             "format" : "double",
-            "description" : "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard 或沒有寫入時為 null"
+            "description" : "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard、沒有寫入或寫入量小到天數超出範圍時為 null"
           },
           "fillsDisk" : {
             "type" : "boolean",
             "description" : "磁碟在保留期內就會滿（daysUntilFull < retentionDays）"
+          },
+          "retentionDays" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "計算時用的 retentionDays"
+          },
+          "diskGbPerShard" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "計算時用的 diskGbPerShard，沒有設定時為 null"
           }
         },
-        "required" : [ "dailyBytes", "daysUntilFull", "fillsDisk", "perShardBytes", "replicas", "totalBytes", "totalWithReplicasBytes" ]
+        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerShard", "fillsDisk", "perShardBytes", "replicas", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
       },
       "Summary" : {
         "type" : "object",

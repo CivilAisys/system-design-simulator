@@ -5,7 +5,8 @@ package simulator.engine;
  * {@code totalWithReplicasBytes} 包含 {@code replicas} 個 Read Replica 的副本；{@code perShardBytes} 假設資料平均分布。
  * {@code daysUntilFull} 是每個 shard 的磁碟幾天後會滿，沒有設定磁碟容量或沒有寫入時為 null；
  * {@code fillsDisk} 表示磁碟在保留期內就會滿（每個 shard 的用量超過磁碟容量）。
+ * {@code retentionDays}、{@code diskGbPerShard} 是計算時用的參數，畫面依它們顯示，不必回頭讀拓撲。
  */
 public record StorageEstimate(double dailyBytes, double totalBytes, int replicas, double totalWithReplicasBytes,
-        double perShardBytes, Double daysUntilFull, boolean fillsDisk) {
+        double perShardBytes, Double daysUntilFull, boolean fillsDisk, double retentionDays, Double diskGbPerShard) {
 }
