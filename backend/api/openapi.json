@@ -83,7 +83,7 @@
           },
           "type" : {
             "type" : "string",
-            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE", "OBJECT_STORAGE", "RATE_LIMITER", "EXTERNAL_API" ]
+            "enum" : [ "CLIENT", "LOAD_BALANCER", "SERVICE", "CACHE", "CDN", "DATABASE", "OBJECT_STORAGE", "RATE_LIMITER", "EXTERNAL_API", "READ_REPLICA" ]
           },
           "name" : {
             "type" : "string"
@@ -117,17 +117,17 @@
           "instances" : {
             "type" : "integer",
             "format" : "int32",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA"
           },
           "concurrency" : {
             "type" : "integer",
             "format" : "int32",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA"
           },
           "serviceTimeMs" : {
             "type" : "number",
             "format" : "double",
-            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE"
+            "description" : "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, READ_REPLICA"
           },
           "callMode" : {
             "type" : "string",
@@ -324,9 +324,17 @@
             "items" : {
               "$ref" : "#/components/schemas/ShardResult"
             }
+          },
+          "warnings" : {
+            "type" : "array",
+            "description" : "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "REPLICATION_LAG" ]
+            }
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "rejectedRps", "shards", "status", "successRps", "throughputRps", "utilization" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "rejectedRps", "shards", "status", "successRps", "throughputRps", "utilization", "warnings" ]
       },
       "ShardResult" : {
         "type" : "object",

@@ -1,5 +1,5 @@
 import type { Edge, Node, NodeType, Topology } from '@/api/client'
-import { NODE_KINDS, NODE_TYPES, type NodeParams } from '@/canvas/catalog'
+import { canFeed, NODE_KINDS, NODE_TYPES, type NodeParams } from '@/canvas/catalog'
 import { EDGE_CHOICE_SPECS, NODE_CHOICE_SPECS, NODE_PARAM_SPECS } from '@/canvas/params'
 
 const SUPPORTED_VERSION = 1
@@ -10,7 +10,7 @@ export type ParseResult = { ok: true; topology: Topology } | { ok: false; errors
 
 // 匯入檔是第 5 節的 Request 格式。這裡擋三種錯誤：
 // - 後端會回 400 的格式錯誤（缺欄位、型別不對、數值溢位成 Infinity、id 重複）
-// - 畫布畫不出來或選不到的邊（連到不存在的節點、連回自己、重複的邊、連進 Client、從沒有下游的 type 連出），
+// - 畫布畫不出來或選不到的邊（連到不存在的節點、連回自己、重複的邊、連進 Client、從沒有下游的 type 連出、Database 連到 Read Replica 以外的節點），
 //   編輯器本身也不允許建立這些邊
 // 參數範圍和其他拓撲規則交給後端驗證，匯入後在錯誤分頁顯示，和使用者自己編輯出來的狀態一樣
 export function parseTopology(text: string): ParseResult {
@@ -196,6 +196,11 @@ function toEdge(
   }
   if (targetType != null && !NODE_KINDS[targetType].hasInput) {
     fail(`${NODE_KINDS[targetType].label} 不能有上游（target 是 "${target}"）`)
+    return null
+  }
+  if (sourceType != null && targetType != null && !canFeed(sourceType, targetType)) {
+    const targets = NODE_KINDS[sourceType].outputTargets!.map((t) => NODE_KINDS[t].label).join('、')
+    fail(`${NODE_KINDS[sourceType].label} 只能連到 ${targets}（target 是 "${target}"）`)
     return null
   }
 

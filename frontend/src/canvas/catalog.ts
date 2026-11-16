@@ -1,4 +1,4 @@
-import { Archive, Boxes, Cloud, Database, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
+import { Archive, Boxes, Cloud, Database, DatabaseBackup, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
 import type { EdgeChoiceParam, EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
@@ -26,6 +26,8 @@ type NodeKind = {
   edgeChoiceParams: EdgeChoiceParam[]
   // 出邊的種類，依 source 的 type 決定
   outputEdgeKind: EdgeKind
+  // 只能連到這些 type（Database 只能連到 Read Replica，spec 4.5）；沒有時不限制
+  outputTargets?: NodeType[]
   // Run 之後節點上顯示的指標：ρ，或沒有 ρ 的 Rate Limiter、External API 改顯示拒絕量
   nodeMetric: 'utilization' | 'rejected'
 }
@@ -40,6 +42,7 @@ export const NODE_TYPES: NodeType[] = [
   'CACHE',
   'CDN',
   'DATABASE',
+  'READ_REPLICA',
   'OBJECT_STORAGE',
   'RATE_LIMITER',
   'EXTERNAL_API',
@@ -124,6 +127,23 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     idPrefix: 'db',
     defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
     numberParams: [...CAPACITY_PARAMS, 'shards'],
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: true,
+    // 複製是非同步的（spec 4.2.3），邊上沒有參數可調
+    edgeParams: [],
+    edgeChoiceParams: [],
+    outputEdgeKind: 'ASYNC',
+    outputTargets: ['READ_REPLICA'],
+    nodeMetric: 'utilization',
+  },
+  // primary 的唯讀副本：write 是 primary 複製過來的，read 由 Service 的 READ 邊送來；分片沿用 primary（spec 4.2.3）
+  READ_REPLICA: {
+    label: 'Read Replica',
+    icon: DatabaseBackup,
+    idPrefix: 'replica',
+    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+    numberParams: CAPACITY_PARAMS,
     choiceParams: [],
     hasInput: true,
     hasOutput: false,
@@ -240,4 +260,9 @@ export function newEdgeId(source: string, target: string, usedIds: ReadonlySet<s
     id = `${base}-${n}`
   }
   return id
+}
+
+// source 的 type 能不能連到 target 的 type（另外還有 hasOutput／hasInput、重複和環的規則）
+export function canFeed(source: NodeType, target: NodeType): boolean {
+  return NODE_KINDS[source].outputTargets?.includes(target) ?? true
 }

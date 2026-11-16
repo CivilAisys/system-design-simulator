@@ -20,14 +20,14 @@ final class MmcQueue {
         if (rho >= 1.0) {
             ClassRates processed = arrival.times(cap / lambda);
             var result = new NodeResult(arrival, cap, lambda - cap, 0, null, null, cap, rho, null, null,
-                    Status.OVERLOADED, null);
+                    Status.OVERLOADED, null, List.of());
             return new Outcome(result, processed);
         }
 
         double waitSec = erlangC(c, lambda / mu) / (cap - lambda);
         double queueMs = waitSec * 1000.0;
         var result = new NodeResult(arrival, lambda, 0, 0, null, null, cap, rho, queueMs,
-                queueMs + params.serviceTimeMs(), Status.of(rho), null);
+                queueMs + params.serviceTimeMs(), Status.of(rho), null, List.of());
         return new Outcome(result, arrival);
     }
 
@@ -40,11 +40,22 @@ final class MmcQueue {
         if (layout.count() == 1) {
             return solve(params, arrival);
         }
-        int others = layout.count() - 1;
-        Outcome hot = solve(params, arrival.times(layout.hottestShare()));
-        Outcome other = solve(params, arrival.times(layout.otherShare()));
+        return solve(params, layout.count(), arrival.times(layout.hottestShare()), arrival.times(layout.otherShare()));
+    }
+
+    /**
+     * 第一個 shard 收到 {@code first}、其他 {@code count - 1} 個 shard 各收到 {@code each}。
+     * Read Replica 用它：每個 shard 的複製寫入是 primary 對應 shard 處理完的寫入，不一定和 read 同比例（spec 4.2.3）。
+     * 節點的 ρ 和狀態取 ρ 較高的那一種 shard。
+     */
+    static Outcome solve(CapacityParams params, int count, ClassRates first, ClassRates each) {
+        int others = count - 1;
+        Outcome hot = solve(params, first);
+        Outcome other = solve(params, each);
         NodeResult h = hot.result();
         NodeResult o = other.result();
+        ClassRates arrival = first.plus(each.times(others));
+        NodeResult busiest = o.utilization() > h.utilization() ? o : h;
 
         ClassRates processed = hot.processed().plus(other.processed().times(others));
         double lambda = arrival.total();
@@ -62,8 +73,8 @@ final class MmcQueue {
             shards.add(shard(o));
         }
         var result = new NodeResult(arrival, h.throughputRps() + o.throughputRps() * others,
-                h.droppedRps() + o.droppedRps() * others, 0, null, null, params.capacityRps() * layout.count(),
-                h.utilization(), queueMs, latencyMs, h.status(), List.copyOf(shards));
+                h.droppedRps() + o.droppedRps() * others, 0, null, null, params.capacityRps() * count,
+                busiest.utilization(), queueMs, latencyMs, busiest.status(), List.copyOf(shards), List.of());
         return new Outcome(result, processed);
     }
 

@@ -1,4 +1,4 @@
-import type { Status } from '@/api/client'
+import type { NodeWarning, Status } from '@/api/client'
 
 // 第 4.4 節的狀態色，畫布節點、指標表和 Sankey 共用。
 // Rate Limiter 的 LIMITING／NOT_LIMITING 不是 ρ 分級：限流是設計上預期的行為，不變色、不發光。
@@ -75,4 +75,13 @@ export const STATUS_LABEL: Record<Status, string> = {
   NOT_LIMITING: '未觸發',
   OVER_QUOTA: '超過配額',
   WITHIN_QUOTA: '配額內',
+}
+
+// 節點警告（spec 4.2.3），不影響狀態分級，節點和指標表都顯示
+export const WARNING_LABEL: Record<NodeWarning, string> = {
+  REPLICATION_LAG: '複製跟不上',
+}
+
+export const WARNING_TITLE: Record<NodeWarning, string> = {
+  REPLICATION_LAG: 'Read Replica 過載，丟掉了一部分複製寫入：replication lag 會持續增加',
 }

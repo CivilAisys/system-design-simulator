@@ -42,7 +42,9 @@ final class SuccessRates {
                 double miss = graph.visits(edge, read);
                 yield (1 - miss) + miss * children.get(edge.target());
             }
+            // 複製是非同步的，replica 跟不上不影響 primary 上的請求
             case StorageNode storage -> 1;
+            case ReadReplicaNode replica -> 1;
             case ExternalApiNode api -> 1;
             // 放行的請求只送往唯一的下游；被拒絕的部分由 pass(n) 扣掉
             case RateLimiterNode limiter -> children.get(edges.getFirst().target());

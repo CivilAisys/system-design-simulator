@@ -12,6 +12,7 @@ import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
 import simulator.engine.EndToEndLatency;
 import simulator.engine.NodeResult;
+import simulator.engine.NodeWarning;
 import simulator.engine.ShardResult;
 import simulator.engine.SimulationResult;
 import simulator.engine.Status;
@@ -116,13 +117,16 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, nullable = true) Status status,
             @Schema(requiredMode = REQUIRED, nullable = true,
                     description = "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）")
-            List<ShardResultDto> shards) {
+            List<ShardResultDto> shards,
+            @Schema(requiredMode = REQUIRED, description = "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）")
+            List<NodeWarning> warnings) {
 
         static NodeResultDto from(NodeResult node) {
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
                     node.droppedRps(), node.rejectedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()),
                     node.capacityRps(), node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status(),
-                    node.shards() == null ? null : node.shards().stream().map(ShardResultDto::from).toList());
+                    node.shards() == null ? null : node.shards().stream().map(ShardResultDto::from).toList(),
+                    node.warnings());
         }
     }
 

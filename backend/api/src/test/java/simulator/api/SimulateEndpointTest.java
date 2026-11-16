@@ -35,7 +35,7 @@ class SimulateEndpointTest {
 
     private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps", "rejectedRps",
             "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status",
-            "shards");
+            "shards", "warnings");
     private static final List<String> SERVER_FIELDS = List.of("capacityRps", "utilization", "avgQueueMs",
             "avgLatencyMs", "status");
 
@@ -233,6 +233,20 @@ class SimulateEndpointTest {
         assertThat(even.at("/summary/dropRate").asDouble()).isZero();
     }
 
+    // 「Read Replica」範例要示範的情境：replica 分擔 read，但每個 replica 都要套用全部的 write
+    @Test
+    void readReplicaExampleSplitsReadsButEveryReplicaAppliesAllWrites() throws Exception {
+        JsonNode body = simulate(readExample("read-replica.json"));
+
+        assertRates(body.at("/nodes/db-1/arrivalRps"), 0, 1200);
+        for (String replica : List.of("replica-1", "replica-2")) {
+            assertRates(body.at("/nodes/" + replica + "/arrivalRps"), 5400, 1200);
+            assertThat(body.at("/nodes/" + replica + "/utilization").asDouble()).isCloseTo(0.66, within(1e-9));
+            assertThat(body.at("/nodes/" + replica + "/warnings").isEmpty()).isTrue();
+        }
+        assertThat(body.at("/summary/dropRate").asDouble()).isZero();
+    }
+
     static Stream<String> exampleFiles() throws Exception {
         List<String> files;
         try (Stream<Path> listing = Files.list(examplesDir())) {
@@ -337,7 +351,7 @@ class SimulateEndpointTest {
                 // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
                 Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
-                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, RATE_LIMITER, EXTERNAL_API]"),
+                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, RATE_LIMITER, EXTERNAL_API, READ_REPLICA]"),
                 Arguments.of("/nodes/0/name", "123", "nodes[0].name, expected a string"),
                 Arguments.of("/nodes", "{}", "nodes, expected an array"));
     }

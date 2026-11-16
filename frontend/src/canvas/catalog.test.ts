@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
+import { canFeed, newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
 import { checkNodeParam, NODE_CHOICE_SPECS } from './params'
 
 describe('Node type 定義', () => {
@@ -29,6 +29,7 @@ describe('元件面板', () => {
       'REDIS_CLUSTER',
       'CDN',
       'DATABASE',
+      'READ_REPLICA',
       'OBJECT_STORAGE',
       'RATE_LIMITER',
       'EXTERNAL_API',
@@ -44,5 +45,17 @@ describe('元件面板', () => {
     for (const param of NODE_KINDS.CACHE.numberParams) {
       expect(checkNodeParam(node.params, param, node.params[param]!)).toBeNull()
     }
+  })
+})
+
+describe('type 的連線限制', () => {
+  it('Database 只能連到 Read Replica', () => {
+    expect(canFeed('DATABASE', 'READ_REPLICA')).toBe(true)
+    expect(canFeed('DATABASE', 'CACHE')).toBe(false)
+  })
+
+  it('沒有限制的 type 可以連到任何 type', () => {
+    expect(canFeed('SERVICE', 'READ_REPLICA')).toBe(true)
+    expect(canFeed('SERVICE', 'DATABASE')).toBe(true)
   })
 })

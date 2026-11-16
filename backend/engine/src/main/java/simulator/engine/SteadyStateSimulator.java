@@ -46,6 +46,7 @@ public final class SteadyStateSimulator implements Simulator {
                         nodeResults);
                 case RateLimiterNode limiter -> admit(node.id(), limiter.limitRps(), 0, Status.LIMITING,
                         Status.NOT_LIMITING, arrival, nodeResults);
+                case ReadReplicaNode replica -> replicate(replica, graph.primaryOf(replica.id()), arrival, nodeResults);
                 case ExternalApiNode api -> admit(node.id(), api.quotaRps(), api.latencyMs(), Status.OVER_QUOTA,
                         Status.WITHIN_QUOTA, arrival, nodeResults);
             };
@@ -89,8 +90,49 @@ public final class SteadyStateSimulator implements Simulator {
         boolean exceeded = lambda > limit;
         ClassRates passed = exceeded ? arrival.times(limit / lambda) : arrival;
         nodeResults.put(nodeId, new NodeResult(arrival, passed.total(), 0, lambda - passed.total(), null, null,
-                null, null, 0.0, latencyMs, exceeded ? over : within, null));
+                null, null, 0.0, latencyMs, exceeded ? over : within, null,
+                List.of()));
         return passed;
+    }
+
+    /**
+     * Read Replica（spec 4.2.3）：write 到達率是 primary 處理完的寫入，再加上 Service 送來的 read。
+     * primary 分片時沿用它的配置：第 i 個 shard 收到 primary 第 i 個 shard 的複製寫入，加上分到第 i 個 shard 的 read。
+     * 過載時丟棄量依比例分給 read 和複製寫入，丟到複製寫入就加上 REPLICATION_LAG 警告。
+     */
+    private static ClassRates replicate(ReadReplicaNode replica, DatabaseNode primary, ClassRates arrival,
+            Map<String, NodeResult> nodeResults) {
+        NodeResult primaryResult = nodeResults.get(primary.id());
+        double replicated = processedWrites(primaryResult.arrivalRps(), primaryResult.throughputRps());
+        // Service 直接送來的部分（通常只有 read）
+        var direct = new ClassRates(arrival.read(), arrival.write() - replicated);
+        ShardLayout layout = primary.shards();
+        MmcQueue.Outcome outcome;
+        boolean lagging;
+        if (layout.count() == 1) {
+            outcome = MmcQueue.solve(replica.capacityParams(), arrival);
+            lagging = replicated > 0 && outcome.result().droppedRps() > 0;
+        } else {
+            ShardResult hot = primaryResult.shards().get(0);
+            ShardResult other = primaryResult.shards().get(1);
+            double hotWrites = processedWrites(hot.arrivalRps(), hot.throughputRps());
+            double otherWrites = processedWrites(other.arrivalRps(), other.throughputRps());
+            outcome = MmcQueue.solve(replica.capacityParams(), layout.count(),
+                    direct.times(layout.hottestShare()).plus(new ClassRates(0, hotWrites)),
+                    direct.times(layout.otherShare()).plus(new ClassRates(0, otherWrites)));
+            List<ShardResult> shards = outcome.result().shards();
+            lagging = (hotWrites > 0 && shards.get(0).droppedRps() > 0)
+                    || (otherWrites > 0 && shards.get(1).droppedRps() > 0);
+        }
+        NodeResult result = outcome.result();
+        nodeResults.put(replica.id(), lagging ? result.withWarning(NodeWarning.REPLICATION_LAG) : result);
+        return outcome.processed();
+    }
+
+    /** 處理完的 write：丟棄依 read／write 比例發生（spec 4.2）。 */
+    private static double processedWrites(ClassRates arrival, double throughput) {
+        double total = arrival.total();
+        return total > 0 ? arrival.write() * throughput / total : 0;
     }
 
     private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults,

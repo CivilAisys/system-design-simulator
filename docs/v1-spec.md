@@ -105,7 +105,8 @@ system-design-simulator/
 | **Service** | 應用伺服器 | `callMode` | **Fan-out**：每個請求呼叫每個下游 `callsPerRequest` 次；`callMode` 決定依序（`SEQUENTIAL`）或平行（`PARALLEL`） | 2 × 200, 50ms（8,000 rps）, callMode=SEQUENTIAL |
 | **Cache** | 快取（元件面板的「Redis Cluster」是 `shards = 3` 的 Cache） | `hitRatio`、`shards`、`hotShardShare` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
 | **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
-| **Database** | 資料儲存（終點） | `shards`、`hotShardShare` | 無下游 | 1 × 100, 10ms（10,000 rps） |
+| **Database** | 資料儲存（終點） | `shards`、`hotShardShare` | 只能連到 Read Replica（複製，4.2.3） | 1 × 100, 10ms（10,000 rps） |
+| **Read Replica** | primary Database 的唯讀副本 | — | 無下游；write 是 primary 複製過來的，read 由 Service 的 READ 邊送來 | 1 × 100, 10ms（10,000 rps） |
 | **Object Storage** | 存放圖片、影片等大型檔案（例如 S3），終點 | — | 無下游，同 Database | 1 × 10000, 20ms（≈500k rps） |
 | **Rate Limiter** | 全域限流 | `limitRps` | 放行 `min(λ, limitRps)`，超過的部分是**拒絕量**，不往下送；必須剛好一個下游 | limitRps=1000 |
 | **External API** | 第三方服務（金流、簡訊、地圖 API 等），終點 | `latencyMs`、`quotaRps` | 無下游；超過 `quotaRps` 的部分是**拒絕量**（HTTP 429） | latencyMs=100, quotaRps=1000 |
@@ -156,7 +157,7 @@ system-design-simulator/
 - 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`。
 - 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。只換名稱、圖示和部分預設值、type 不變的元件（例如 Redis Cluster）不是新的 type，加在同一個檔案的 `PRESETS`，元件面板讀的是由兩者組成的 `PALETTE`。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類、節點上顯示的指標，元件面板、畫布、屬性面板和匯入都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
 - 計算和既有 type 完全相同、只差預設值和名稱的新 type（例如 CDN 之於 Cache、Object Storage 之於 Database）：engine 讓兩者實作同一個 sealed 子介面（`CachingNode`、`StorageNode`），`switch` 對子介面寫一個分支，計算和驗證共用；前端 `NODE_KINDS` 仍各寫一筆。
-- 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。
+- 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。只能連到特定 type 時寫在 `outputTargets`（例如 Database 只能連到 Read Replica）。
 - 文件：本 spec 的 3.3（元件表）、4.5（驗證規則）、5（API 範例有需要時），`GLOSSARY.md` 的新名詞，並在 `frontend/src/examples/` 加一個用到它的內建範例。
 
 ---
@@ -241,6 +242,15 @@ Cache 和 Database 可以分片（CDN、Object Storage 不行），這是能力�
 - Cache 分片後每個 shard 的 `hitRatio` 相同，送往下游的是所有 shard 的 miss 加總。
 - 回應的節點結果有 `shards` 陣列（5），最熱的 shard 放第一個，每項有到達率、ρ、狀態、處理量、丟棄量、延遲。`shards = 1` 時沒有這個陣列（`null`），結果和不分片完全相同。
 
+### 4.2.3 Read Replica
+
+用來分擔 primary Database 的 read，並呈現「replica 也要套用所有寫入，所以無法擴展寫入」。預設值和 Database 相同（1 × 100、10 ms），一樣用 4.2 的 M/M/c 計算。
+
+- **Replication 邊**：從 Database 拉到 Read Replica 的邊代表複製關係。primary 每秒**處理完**的 write，會在 replica 上同樣套用一次，算成 replica 的 write 到達率（primary 過載丟掉的 write 不會複製）。複製是非同步的，不算進 Client 的端到端延遲（4.3）和成功率（4.3.1），邊畫成虛線，邊上沒有參數可調。
+- **Read 怎麼送到 replica**：用 Service 邊的 `requestClass`（3.4），例如 Service ─(WRITE)→ primary、Service ─(READ)→ replica。要分給多個 replica，中間放一個 LB。
+- **過載**：replica 的丟棄量依比例分給 read 和複製寫入。read 的丟棄照常算進失敗率；複製寫入被丟棄時，節點結果的 `warnings` 有 `REPLICATION_LAG`，畫面顯示「複製跟不上」（replication lag 會持續增加）。警告不影響狀態分級。
+- **配合分片**：primary 有 `shards` 時，replica 自動沿用 primary 的配置（相同的 N 和 `hotShardShare`），自己不能設定。replica 的第 i 個 shard 承擔 primary 第 i 個 shard 處理完的寫入，加上分到第 i 個 shard 的 read，結果也有 `shards` 陣列、畫成 cluster。因為每個 shard 的複製寫入不一定和 read 同比例，節點的 ρ 和狀態取 ρ 較高的那一種 shard。
+
 ### 4.3 端到端平均延遲
 
 設 `L(n, class)` 為一個 class 的請求從節點 n 開始到完成的平均延遲：
@@ -322,7 +332,9 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 | 至少一個 Client | `NO_CLIENT` |
 | 不能有環 | `CYCLE_DETECTED` |
 | Client 不能有上游 | `CLIENT_HAS_INPUT` |
-| Database、Object Storage 不能有下游（Object Storage 沿用同一個錯誤碼，訊息寫 Object Storage） | `DATABASE_HAS_OUTPUT` |
+| Database 只能連到 Read Replica；Object Storage 不能有下游（沿用同一個錯誤碼，訊息寫各自的 type） | `DATABASE_HAS_OUTPUT` |
+| Read Replica 必須剛好有一個 Database 上游（primary） | `REPLICA_PRIMARY_COUNT` |
+| Read Replica 不能有下游 | `REPLICA_HAS_OUTPUT` |
 | Cache、CDN 必須剛好一個下游（CDN 沿用同一個錯誤碼，訊息寫 CDN） | `CACHE_DOWNSTREAM_COUNT` |
 | Rate Limiter 必須剛好一個下游 | `RATE_LIMITER_DOWNSTREAM_COUNT` |
 | External API 不能有下游 | `EXTERNAL_API_HAS_OUTPUT` |
@@ -335,7 +347,7 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 
 - `NO_CLIENT` 兩個都是 `null`（沒有可以指的節點）。
 - `CYCLE_DETECTED` 在環上的每個節點各一個錯誤；環下游、夾在兩個環中間的節點不算。
-- `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`RATE_LIMITER_DOWNSTREAM_COUNT`、`EXTERNAL_API_HAS_OUTPUT`、`NO_DOWNSTREAM` 附 `nodeId`。
+- `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`RATE_LIMITER_DOWNSTREAM_COUNT`、`EXTERNAL_API_HAS_OUTPUT`、`REPLICA_PRIMARY_COUNT`、`REPLICA_HAS_OUTPUT`、`NO_DOWNSTREAM` 附 `nodeId`。
 - `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則，但仍算在另一端的上下游數量裡（畫布上看得到這條邊，不重複報錯）。
 - `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。Rate Limiter 的 `limitRps`、External API 的 `quotaRps` 也必須 > 0：0 等於全部拒絕，要停用就刪掉節點。
 
@@ -434,7 +446,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
       "avgQueueMs": null,
       "avgLatencyMs": null,
       "status": null,
-      "shards": null
+      "shards": null,
+      "warnings": []
     },
     "svc-1": {
       "arrivalRps": { "read": 900, "write": 100 },
@@ -446,7 +459,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
       "avgQueueMs": 0.0,
       "avgLatencyMs": 50.0,
       "status": "OK",
-      "shards": null
+      "shards": null,
+      "warnings": []
     }
   },
   "edges": {
@@ -467,6 +481,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 ```
 
 驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單，不做任何計算：`nodes`、`edges` 為 `{}`，`summary` 為 `null`。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
+
+**警告**：`warnings` 永遠是陣列，沒有警告時為空；目前只有 Read Replica 的 `REPLICATION_LAG`（4.2.3）。
 
 **分片的節點**：`shards` 是每個 shard 的結果陣列（`arrivalRps`、`throughputRps`、`droppedRps`、`utilization`、`avgLatencyMs`、`status`），最熱的放第一個；沒有分片的節點為 `null`（4.2.2）。
 
@@ -516,6 +532,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 **互動規則**
 - 自訂 React Flow 節點：顯示名稱、類型圖示、ρ 和狀態色；Run 之後才會出現指標。
 - 邊上的 label 顯示 RPS，粗細依流量比例。
+- 節點有警告時（例如 Read Replica 的「複製跟不上」）在節點和指標表的狀態旁顯示。
 - Rate Limiter、External API 節點沒有 ρ，改顯示拒絕量和狀態（「限流中」／「未觸發」、「超過配額」／「配額內」）。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
 - **Cluster 外觀**：`shards` > 1 的 Cache、Database 在節點裡排出 N 個格子（一行最多 8 格，64 個 shard 是 8 × 8），每格是一個 shard，最熱的在第一格，依該 shard 的狀態（4.4）上色，過載的格子發光。滑鼠移到格子上顯示該 shard 的到達率、ρ、延遲、丟棄量。格子不能單獨選取或編輯，參數在節點的屬性面板設定。`shards = 1` 時外觀不變。Run 之前、或改了 `shards` 還沒重算時，格子是灰色。

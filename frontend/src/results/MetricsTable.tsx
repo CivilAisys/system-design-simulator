@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { totalRps, type ComputedResult, type Topology } from '@/api/client'
 import { DASH, formatClassRates, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
-import { STATUS_BADGE, STATUS_LABEL } from '@/canvas/status'
+import { STATUS_BADGE, STATUS_LABEL, WARNING_LABEL, WARNING_TITLE } from '@/canvas/status'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 
 type MetricsTableProps = {
@@ -86,6 +86,16 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
               <TableCell className="text-right tabular-nums">{formatOptionalRps(metrics.successRps)}</TableCell>
               <TableCell>
                 {status ? <Badge className={STATUS_BADGE[status]}>{STATUS_LABEL[status]}</Badge> : DASH}
+                {metrics.warnings.map((warning) => (
+                  <Badge
+                    key={warning}
+                    variant="outline"
+                    className="ml-1 text-orange-600 dark:text-orange-400"
+                    title={WARNING_TITLE[warning]}
+                  >
+                    {WARNING_LABEL[warning]}
+                  </Badge>
+                ))}
               </TableCell>
             </TableRow>
           )

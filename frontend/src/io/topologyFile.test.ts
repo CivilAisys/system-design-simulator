@@ -207,7 +207,7 @@ describe('格式錯誤', () => {
 
     it('type 不是已知的類型', () => {
       expect(errorsOf((f) => void (f.nodes[4].type = 'QUEUE'))).toEqual([
-        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、OBJECT_STORAGE、RATE_LIMITER、EXTERNAL_API 其中之一',
+        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、READ_REPLICA、OBJECT_STORAGE、RATE_LIMITER、EXTERNAL_API 其中之一',
       ])
     })
 
@@ -364,10 +364,24 @@ describe('畫不出來的邊', () => {
     ])
   })
 
-  it('從 Database 連出', () => {
+  it('Database 連到 Read Replica 以外的節點', () => {
     expect(errorsOf((f) => void Object.assign(f.edges[4], { source: 'db', target: 'cache' }))).toEqual([
-      'edges[4]（id "e5"）：Database 不能有下游（source 是 "db"）',
+      'edges[4]（id "e5"）：Database 只能連到 Read Replica（target 是 "cache"）',
     ])
+  })
+
+  it('Database 可以連到 Read Replica', () => {
+    const file = validFile()
+    const replica = {
+      id: 'replica',
+      type: 'READ_REPLICA',
+      name: 'Replica',
+      params: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+      ui: { x: 1200, y: 100 },
+    }
+    const edges = [...file.edges, edge('e6', 'db', 'replica')]
+    const topology = topologyOf({ ...file, nodes: [...file.nodes, replica], edges })
+    expect(topology.edges.at(-1)).toMatchObject({ source: 'db', target: 'replica' })
   })
 
   it('從 External API 連出', () => {

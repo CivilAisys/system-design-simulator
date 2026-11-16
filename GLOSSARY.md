@@ -11,7 +11,7 @@
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
-拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database、Object Storage、Rate Limiter 或 External API。
+拓撲中的一個元件：Client、Load Balancer、Service、Cache、CDN、Database、Object Storage、Read Replica、Rate Limiter 或 External API。
 _Avoid_: component、box
 
 **Edge（邊）**:
@@ -34,6 +34,13 @@ _Avoid_: server、app、backend
 
 **CDN**:
 放在 Client 和後端（origin）之間的快取，行為和 Cache 相同，只有預設值和名稱不同。
+
+**Read Replica**:
+primary Database 的唯讀副本：分擔 read，但要套用 primary 的所有寫入，所以無法擴展寫入。
+_Avoid_: slave、secondary
+
+**Replication（複製）**:
+primary 把處理完的寫入非同步地套用到 Read Replica。不算進 Client 的延遲和成功率；replica 跟不上時 replication lag 會持續增加。
 
 **Rate Limiter**:
 限制每秒放行的請求數（全域上限，不分 Client），超過的部分拒絕，不往下送。
