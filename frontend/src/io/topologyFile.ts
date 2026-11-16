@@ -107,12 +107,11 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     return null
   }
 
-  // 選填參數省略時用該類型的預設值（spec 3.6）
   const kind = NODE_KINDS[type]
   const kept: NodeParams = {}
   for (const param of kind.numberParams) {
     const spec = NODE_PARAM_SPECS[param]
-    const value = params[param] === undefined && spec.optional ? kind.defaults[param] : params[param]
+    const value = paramOrDefault(params, param, spec.optional, kind.defaults)
     if (!isFiniteNumber(value)) {
       fail(`缺少數值參數 params.${param}（或數值太大）`)
       return null
@@ -128,7 +127,7 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
   }
   for (const param of kind.choiceParams) {
     const spec = NODE_CHOICE_SPECS[param]
-    const value = params[param] === undefined && spec.optional ? kind.defaults[param] : params[param]
+    const value = paramOrDefault(params, param, spec.optional, kind.defaults)
     const option = spec.options.find((o) => o.value === value)
     if (!option) {
       fail(`params.${param} 必須是 ${spec.options.map((o) => o.value).join(' 或 ')}`)
@@ -229,6 +228,16 @@ function endpoint(
     return null
   }
   return value
+}
+
+// 選填參數省略時換成該類型的預設值，其他情況照原樣交給呼叫端檢查
+function paramOrDefault(
+  params: Record<string, unknown>,
+  param: keyof NodeParams,
+  optional: boolean | undefined,
+  defaults: NodeParams,
+): unknown {
+  return params[param] === undefined && optional ? defaults[param] : params[param]
 }
 
 // 沒有座標的節點排在所有有座標的節點下方一列，不會和它們重疊
