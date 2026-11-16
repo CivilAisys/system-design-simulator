@@ -120,11 +120,11 @@ describe('formatBytes', () => {
 
 describe('formatDays', () => {
   it('不到 1 天不顯示成 0', () => {
-    expect(formatDays(0.2)).toBe('< 1 天')
+    expect(formatDays(0.2)).toBe('不到 1 天')
   })
 
-  it('100 天以內保留一位小數，之後四捨五入', () => {
-    expect(formatDays(16.53)).toBe('16.5 天')
-    expect(formatDays(1234.6)).toBe(`${(1235).toLocaleString()} 天`)
+  it('100 天以內保留一位小數，之後四捨五入，前面加「約」', () => {
+    expect(formatDays(16.53)).toBe('約 16.5 天')
+    expect(formatDays(1234.6)).toBe(`約 ${(1235).toLocaleString()} 天`)
   })
 })

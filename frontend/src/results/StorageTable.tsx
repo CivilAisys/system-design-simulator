@@ -96,7 +96,7 @@ function DiskCell({
   if (daysUntilFull == null) return '不會滿'
   return (
     <>
-      約 {formatDays(daysUntilFull)}
+      {formatDays(daysUntilFull)}
       <div className={cn('text-xs', !fillsDisk && 'text-muted-foreground')}>
         {fillsDisk ? '保留期內就會滿' : '保留期內不會滿'}・{formatBytes(diskGb * 1e9)}
       </div>

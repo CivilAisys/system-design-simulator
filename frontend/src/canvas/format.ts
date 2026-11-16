@@ -56,10 +56,10 @@ export function formatBytes(bytes: number): string {
   return formatScaled(bytes, BYTE_UNITS)
 }
 
-// 磁碟幾天後會滿；不到 1 天顯示「< 1 天」，避免看起來像 0
+// 磁碟幾天後會滿，是估計值所以加「約」；不到 1 天顯示「不到 1 天」，避免看起來像 0
 export function formatDays(days: number): string {
-  if (days < 1) return '< 1 天'
-  return days < 100 ? `${days.toFixed(1)} 天` : `${Math.round(days).toLocaleString()} 天`
+  if (days < 1) return '不到 1 天'
+  return days < 100 ? `約 ${days.toFixed(1)} 天` : `約 ${Math.round(days).toLocaleString()} 天`
 }
 
 export function formatBitsPerSec(bytesPerSec: number): string {
