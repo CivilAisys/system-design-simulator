@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { NODE_KINDS, shownShards } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
-import { workersHint } from './instanceStack'
+import { workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
 import { ParamLabel } from './ParamLabel'
 import {
