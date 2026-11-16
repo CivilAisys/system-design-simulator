@@ -66,16 +66,16 @@ export function RpsEdge({
         <EdgeLabelRenderer>
           <div
             className={cn(
-              'nodrag nopan pointer-events-none absolute rounded bg-background/80 px-1.5 py-0.5 text-xs text-foreground',
+              'nodrag nopan pointer-events-none absolute rounded bg-background/80 px-1.5 py-0.5 text-xs whitespace-nowrap text-foreground',
               stale && 'opacity-50',
             )}
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
           >
             {classTag && <span className={cn('font-semibold', result && 'mr-1')}>{classTag}</span>}
             {result && formatRps(totalRps(result.rps))}
-            {/* consumer 處理不完：queue 每秒增加的訊息數 */}
+            {/* 沒有處理成功的訊息：queue 每秒增加的筆數。放第二行，不拉長標籤 */}
             {result && result.backlogRps > 0 && (
-              <span className="ml-1 font-semibold text-orange-500">積壓 +{formatRps(result.backlogRps)}/s</span>
+              <div className="font-semibold text-orange-500">積壓 +{formatRps(result.backlogRps)}/s</div>
             )}
             {/* 只有 Client 的邊有：使用者端頻寬（spec 4.7） */}
             {result?.bandwidth && (

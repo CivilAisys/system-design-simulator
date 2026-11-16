@@ -602,7 +602,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 **互動規則**
 - 自訂 React Flow 節點：顯示名稱、類型圖示、ρ 和狀態色；Run 之後才會出現指標。
 - 邊上的 label 顯示 RPS，粗細依流量比例。
-- 節點有警告時（Read Replica 的「複製跟不上」、consumer 的「積壓中」）在節點和指標表的狀態旁顯示。Message Queue 的下游邊有積壓時，標籤後面加上「積壓 +X rps/s」。
+- 節點有警告時（Read Replica 的「複製跟不上」、consumer 的「積壓中」）在節點和指標表的狀態旁顯示。Message Queue 的下游邊有積壓時，標籤第二行顯示「積壓 +X rps/s」（不拉長標籤）。邊的標籤畫在節點上面一層，節點靠得近時不會被擋住，也不攔截節點的點擊和拖曳。
 - Rate Limiter、External API 節點沒有 ρ，改顯示拒絕量和狀態（「限流中」／「未觸發」、「超過配額」／「配額內」）。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
 - **Cluster 外觀**：`shards` > 1 的 Cache、Database，以及沿用分片 primary 的 Read Replica，在節點裡排出 N 個格子（一行最多 8 格，64 個 shard 是 8 × 8），每格是一個 shard，最熱的在第一格，依該 shard 的狀態（4.4）上色，過載的格子發光。滑鼠移到格子上顯示該 shard 的到達率、ρ、延遲、丟棄量。格子不能單獨選取或編輯，參數在節點的屬性面板設定。`shards = 1` 時外觀不變。Run 之前、或改了 `shards` 還沒重算時，格子是灰色。
