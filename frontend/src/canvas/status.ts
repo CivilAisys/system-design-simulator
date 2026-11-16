@@ -85,5 +85,6 @@ export const WARNING_LABEL: Record<NodeWarning, string> = {
 
 export const WARNING_TITLE: Record<NodeWarning, string> = {
   REPLICATION_LAG: 'Read Replica 過載，丟掉了一部分複製寫入：replication lag 會持續增加',
-  BACKLOG: 'consumer 處理不完 Message Queue 送來的訊息，超過容量的部分留在 queue 裡，backlog 持續增加',
+  BACKLOG:
+    'Message Queue 送來的訊息有一部分沒有處理成功（consumer 處理不完，或下游失敗），留在 queue 裡等重試，backlog 持續增加',
 }

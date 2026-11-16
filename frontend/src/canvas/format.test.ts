@@ -48,10 +48,23 @@ describe('formatClassRates', () => {
 })
 
 describe('formatMs', () => {
-  it('取一位小數', () => {
+  it('0.1 ms 以上取一位小數', () => {
     expect(formatMs(12.345)).toBe('12.3 ms')
-    expect(formatMs(0)).toBe('0.0 ms')
-    expect(formatMs(0.04)).toBe('0.0 ms')
+    expect(formatMs(0.1)).toBe('0.1 ms')
+  })
+
+  it('小於 0.1 ms 取兩位有效數字，不顯示成 0.0', () => {
+    expect(formatMs(0.01)).toBe('0.010 ms')
+    expect(formatMs(0.0012)).toBe('0.0012 ms')
+    expect(formatMs(0.04)).toBe('0.040 ms')
+  })
+
+  it('四捨五入到 0.1 的值和 0.1 用同一個格式', () => {
+    expect(formatMs(0.0996)).toBe('0.1 ms')
+  })
+
+  it('0 顯示成 0 ms', () => {
+    expect(formatMs(0)).toBe('0 ms')
   })
 
   it('null 顯示成 —', () => {
@@ -96,8 +109,10 @@ describe('formatBytesPerSec', () => {
     expect(formatBytesPerSec(999_700)).toBe('1.00 MB/s')
   })
 
-  it('超過最大單位時不再換算', () => {
-    expect(formatBytesPerSec(2e18)).toBe('2000 PB/s')
+  it('超過 PB/s 時用科學記號', () => {
+    expect(formatBytesPerSec(999e15)).toBe('999 PB/s')
+    expect(formatBytesPerSec(1.234e18)).toBe('1.2e18 B/s')
+    expect(formatBytesPerSec(999.7e15)).toBe('1.0e18 B/s')
   })
 })
 
@@ -107,14 +122,23 @@ describe('formatBitsPerSec', () => {
     expect(formatBitsPerSec(1.9e9)).toBe('15.2 Gbps')
     expect(formatBitsPerSec(100)).toBe('800 bps')
   })
+
+  it('超過 Pbps 時用科學記號', () => {
+    expect(formatBitsPerSec(2e18)).toBe('1.6e19 bps')
+    // bytes 還在 PB/s 以內，乘 8 之後才超過
+    expect(formatBitsPerSec(125e15)).toBe('1.0e18 bps')
+  })
 })
 
 describe('formatBytes', () => {
-  it('用十進位單位換算到 YB', () => {
+  it('用十進位單位換算到 PB', () => {
     expect(formatBytes(0)).toBe('0 B')
     expect(formatBytes(17_280_000_000)).toBe('17.3 GB')
     expect(formatBytes(6.3e15)).toBe('6.30 PB')
-    expect(formatBytes(2e24)).toBe('2.00 YB')
+  })
+
+  it('超過 PB 時用科學記號', () => {
+    expect(formatBytes(2e24)).toBe('2.0e24 B')
   })
 })
 

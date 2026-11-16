@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canFeed, newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
+import { canFeed, newEdgeRequestClass, newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
 import { checkNodeParam, NODE_CHOICE_SPECS } from './params'
 
 describe('Node type 定義', () => {
@@ -63,5 +63,17 @@ describe('type 的連線限制', () => {
   it('沒有限制的 type 可以連到任何 type', () => {
     expect(canFeed('SERVICE', 'READ_REPLICA')).toBe(true)
     expect(canFeed('SERVICE', 'DATABASE')).toBe(true)
+  })
+})
+
+describe('新邊的 requestClass', () => {
+  it('Service 連到 Read Replica 預設只送 read', () => {
+    expect(newEdgeRequestClass('SERVICE', 'READ_REPLICA')).toBe('READ')
+  })
+
+  it('其他邊預設 ALL', () => {
+    expect(newEdgeRequestClass('SERVICE', 'DATABASE')).toBe('ALL')
+    expect(newEdgeRequestClass('LOAD_BALANCER', 'READ_REPLICA')).toBe('ALL')
+    expect(newEdgeRequestClass('DATABASE', 'READ_REPLICA')).toBe('ALL')
   })
 })
