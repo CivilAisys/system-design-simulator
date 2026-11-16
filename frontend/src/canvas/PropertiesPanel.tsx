@@ -13,6 +13,7 @@ import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
 import { workersHint } from './instanceStack'
 import { NumberField } from './NumberField'
+import { ParamLabel } from './ParamLabel'
 import {
   checkNodeParam,
   EDGE_CHOICE_SPECS,
@@ -152,8 +153,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
               check={(value) => checkNodeParam(node.params, 'diskGbPerShard', value)}
               onChange={(value) => onUpdate(node.id, { params: { diskGbPerShard: value } })}
             />
-            <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
-              <span>每個 shard 的磁碟容量</span>
+            <div className="flex justify-end text-xs">
               <Button
                 variant="link"
                 size="sm"
@@ -178,14 +178,16 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
         // 底色跟著狀態（STATUS_BADGE 的淡底和深色文字）
         <div className={cn('grid gap-2.5 rounded-xl bg-muted p-3.5', status && STATUS_BADGE[status])}>
           <div className="flex items-baseline justify-between text-sm">
-            <span>ρ</span>
+            <span>
+              <ParamLabel label="使用率" labelEn="ρ" />
+            </span>
             <span className={cn('font-heading text-[22px] font-bold', status && STATUS_TEXT[status])}>
               {formatUtilization(utilization)}
             </span>
           </div>
           <Progress
             value={Math.min(utilization, 1) * 100}
-            aria-label="ρ"
+            aria-label="使用率"
             indicatorClassName={status ? STATUS_FILL[status] : undefined}
           />
         </div>
@@ -201,10 +203,12 @@ type ChoiceFieldProps<V extends string> = {
 }
 
 function ChoiceField<V extends string>({ spec, value, onChange }: ChoiceFieldProps<V>) {
-  const { label, options } = spec
+  const { label, labelEn, options } = spec
   return (
     <div className="grid gap-1.5">
-      <Label>{label}</Label>
+      <Label>
+        <ParamLabel label={label} labelEn={labelEn} />
+      </Label>
       <Select
         value={value}
         // 選項只有 options 裡的值

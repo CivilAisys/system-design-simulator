@@ -598,7 +598,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 | 區塊 | 元件 |
 |---|---|
 | 左側元件面板 | shadcn Sidebar，依類別分成流量、運算、資料、非同步四組，每組有類別色（流量藍、運算紫、資料粉、非同步青），元件圖示放在類別色的圓角方塊裡，畫布節點和屬性面板標題用同一個樣式（拖到畫布，放在滑鼠放開的位置；點一下則放在畫面中央，被占了就往外找最近一個不重疊的位置） |
-| 右側屬性面板 | shadcn Input、Slider、Progress（ρ） |
+| 右側屬性面板 | shadcn Input、Slider、Progress（ρ）。參數名稱寫成「中文（英文）」，英文是 API 的欄位名稱、用較淡的顏色，例如「機器數（instances）」「使用率（ρ）」；下拉選項寫成「依序（SEQUENTIAL）」；元件名稱和單位維持英文 |
 | 下方結果 | shadcn Tabs、Table、Badge（狀態）；ECharts Sankey；分頁下方的重點數字卡片 |
 | 工具列 | shadcn Button、Switch、DropdownMenu |
 | 通知 | shadcn Sonner（例如「發現瓶頸：DB」） |

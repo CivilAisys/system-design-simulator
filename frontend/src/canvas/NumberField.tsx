@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
+import { ParamLabel } from './ParamLabel'
 import { checkNumber, fromSlider, parseDraft, sliderRange, syncDraft, toSlider, type NumberSpec } from './params'
 
 type NumberFieldProps = {
@@ -47,7 +48,9 @@ export function NumberField({ spec, value, onChange, check = (next) => checkNumb
   return (
     <div className="grid gap-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <Label htmlFor={id}>{spec.label}</Label>
+        <Label htmlFor={id}>
+          <ParamLabel label={spec.label} labelEn={spec.labelEn} />
+        </Label>
         {spec.unit && <span className="text-xs text-muted-foreground">{spec.unit}</span>}
       </div>
       <Input
