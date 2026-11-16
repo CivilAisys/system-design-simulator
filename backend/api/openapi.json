@@ -65,6 +65,12 @@
             "type" : "number",
             "format" : "double",
             "default" : 1
+          },
+          "requestClass" : {
+            "type" : "string",
+            "default" : "ALL",
+            "description" : "只用在 Service 的邊：哪個 class 的請求會呼叫這個下游",
+            "enum" : [ "ALL", "READ", "WRITE" ]
           }
         },
         "required" : [ "id", "source", "target" ]

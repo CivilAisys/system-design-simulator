@@ -16,6 +16,8 @@ export type RpsEdgeData = {
   edge: Edge
   // 依 source 的 type 決定，畫的時候才算（Canvas）；沒有時當成同步
   kind?: EdgeKind
+  // 只給 READ／WRITE 其中一個 class 走的邊顯示「R」／「W」，requestClass 沒有作用的邊沒有（Canvas 算）
+  classTag?: 'R' | 'W'
   result?: EdgeResult
   // 這條邊的 RPS / 整張圖最大的邊 RPS（0..1），有計算結果時才有
   flow?: number
@@ -40,7 +42,7 @@ export function RpsEdge({
   data,
 }: EdgeProps<RpsFlowEdge>) {
   const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
-  const { kind = 'SYNC', result, flow, errors, stale } = data
+  const { kind = 'SYNC', classTag, result, flow, errors, stale } = data
   // 過期的結果不播動畫：流量可能已經不是這樣
   const moving = flow != null && !stale ? particles(flow) : null
 
@@ -60,7 +62,7 @@ export function RpsEdge({
             />
           </circle>
         ))}
-      {result && (
+      {(result || classTag) && (
         <EdgeLabelRenderer>
           <div
             className={cn(
@@ -69,7 +71,8 @@ export function RpsEdge({
             )}
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
           >
-            {formatRps(totalRps(result.rps))}
+            {classTag && <span className={cn('font-semibold', result && 'mr-1')}>{classTag}</span>}
+            {result && formatRps(totalRps(result.rps))}
           </div>
         </EdgeLabelRenderer>
       )}

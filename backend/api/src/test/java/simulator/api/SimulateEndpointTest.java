@@ -296,6 +296,8 @@ class SimulateEndpointTest {
                 Arguments.of("/edges/0/weight", "\"1\"", "edges[0].weight, expected a number"),
                 Arguments.of("/edges/0/latencyMs", "true", "edges[0].latencyMs, expected a number"),
                 Arguments.of("/edges/1/callsPerRequest", "2.5", "edges[1].callsPerRequest, expected an integer"),
+                Arguments.of("/edges/1/requestClass", "\"BOTH\"",
+                        "edges[1].requestClass, expected one of [ALL, READ, WRITE]"),
                 // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
                 Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
@@ -336,6 +338,19 @@ class SimulateEndpointTest {
         assertThat(body.at("/edges/e1/rps/read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(body.at("/edges/e2/rps/read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(body.at("/nodes/db-1/arrivalRps/read").asDouble()).isCloseTo(900, within(1e-6));
+    }
+
+    @Test
+    void writeOnlyServiceEdgeCarriesOnlyWrites() throws Exception {
+        ObjectNode topology = straightTopology();
+        set(topology, "/edges/1/requestClass", mapper.getNodeFactory().textNode("WRITE"));
+
+        JsonNode body = mapper.readTree(postTopology(topology)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/edges/e2/rps/read").asDouble()).isZero();
+        assertThat(body.at("/edges/e2/rps/write").asDouble()).isCloseTo(100, within(1e-6));
     }
 
     @Test

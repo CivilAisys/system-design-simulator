@@ -128,8 +128,10 @@ system-design-simulator/
 | `weight` | 分流權重（Client、LB 用） | 1 |
 | `callsPerRequest` | 每個請求呼叫幾次（Service 用） | 1 |
 | `latencyMs` | 網路延遲（單程） | 1 |
+| `requestClass` | 哪個 class 的請求會走這條邊（Service 用）：`ALL`、`READ`、`WRITE` | `ALL` |
 
-- 欄位只在對應的起點有意義：`weight` 只用在 Client／LB 的邊，`callsPerRequest` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（匯出的檔案一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
+- 欄位只在對應的起點有意義：`weight` 只用在 Client／LB 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（匯出的檔案一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
+- `requestClass`：一個 class 的請求只呼叫 `requestClass` 符合的下游（`ALL` 兩種都符合），例如 Service ─(READ)→ Read Replica、Service ─(WRITE)→ primary，或 CQRS 的讀寫分流。流量、延遲（4.3）、成功率（4.3.1）都只算符合的下游；沒有任何符合的下游時，Service 就是這個 class 的終點。Client／LB 的邊不支援（要依 class 重新正規化權重，還要處理某個 class 沒有邊可走的情況）。畫布上 `READ`／`WRITE` 的邊在標籤前面顯示「R」／「W」，邊上的 RPS 和粒子只有那個 class 的流量。
 - 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
 - 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去。匯入時只擋自己連自己，經過其他節點的環照樣讀入，Run 之後在錯誤分頁顯示。
 
@@ -233,7 +235,7 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 |---|---|
 | Database、External API | `W(n)`（External API 的 `W = latencyMs`） |
 | Load Balancer／Client | `W(n) + Σ (weight_i / Σweight) × (edge_i.latencyMs×2 + L(child_i))` |
-| Service（`SEQUENTIAL`） | `W(n) + Σ callsPerRequest_i × (edge_i.latencyMs×2 + L(child_i))`（依序呼叫，所以相加） |
+| Service（`SEQUENTIAL`） | `W(n) + Σ callsPerRequest_i × (edge_i.latencyMs×2 + L(child_i))`（依序呼叫，所以相加；只加 `requestClass` 符合這個 class 的下游，下同） |
 | Service（`PARALLEL`） | `W(n) + max_i [ callsPerRequest_i × (edge_i.latencyMs×2 + L(child_i)) ]`（各下游同時呼叫，取最慢的；同一個下游呼叫多次時仍依序） |
 | Cache（read） | `W(n) + (1 − hitRatio) × (edge.latencyMs×2 + L(child))` |
 | Cache（write） | `W(n) + edge.latencyMs×2 + L(child)` |
@@ -241,7 +243,7 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 
 Client 本身沒有 W（記為 0）。
 
-**「路徑」只算這個 class 實際會走到的下游**：一個請求平均往某條邊送的次數為 0 時（目前只有 Cache read 的 `1 − hitRatio`，weight 和 `callsPerRequest` 都不能為 0），那個下游不在這個 class 的路徑上，公式裡也略過它（避免 `0 × null`）。例如 `hitRatio = 1` 時 read 不會到 DB，DB 被 write 壓到過載只讓 write 變成 `null`。
+**「路徑」只算這個 class 實際會走到的下游**：一個請求平均往某條邊送的次數為 0 時（Cache read 的 `1 − hitRatio`、Service 上 `requestClass` 不符合的邊；weight 和 `callsPerRequest` 都不能為 0），那個下游不在這個 class 的路徑上，公式裡也略過它（避免 `0 × null`）。例如 `hitRatio = 1` 時 read 不會到 DB，DB 被 write 壓到過載只讓 write 變成 `null`。
 
 端到端延遲在下列情況記為 `null`，回應的 `undefinedReason` 說明原因：
 
@@ -262,7 +264,7 @@ avgEndToEndMs[class] = Σ_client (client.rps × classRatio × L(client, class)) 
 
 > 階段一只算**平均值**。p99 不能沿路徑相加，需要分佈或模擬，留到階段二。
 >
-> ⚠️ **`PARALLEL` 是近似值**：「各下游平均值的最大值」會低估真實延遲（真實的是「每個請求各自取最大值」再平均）。回應以 `approximate: true` 標示，前端顯示「近似」；路徑上的 `PARALLEL` Service 只呼叫一個下游時取最大值就是它本身，不算近似；`ms` 為 `null` 時 `approximate` 一定是 `false`。summary 只要有一個參與平均的 Client 是近似，就是近似。階段二用 DES 算出正確值。
+> ⚠️ **`PARALLEL` 是近似值**：「各下游平均值的最大值」會低估真實延遲（真實的是「每個請求各自取最大值」再平均）。回應以 `approximate: true` 標示，前端顯示「近似」；路徑上的 `PARALLEL` Service 這個 class 實際只呼叫一個下游時（例如 READ、WRITE 各一條邊），取最大值就是它本身，不算近似；`ms` 為 `null` 時 `approximate` 一定是 `false`。summary 只要有一個參與平均的 Client 是近似，就是近似。階段二用 DES 算出正確值。
 
 ### 4.3.1 成功率
 
@@ -275,7 +277,7 @@ Service 有 fan-out 時，下游的 RPS 是「子呼叫」而不是「使用者�
 |---|---|
 | Database、External API | `pass(n)`（External API 的 `pass(n) = 放行量 / 到達量`） |
 | Load Balancer／Client | `pass(n) × Σ (weight_i / Σweight) × S(child_i)` |
-| Service（依序或平行都一樣） | `pass(n) × Π S(child_i)^callsPerRequest_i`（任何一個子呼叫失敗，整個請求就失敗） |
+| Service（依序或平行都一樣） | `pass(n) × Π S(child_i)^callsPerRequest_i`（任何一個子呼叫失敗，整個請求就失敗；只乘 `requestClass` 符合這個 class 的下游） |
 | Cache（read） | `pass(n) × (hitRatio + (1 − hitRatio) × S(child))` |
 | Cache（write） | `pass(n) × S(child)` |
 | Rate Limiter | `pass(n) × S(child)`，`pass(n) = 放行量 / 到達量`（拒絕也算失敗） |

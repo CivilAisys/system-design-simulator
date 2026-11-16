@@ -76,6 +76,9 @@ Service 對每個下游各發出 `callsPerRequest` 次呼叫，使下游的流�
 **Call mode（呼叫模式）**:
 Service 呼叫多個下游的方式：依序（SEQUENTIAL）或平行（PARALLEL）。
 
+**requestClass（邊的請求類別）**:
+Service 的邊只給哪個 Request class 走：ALL、READ 或 WRITE。用來把 read 和 write 送到不同的下游。
+
 **Offered rps**:
 所有 Client 送出的請求總數。
 

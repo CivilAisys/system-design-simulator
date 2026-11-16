@@ -41,16 +41,21 @@ function validFile() {
       },
     ],
     edges: [
-      { id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 },
-      { id: 'e2', source: 'lb', target: 'svc', weight: 2, callsPerRequest: 1, latencyMs: 0.5 },
-      { id: 'e3', source: 'svc', target: 'cache', weight: 1, callsPerRequest: 3, latencyMs: 1 },
-      { id: 'e4', source: 'svc', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 2 },
-      { id: 'e5', source: 'cache', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1 },
+      { id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1, requestClass: 'ALL' },
+      { id: 'e2', source: 'lb', target: 'svc', weight: 2, callsPerRequest: 1, latencyMs: 0.5, requestClass: 'ALL' },
+      { id: 'e3', source: 'svc', target: 'cache', weight: 1, callsPerRequest: 3, latencyMs: 1, requestClass: 'ALL' },
+      { id: 'e4', source: 'svc', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 2, requestClass: 'WRITE' },
+      { id: 'e5', source: 'cache', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1, requestClass: 'ALL' },
     ],
   }
 }
 
 type FileData = ReturnType<typeof validFile>
+
+// 只有 latencyMs 不是預設值的邊
+function edge(id: string, source: string, target: string, latencyMs = 1) {
+  return { id, source, target, weight: 1, callsPerRequest: 1, latencyMs, requestClass: 'ALL' }
+}
 
 // 測試要拿掉必填欄位，型別上不允許 delete，集中在這裡繞過
 function remove(target: object, field: string) {
@@ -91,12 +96,14 @@ describe('合法的檔案', () => {
     expect(topology).toEqual(validFile())
   })
 
-  it('邊省略的數值參數用預設值 1', () => {
+  it('邊省略的數值參數用預設值 1，requestClass 用 ALL', () => {
     const topology = topologyOf({
       ...validFile(),
       edges: [{ id: 'e1', source: 'client', target: 'lb' }],
     })
-    expect(topology.edges).toEqual([{ id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1 }])
+    expect(topology.edges).toEqual([
+      { id: 'e1', source: 'client', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 1, requestClass: 'ALL' },
+    ])
   })
 
   // 還沒有真正的選填節點參數（#63 的 shards 會是第一個），先暫時把 hitRatio 和 callMode 當成選填來示範
@@ -198,6 +205,12 @@ describe('格式錯誤', () => {
     it('數值參數型別不對', () => {
       expect(errorsOf((f) => void Object.assign(f.nodes[0].params, { rps: '1000' }))).toEqual([
         'nodes[0]（id "client"）：缺少數值參數 params.rps（或數值太大）',
+      ])
+    })
+
+    it.each(['BOTH', 'read', 1])('requestClass 不是 ALL、READ、WRITE：%s', (value) => {
+      expect(errorsOf((f) => void Object.assign(f.edges[3], { requestClass: value }))).toEqual([
+        'edges[3]（id "e4"）：requestClass 必須是 ALL、READ、WRITE 其中之一',
       ])
     })
 
@@ -344,7 +357,7 @@ describe('畫不出來的邊', () => {
 
   it('從 External API 連出', () => {
     const file = withExternalApi()
-    file.edges.push({ id: 'e7', source: 'pay', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1 })
+    file.edges.push(edge('e7', 'pay', 'db'))
     expect(toTopology(file)).toEqual({
       ok: false,
       errors: ['edges[6]（id "e7"）：External API 不能有下游（source 是 "pay"）'],
@@ -353,7 +366,7 @@ describe('畫不出來的邊', () => {
 
   it('從 Object Storage 連出', () => {
     const file = withObjectStorage()
-    file.edges.push({ id: 'e7', source: 'storage', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1 })
+    file.edges.push(edge('e7', 'storage', 'db'))
     expect(toTopology(file)).toEqual({
       ok: false,
       errors: ['edges[6]（id "e7"）：Object Storage 不能有下游（source 是 "storage"）'],
@@ -405,8 +418,8 @@ function withCdn() {
     params: { instances: 10, concurrency: 1000, serviceTimeMs: 1, hitRatio: 0.95 },
     ui: { x: 0, y: 200 },
   })
-  file.edges[0] = { id: 'e1', source: 'client', target: 'cdn', weight: 1, callsPerRequest: 1, latencyMs: 5 }
-  file.edges.push({ id: 'e6', source: 'cdn', target: 'lb', weight: 1, callsPerRequest: 1, latencyMs: 30 })
+  file.edges[0] = edge('e1', 'client', 'cdn', 5)
+  file.edges.push(edge('e6', 'cdn', 'lb', 30))
   return file
 }
 
@@ -420,7 +433,7 @@ function withObjectStorage() {
     params: { instances: 1, concurrency: 10000, serviceTimeMs: 20 },
     ui: { x: 900, y: 300 },
   })
-  file.edges.push({ id: 'e6', source: 'svc', target: 'storage', weight: 1, callsPerRequest: 1, latencyMs: 5 })
+  file.edges.push(edge('e6', 'svc', 'storage', 5))
   return file
 }
 
@@ -458,7 +471,7 @@ function withExternalApi() {
   return {
     ...file,
     nodes: [...file.nodes, api],
-    edges: [...file.edges, { id: 'e6', source: 'svc', target: 'pay', weight: 1, callsPerRequest: 1, latencyMs: 20 }],
+    edges: [...file.edges, edge('e6', 'svc', 'pay', 20)],
   }
 }
 

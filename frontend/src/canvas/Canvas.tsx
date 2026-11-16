@@ -10,7 +10,7 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { totalRps, type NodeType, type SimulationResult } from '@/api/client'
+import { totalRps, type Edge, type NodeType, type SimulationResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { arrowMarker, edgeColor } from './edgeStyle'
@@ -82,6 +82,7 @@ export function Canvas({
           data: {
             ...e.data,
             kind: sourceType && NODE_KINDS[sourceType].outputEdgeKind,
+            classTag: sourceType && classTag(sourceType, e.data.edge),
             result: edgeResult,
             flow: edgeResult && flowRatio(totalRps(edgeResult.rps), maxRps),
             errors: edgeErrors,
@@ -129,4 +130,10 @@ export function Canvas({
       <Controls />
     </ReactFlow>
   )
+}
+
+// requestClass 只對 Service 的出邊有作用（spec 3.4），其他邊上的值計算時忽略，不顯示
+function classTag(sourceType: NodeType, edge: Edge): 'R' | 'W' | undefined {
+  if (!NODE_KINDS[sourceType].edgeChoiceParams.includes('requestClass')) return undefined
+  return edge.requestClass === 'READ' ? 'R' : edge.requestClass === 'WRITE' ? 'W' : undefined
 }
