@@ -55,6 +55,11 @@ describe('type 的連線限制', () => {
     expect(canFeed('DATABASE', 'CACHE')).toBe(false)
   })
 
+  it('Message Queue 只能連到 Service（consumer group）', () => {
+    expect(canFeed('MESSAGE_QUEUE', 'SERVICE')).toBe(true)
+    expect(canFeed('MESSAGE_QUEUE', 'DATABASE')).toBe(false)
+  })
+
   it('沒有限制的 type 可以連到任何 type', () => {
     expect(canFeed('SERVICE', 'READ_REPLICA')).toBe(true)
     expect(canFeed('SERVICE', 'DATABASE')).toBe(true)

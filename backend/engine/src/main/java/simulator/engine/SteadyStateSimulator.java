@@ -29,7 +29,7 @@ public final class SteadyStateSimulator implements Simulator {
         // Client 的結果要等端到端延遲與成功率算完才能建立
         Map<String, ClassRates> sentByClient = new HashMap<>();
         // consumer → Message Queue 送給它的邊
-        Map<String, List<Edge>> consumed = new HashMap<>();
+        Map<String, List<Edge>> queuedByConsumer = new HashMap<>();
         List<Node> order = graph.topologicalOrder();
         for (Node node : order) {
             ClassRates arrival = arrivals.get(node.id());
@@ -53,7 +53,7 @@ public final class SteadyStateSimulator implements Simulator {
                 case ExternalApiNode api -> admit(node.id(), api.quotaRps(), api.latencyMs(), Status.OVER_QUOTA,
                         Status.WITHIN_QUOTA, arrival, nodeResults);
             };
-            List<Edge> queued = consumed.getOrDefault(node.id(), List.of());
+            List<Edge> queued = queuedByConsumer.getOrDefault(node.id(), List.of());
             if (!queued.isEmpty()) {
                 keepInQueue(node.id(), queued, nodeResults, edgeResults);
             }
@@ -64,7 +64,7 @@ public final class SteadyStateSimulator implements Simulator {
                 edgeResults.put(edge.id(), new EdgeResult(rps));
                 arrivals.merge(edge.target(), rps, ClassRates::plus);
                 if (graph.feedsConsumer(edge)) {
-                    consumed.computeIfAbsent(edge.target(), id -> new ArrayList<>()).add(edge);
+                    queuedByConsumer.computeIfAbsent(edge.target(), id -> new ArrayList<>()).add(edge);
                 }
             }
         }
@@ -125,11 +125,7 @@ public final class SteadyStateSimulator implements Simulator {
             edgeResults.put(edge.id(), new EdgeResult(edgeResult.rps(), edgeBacklog));
             backlog += edgeBacklog;
         }
-        var kept = new NodeResult(result.arrivalRps(), result.throughputRps(), result.droppedRps() - backlog,
-                result.rejectedRps(), result.successRps(), result.endToEndMs(), result.capacityRps(),
-                result.utilization(), result.avgQueueMs(), result.avgLatencyMs(), result.status(), result.shards(),
-                result.warnings());
-        nodeResults.put(nodeId, kept.withWarning(NodeWarning.BACKLOG));
+        nodeResults.put(nodeId, result.withDropped(result.droppedRps() - backlog).withWarning(NodeWarning.BACKLOG));
     }
 
     /**

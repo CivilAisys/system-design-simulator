@@ -6,6 +6,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { totalRps, type NodeResult, type SimulationResult, type Topology } from '@/api/client'
 import type { Theme } from '@/theme'
 import { formatRps } from '@/canvas/format'
+import { isReplicationSource } from '@/canvas/catalog'
 import { NEUTRAL_HEX, STATUS_HEX } from '@/canvas/status'
 
 // 只載入用到的部分，避免把整個 ECharts 打包進來
@@ -15,9 +16,11 @@ type SankeyOption = echarts.ComposeOption<SankeySeriesOption | TooltipComponentO
 
 // 沒被送往下游的流量各自流進一個終點：過載的丟棄和 Rate Limiter／External API 的拒絕分開顯示。
 // id 用 \u0000 開頭，不會和使用者的節點 id 撞在一起
+// consumer 處理不完、留在 queue 裡的訊息（spec 4.2.4）也是一個終點，數值是送給它的邊的 backlog 加總
 const SINKS = [
   { id: '\u0000dropped', name: '丟棄', color: STATUS_HEX.OVERLOADED, rps: (node: NodeResult) => node.droppedRps },
   { id: '\u0000rejected', name: '拒絕', color: NEUTRAL_HEX, rps: (node: NodeResult) => node.rejectedRps },
+  { id: '\u0000backlog', name: '積壓', color: STATUS_HEX.CRITICAL, rps: (_: NodeResult, backlog: number) => backlog },
 ]
 
 type FlowSankeyProps = {
@@ -63,16 +66,22 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
     if (!rps || totalRps(rps) <= 0) return []
     // 複製不是請求的流向：畫出來會讓 primary 看起來處理了好幾倍的流量。
     // Message Queue 送給 consumer 的訊息是真的要處理的流量，照畫
-    if (types.get(edge.source) === 'DATABASE') return []
+    const sourceType = types.get(edge.source)
+    if (sourceType && isReplicationSource(sourceType)) return []
     return [{ source: edge.source, target: edge.target, value: totalRps(rps), read: rps.read, write: rps.write }]
   })
-  // 丟棄和拒絕都是依 read／write 的比例發生（spec 4.2），用到達率的比例拆開
+  const backlog = new Map<string, number>()
+  for (const edge of topology.edges) {
+    const queued = result.edges[edge.id]?.backlogRps ?? 0
+    if (queued > 0) backlog.set(edge.target, (backlog.get(edge.target) ?? 0) + queued)
+  }
+  // 丟棄、拒絕和積壓都是依 read／write 的比例發生（spec 4.2），用到達率的比例拆開
   const sinkLinks = topology.nodes.flatMap((node) => {
     const metrics = result.nodes[node.id]
     if (!metrics) return []
     const arrival = totalRps(metrics.arrivalRps)
     return SINKS.flatMap((sink) => {
-      const value = sink.rps(metrics)
+      const value = sink.rps(metrics, backlog.get(node.id) ?? 0)
       if (value <= 0 || arrival <= 0) return []
       const share = value / arrival
       return [

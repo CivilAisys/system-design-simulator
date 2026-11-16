@@ -109,6 +109,14 @@ final class TopologyValidator {
                     ? "Object Storage " + name + " 不能有下游連線"
                     : "Database " + name + " 只能連到 Read Replica");
         }
+        if (node instanceof MessageQueueNode) {
+            long nonService = graph.outgoing(node.id()).stream()
+                    .filter(edge -> !(graph.node(edge.target()) instanceof ServiceNode)).count();
+            if (nonService > 0) {
+                nodeError(node, "QUEUE_CONSUMER_TYPE",
+                        "Message Queue " + name + " 只能連到 Service（consumer group），目前有 " + nonService + " 個不是");
+            }
+        }
         if (node instanceof ReadReplicaNode) {
             int primaryCount = primaries.getOrDefault(node.id(), Set.of()).size();
             if (primaryCount != 1) {

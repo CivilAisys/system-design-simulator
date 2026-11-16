@@ -505,7 +505,7 @@ function withExternalApi() {
   }
 }
 
-// 合法檔案再加一個 Service 送訊息的 Message Queue，consumer 是 LB
+// 合法檔案再加一個 Service 送訊息的 Message Queue，consumer 是另一個 Service
 function withMessageQueue() {
   const file = validFile()
   const mq = {
@@ -515,8 +515,15 @@ function withMessageQueue() {
     params: { instances: 1, concurrency: 1000, serviceTimeMs: 1 },
     ui: { x: 900, y: 400 },
   }
-  const edges = [...file.edges, edge('e6', 'svc', 'mq'), edge('e7', 'mq', 'lb')]
-  return { ...file, nodes: [...file.nodes, mq], edges }
+  const worker = {
+    id: 'worker',
+    type: 'SERVICE',
+    name: 'Worker',
+    params: { instances: 1, concurrency: 50, serviceTimeMs: 50, callMode: 'SEQUENTIAL' },
+    ui: { x: 1200, y: 400 },
+  }
+  const edges = [...file.edges, edge('e6', 'svc', 'mq'), edge('e7', 'mq', 'worker')]
+  return { ...file, nodes: [...file.nodes, mq, worker], edges }
 }
 
 describe('匯出再匯入', () => {

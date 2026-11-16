@@ -211,7 +211,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'rejected',
-  },  // 非同步：Client 只等到 ack；每條下游邊是一個 consumer group，都收到全部訊息（spec 4.2.4）
+  },
+  // 非同步：Client 只等到 ack；每條下游邊是一個 consumer group，都收到全部訊息（spec 4.2.4）
   MESSAGE_QUEUE: {
     label: 'Message Queue',
     icon: Inbox,
@@ -225,9 +226,10 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     edgeParams: [],
     edgeChoiceParams: [],
     outputEdgeKind: 'ASYNC',
+    // consumer group 的 consumer 數量用 Service 的 instances 表示
+    outputTargets: ['SERVICE'],
     nodeMetric: 'utilization',
   },
-
 }
 
 // 元件面板的一個項目：每個 type 一個，另外有 preset（type 不變，只換名稱、圖示和部分預設值，JSON 裡看不出來）
@@ -296,4 +298,9 @@ export function newEdgeId(source: string, target: string, usedIds: ReadonlySet<s
 // source 的 type 能不能連到 target 的 type（另外還有 hasOutput／hasInput、重複和環的規則）
 export function canFeed(source: NodeType, target: NodeType): boolean {
   return NODE_KINDS[source].outputTargets?.includes(target) ?? true
+}
+
+// 複製的來源（Database）：連出去的邊是 Read Replica 套用的寫入，不是請求的流向
+export function isReplicationSource(type: NodeType): boolean {
+  return NODE_KINDS[type].outputTargets?.includes('READ_REPLICA') ?? false
 }

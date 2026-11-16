@@ -112,6 +112,61 @@ class MessageQueueTest {
     }
 
     @Test
+    void failuresBehindTheConsumerDoNotAffectClientSuccess() {
+        // worker 處理得完，但它寫入的 DB 容量只有 100：worker → DB 的丟棄是非同步路徑的失敗
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0),
+                        new MessageQueueNode("mq", "Queue", NodeHealth.HEALTHY, BROKER),
+                        new ServiceNode("worker", "Worker", NodeHealth.HEALTHY, ROOMY, CallMode.SEQUENTIAL),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, workers(1))),
+                List.of(
+                        new Edge("e1", "client", "mq", 1, 1, 1),
+                        new Edge("g1", "mq", "worker", 1, 1, 1),
+                        new Edge("store", "worker", "db", 1, 1, 1))));
+
+        assertThat(result.nodes().get("db").status()).isEqualTo(Status.OVERLOADED);
+        assertThat(result.summary().dropRate()).isZero();
+        assertThat(result.summary().avgEndToEndMs().write().ms()).isNotNull();
+    }
+
+    @Test
+    void consumerOnBothPathsDropsOnlyTheSynchronousShare() {
+        // worker 同時被 Client 直接呼叫（同步 500）和 MQ 送訊息（非同步 500），容量 600：超過的 400 依比例分
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0),
+                        new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, ROOMY),
+                        new MessageQueueNode("mq", "Queue", NodeHealth.HEALTHY, BROKER),
+                        new ServiceNode("worker", "Worker", NodeHealth.HEALTHY, workers(6), CallMode.SEQUENTIAL)),
+                List.of(
+                        new Edge("e1", "client", "lb", 1, 1, 1),
+                        new Edge("direct", "lb", "worker", 1, 1, 1),
+                        new Edge("enqueue", "lb", "mq", 1, 1, 1),
+                        new Edge("g1", "mq", "worker", 1, 1, 1))));
+        NodeResult worker = result.nodes().get("worker");
+
+        assertThat(result.edges().get("g1").backlogRps()).isCloseTo(200, within(EPS));
+        assertThat(worker.droppedRps()).isCloseTo(200, within(EPS));
+        assertThat(worker.warnings()).containsExactly(NodeWarning.BACKLOG);
+        // 同步那一半的通過率是 600 / 1000；送進 queue 的一半全部成功
+        assertThat(result.summary().successRps()).isCloseTo(500 * 0.6 + 500, within(EPS));
+    }
+
+    @Test
+    void queueMayOnlyFeedServices() {
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0),
+                        new MessageQueueNode("mq", "Queue", NodeHealth.HEALTHY, BROKER),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, ROOMY)),
+                List.of(new Edge("e1", "client", "mq", 1, 1, 1), new Edge("g1", "mq", "db", 1, 1, 1))));
+
+        assertThat(result.errors()).extracting(ValidationError::code, ValidationError::nodeId)
+                .contains(tuple("QUEUE_CONSUMER_TYPE", "mq"));
+    }
+
+    @Test
     void queueNeedsAtLeastOneConsumer() {
         SimulationResult result = simulator.simulate(new Topology(
                 List.of(
