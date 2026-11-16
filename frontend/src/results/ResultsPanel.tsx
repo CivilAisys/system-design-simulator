@@ -129,7 +129,7 @@ function DiskFullText({ topology, result }: { topology: Topology; result: Comput
     <p className="text-sm text-destructive">
       <span className="mr-2">磁碟會滿</span>
       {full
-        .map((node) => `${node.name}（約 ${formatDays(result.storage[node.id].daysUntilFull ?? 0)}）`)
+        .map((node) => `${node.name}（${formatDays(result.storage[node.id].daysUntilFull ?? 0)}）`)
         .join('、')}
     </p>
   )
