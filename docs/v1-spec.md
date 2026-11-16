@@ -611,7 +611,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - 延遲（指標表、端到端延遲、shard 的提示）取一位小數；小於 0.1 ms 時改用兩位有效數字（例如 Cache 預設的 `0.010 ms`），0 顯示 `0 ms`。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
 - **Cluster 外觀**：`shards` > 1 的 Cache、Database，以及沿用分片 primary 的 Read Replica，在節點裡排出 N 個格子（一行最多 8 格，64 個 shard 是 8 × 8），每格是一個 shard，最熱的在第一格，依該 shard 的狀態（4.4）上色，過載的格子發光。滑鼠移到格子上顯示該 shard 的到達率、ρ、延遲、丟棄量。格子不能單獨選取或編輯，參數在節點的屬性面板設定。`shards = 1` 時外觀不變。Run 之前、或改了 `shards` 還沒重算時，格子是灰色。
-- **多台機器**：能設定 `instances` 的元件（LB、Service、Cache、CDN、Database、Read Replica、Object Storage、Message Queue）在 `instances` > 1 時，節點後面往右下疊出卡片，右上角用類別色的標籤顯示台數：2 台疊 1 層、顯示 `×2`；3 台以上疊 2 層、顯示實際台數（`×10`、`×200`，大數字加千分位）。疊層不攔截滑鼠，連接點和選取範圍不變。分片的節點（含沿用分片 primary 的 Read Replica）已經畫成 cluster，不疊層。屬性面板的 `instances` 下方顯示 worker 總數，例如「共 2 台 × 180 並行 ＝ 360 個 worker」，分片時前面加「每個 shard」。
+- **多台機器**：能設定 `instances` 的元件（LB、Service、Cache、CDN、Database、Read Replica、Object Storage、Message Queue）在 `instances` > 1 時，節點內容右側畫一個小機櫃：一台一條橫槽、縱向疊放，最多 5 條（超過 5 台仍是 5 條），槽用節點的狀態色，還沒有結果時是淡灰。右上角用類別色的標籤顯示實際台數（`×2`、`×10`、`×200`，大數字加千分位）。機櫃在節點右側、縱向，和分片格子（節點底部橫排）區分。分片的節點（含沿用分片 primary 的 Read Replica）已經畫成 cluster，不畫機櫃。屬性面板的 `instances` 下方顯示 worker 總數，例如「共 2 台 × 180 並行 ＝ 360 個 worker」，分片時前面加「每個 shard」。
 - **Preset**：元件面板的「Redis Cluster」是 `shards = 3` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
 - 指標表在分片節點的名稱旁顯示 shard 數；屬性面板在 `shards` > 1 時顯示 `hotShardShare`，沒設定時顯示平均值 `1/N`；設定過之後可以按「改回平均」拿掉這個參數，之後改 shard 數占比會跟著 `1/N` 走。
 - **頻寬**（4.7）：Client 的邊在 RPS 下面一行小字顯示「出 X・入 Y」；結果面板上方的 summary 列出出口、入口頻寬，有 CDN 擋掉流量時加上 origin 出口和擋掉的比例。單位自動換算（B/s、KB/s、MB/s、GB/s…，十進位，最大到 PB/s，超過時用科學記號，例如 `1.2e18 B/s`），括號裡附上 bits（Mbps、Gbps…，同樣最大到 Pbps）。

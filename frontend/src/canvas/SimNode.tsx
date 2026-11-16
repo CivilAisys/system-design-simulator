@@ -1,11 +1,11 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
 import { cn } from '@/lib/utils'
-import type { Node, NodeResult } from '@/api/client'
+import type { Node, NodeResult, Status } from '@/api/client'
 import { NODE_KINDS, shownShards } from './catalog'
 import { CATEGORY_DOT } from './category'
 import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
-import { instanceStack } from './instanceStack'
+import { instanceRack, type InstanceRack } from './instanceRack'
 import { ShardGrid } from './ShardGrid'
 import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
@@ -23,16 +23,13 @@ export type SimNodeData = {
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
-// 疊層每一層錯開的距離
-const STACK_OFFSET = 4
-
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { node, result, errors, stale, mirroredShards } = data
   const { icon, category, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
   const shards = shownShards(node, mirroredShards)
-  const stack = instanceStack(node, shards)
+  const rack = instanceRack(node, shards)
 
   return (
     <div
@@ -45,17 +42,6 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         selected && 'outline-2 outline-offset-6 outline-primary',
       )}
     >
-      {/* 多台機器：節點後面往右下錯開的卡片。不攔截滑鼠，選取範圍和連接點不變 */}
-      {stack &&
-        // 同一個 z-index 依 DOM 順序畫，最遠的那層先畫，近的蓋在它上面
-        Array.from({ length: stack.layers }, (_, i) => stack.layers - i).map((depth) => (
-          <div
-            key={depth}
-            aria-hidden
-            className="pointer-events-none absolute inset-0 -z-10 rounded-card border border-input bg-card"
-            style={{ translate: `${depth * STACK_OFFSET}px ${depth * STACK_OFFSET}px`, opacity: 1.35 - depth * 0.35 }}
-          />
-        ))}
       {/* 外框和光暈單獨一層，過載脈動時只有光暈閃，文字不跟著閃。
           驗證失敗時沒有計算結果，不會同時有狀態色。過期時畫淡、不脈動 */}
       {(errors || status) && (
@@ -87,6 +73,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
             </div>
           )}
         </div>
+        {rack && <Rack rack={rack} status={status} stale={stale} />}
       </div>
       {result?.warnings.map((warning) => (
         <p key={warning} className="mt-1 text-xs font-semibold text-critical-ink" title={WARNING_TITLE[warning]}>
@@ -95,17 +82,53 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       ))}
       {shards > 1 && <ShardGrid count={shards} shards={result?.shards} stale={stale} />}
       {/* 畫在狀態外框之後，不被外框蓋住 */}
-      {stack && (
+      {rack && (
         <span
           className={cn(
             'pointer-events-none absolute -top-2.5 -right-2.5 rounded-full border-2 border-canvas px-1.75 py-px text-[11px] font-bold text-card',
             CATEGORY_DOT[category],
           )}
         >
-          {stack.label}
+          {rack.label}
         </span>
       )}
       {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>
   )
+}
+
+type RackProps = {
+  rack: InstanceRack
+  status: Status | null
+  stale?: boolean
+}
+
+// 多台機器：節點右側的小機櫃，一台一條橫槽、縱向疊放，用節點的狀態色。
+// 和分片格子（節點底部橫排的方格）用位置、方向和形狀區分。還沒有結果時用淡灰，過期時跟著畫淡
+function Rack({ rack, status, stale }: RackProps) {
+  return (
+    <div
+      aria-hidden
+      className={cn('flex shrink-0 flex-col gap-0.5 rounded-sm border border-input p-0.5', stale && 'opacity-30')}
+    >
+      {Array.from({ length: rack.slots }, (_, i) => (
+        <div
+          key={i}
+          className={cn('h-0.75 w-3.5 rounded-[1px]', status ? RACK_SLOT[status] : 'bg-muted-foreground/25')}
+        />
+      ))}
+    </div>
+  )
+}
+
+// 槽太小，不用 STATUS_FILL 過載時的陰影。能設定 instances 的元件只會有 ρ 分級的狀態
+const RACK_SLOT: Record<Status, string> = {
+  OK: 'bg-ok',
+  WARN: 'bg-warn',
+  CRITICAL: 'bg-critical',
+  OVERLOADED: 'bg-over',
+  LIMITING: 'bg-muted-foreground/40',
+  NOT_LIMITING: 'bg-muted-foreground/40',
+  OVER_QUOTA: 'bg-muted-foreground/40',
+  WITHIN_QUOTA: 'bg-muted-foreground/40',
 }
