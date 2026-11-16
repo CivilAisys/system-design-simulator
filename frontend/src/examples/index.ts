@@ -8,6 +8,7 @@ import mediaStorage from './media-storage.json'
 import overload from './overload.json'
 import rateLimiter from './rate-limiter.json'
 import readWriteSplit from './read-write-split.json'
+import redisCluster from './redis-cluster.json'
 import sharding from './sharding.json'
 
 export type Example = { id: string; label: string; topology: Topology }
@@ -31,6 +32,8 @@ export const EXAMPLES: Example[] = [
   { id: 'external-api', label: 'External API', topology: builtIn(externalApi) },
   // Database 切 4 片，容量 40,000，但最熱的 shard 分到 40%：28,000 rps 就讓它過載。把 hotShardShare 刪掉（平均分配）就撐得住
   { id: 'sharding', label: '分片熱點', topology: builtIn(sharding) },
+  // 熱門貼文的 key 都在同一個 shard：它分到一半的流量而過載，另外兩格還很閒
+  { id: 'redis-cluster', label: 'Redis Cluster 熱點 key', topology: builtIn(redisCluster) },
 ]
 
 // JSON import 的型別太寬（type 是 string），走和匯入檔案相同的檢查來取得 Topology

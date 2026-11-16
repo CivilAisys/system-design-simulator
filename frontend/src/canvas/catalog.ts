@@ -1,4 +1,4 @@
-import { Archive, Cloud, Database, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
+import { Archive, Boxes, Cloud, Database, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
 import type { EdgeChoiceParam, EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
@@ -179,17 +179,37 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
   },
 }
 
+// 元件面板的一個項目：每個 type 一個，另外有 preset（type 不變，只換名稱、圖示和部分預設值，JSON 裡看不出來）
+export type PaletteItem = {
+  id: string
+  type: NodeType
+  label: string
+  icon: LucideIcon
+  params?: Partial<NodeParams>
+}
+
+// preset 放在它的 type 後面
+const PRESETS: PaletteItem[] = [
+  // Redis Cluster = 分片的 Cache（spec 4.2.2）
+  { id: 'REDIS_CLUSTER', type: 'CACHE', label: 'Redis Cluster', icon: Boxes, params: { shards: 3 } },
+]
+
+export const PALETTE: PaletteItem[] = NODE_TYPES.flatMap((type) => {
+  const { label, icon } = NODE_KINDS[type]
+  return [{ id: type, type, label, icon }, ...PRESETS.filter((preset) => preset.type === type)]
+})
+
 // 拖到畫布或點擊元件面板時建立的節點：id 和名稱都取同類型中第一個沒被用掉的編號
 // usedIds 是這次編輯用過的所有 id（含已刪除的），新節點不能沿用：
 // 過期的結果（Auto-run 關閉或還在 debounce）會用 id 把狀態和驗證錯誤畫到同 id 的新節點上
-export function newNode(type: NodeType, usedIds: ReadonlySet<string>, position: { x: number; y: number }): Node {
-  const { label, defaults } = NODE_KINDS[type]
+export function newNode(item: PaletteItem, usedIds: ReadonlySet<string>, position: { x: number; y: number }): Node {
+  const { type, label } = item
   const n = nextNodeNumber(type, usedIds)
   return {
     id: nodeId(type, n),
     type,
     name: `${label} ${n}`,
-    params: { ...defaults },
+    params: { ...NODE_KINDS[type].defaults, ...item.params },
     state: 'HEALTHY',
     ui: position,
   }

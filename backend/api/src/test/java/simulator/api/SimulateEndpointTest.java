@@ -216,6 +216,23 @@ class SimulateEndpointTest {
         assertThat(even.at("/summary/dropRate").asDouble()).isZero();
     }
 
+    // 「Redis Cluster 熱點 key」範例要示範的情境：一個 shard 過載，其他 shard 還很閒
+    @Test
+    void redisClusterExampleHasOneHotShard() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("redis-cluster.json"));
+        JsonNode hot = simulate(mapper.writeValueAsBytes(example));
+        // 250,000 × 0.5 = 125,000 > 每個 shard 的 100,000；其他兩個各 62,500
+        assertThat(hot.at("/nodes/cache-1/shards").size()).isEqualTo(3);
+        assertThat(hot.at("/nodes/cache-1/shards/0/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(hot.at("/nodes/cache-1/shards/1/status").asText()).isEqualTo("OK");
+        assertThat(hot.at("/nodes/cache-1/shards/2/status").asText()).isEqualTo("OK");
+        assertThat(hot.at("/summary/bottleneckNodeId").asText()).isEqualTo("cache-1");
+
+        remove(example, "/nodes/2/params/hotShardShare");
+        JsonNode even = simulate(mapper.writeValueAsBytes(example));
+        assertThat(even.at("/summary/dropRate").asDouble()).isZero();
+    }
+
     static Stream<String> exampleFiles() throws Exception {
         List<String> files;
         try (Stream<Path> listing = Files.list(examplesDir())) {

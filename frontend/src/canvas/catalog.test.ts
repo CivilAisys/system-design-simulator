@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NODE_KINDS, NODE_TYPES } from './catalog'
+import { newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
 import { checkNodeParam, NODE_CHOICE_SPECS } from './params'
 
 describe('Node type 定義', () => {
@@ -15,6 +15,34 @@ describe('Node type 定義', () => {
     }
     for (const param of choiceParams) {
       expect(NODE_CHOICE_SPECS[param].options.map((o) => o.value)).toContain(defaults[param])
+    }
+  })
+})
+
+describe('元件面板', () => {
+  it('每個 type 一項，preset 緊接在它的 type 後面，id 不重複', () => {
+    expect(PALETTE.map((item) => item.id)).toEqual([
+      'CLIENT',
+      'LOAD_BALANCER',
+      'SERVICE',
+      'CACHE',
+      'REDIS_CLUSTER',
+      'CDN',
+      'DATABASE',
+      'OBJECT_STORAGE',
+      'RATE_LIMITER',
+      'EXTERNAL_API',
+    ])
+  })
+
+  it('Redis Cluster 是 shards = 3 的 Cache，其他參數用 Cache 的預設值', () => {
+    const cluster = PALETTE.find((item) => item.id === 'REDIS_CLUSTER')!
+    const node = newNode(cluster, new Set(['cache-1']), { x: 0, y: 0 })
+
+    expect(node).toMatchObject({ id: 'cache-2', type: 'CACHE', name: 'Redis Cluster 2' })
+    expect(node.params).toEqual({ ...NODE_KINDS.CACHE.defaults, shards: 3 })
+    for (const param of NODE_KINDS.CACHE.numberParams) {
+      expect(checkNodeParam(node.params, param, node.params[param]!)).toBeNull()
     }
   })
 })
