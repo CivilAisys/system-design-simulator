@@ -185,7 +185,7 @@ describe('格式錯誤', () => {
 
     it('type 不是已知的類型', () => {
       expect(errorsOf((f) => void (f.nodes[4].type = 'QUEUE'))).toEqual([
-        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE 其中之一',
+        'nodes[4]（id "db"）：type 必須是 CLIENT、LOAD_BALANCER、SERVICE、CACHE、CDN、DATABASE、OBJECT_STORAGE 其中之一',
       ])
     })
 
@@ -341,6 +341,15 @@ describe('畫不出來的邊', () => {
       'edges[4]（id "e5"）：Database 不能有下游（source 是 "db"）',
     ])
   })
+
+  it('從 Object Storage 連出', () => {
+    const file = withObjectStorage()
+    file.edges.push({ id: 'e7', source: 'storage', target: 'db', weight: 1, callsPerRequest: 1, latencyMs: 1 })
+    expect(toTopology(file)).toEqual({
+      ok: false,
+      errors: ['edges[6]（id "e7"）：Object Storage 不能有下游（source 是 "storage"）'],
+    })
+  })
 })
 
 describe('沒有座標的節點', () => {
@@ -392,11 +401,26 @@ function withCdn() {
   return file
 }
 
+// 合法檔案再加一個 Service 呼叫的 Object Storage
+function withObjectStorage() {
+  const file = validFile()
+  file.nodes.push({
+    id: 'storage',
+    type: 'OBJECT_STORAGE',
+    name: 'Media',
+    params: { instances: 1, concurrency: 10000, serviceTimeMs: 20 },
+    ui: { x: 900, y: 300 },
+  })
+  file.edges.push({ id: 'e6', source: 'svc', target: 'storage', weight: 1, callsPerRequest: 1, latencyMs: 5 })
+  return file
+}
+
 describe('匯出再匯入', () => {
   it.each([
     ['合法檔案', topologyOf(validFile())],
     ['開啟時的畫布', initialTopology],
     ['CDN', topologyOf(withCdn())],
+    ['Object Storage', topologyOf(withObjectStorage())],
   ])('%s 得到相同的拓撲', (_, topology) => {
     expect(parseTopology(serializeTopology(topology))).toEqual({ ok: true, topology })
   })

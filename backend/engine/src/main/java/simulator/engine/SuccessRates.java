@@ -42,7 +42,7 @@ final class SuccessRates {
                 double miss = graph.visits(edge, read);
                 yield (1 - miss) + miss * children.get(edge.target());
             }
-            case DatabaseNode database -> 1;
+            case StorageNode storage -> 1;
         };
         return pass(node) * downstream;
     }

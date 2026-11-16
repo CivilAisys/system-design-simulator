@@ -1,4 +1,4 @@
-import { Database, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
+import { Archive, Database, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
 import type { EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
@@ -30,7 +30,7 @@ type NodeKind = {
 const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
 
 // 左側元件面板的順序
-export const NODE_TYPES: NodeType[] = ['CLIENT', 'LOAD_BALANCER', 'SERVICE', 'CACHE', 'CDN', 'DATABASE']
+export const NODE_TYPES: NodeType[] = ['CLIENT', 'LOAD_BALANCER', 'SERVICE', 'CACHE', 'CDN', 'DATABASE', 'OBJECT_STORAGE']
 
 export const NODE_KINDS: Record<NodeType, NodeKind> = {
   CLIENT: {
@@ -100,6 +100,19 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     icon: Database,
     idPrefix: 'db',
     defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+    numberParams: CAPACITY_PARAMS,
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: false,
+    edgeParams: ['latencyMs'],
+    outputEdgeKind: 'SYNC',
+  },
+  // 計算和 Database 相同（spec 3.3），只有預設值、圖示和名稱不同
+  OBJECT_STORAGE: {
+    label: 'Object Storage',
+    icon: Archive,
+    idPrefix: 'storage',
+    defaults: { instances: 1, concurrency: 10000, serviceTimeMs: 20 },
     numberParams: CAPACITY_PARAMS,
     choiceParams: [],
     hasInput: true,

@@ -268,7 +268,7 @@ class SimulateEndpointTest {
                 // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
                 Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
-                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE]"),
+                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE]"),
                 Arguments.of("/nodes/0/name", "123", "nodes[0].name, expected a string"),
                 Arguments.of("/nodes", "{}", "nodes, expected an array"));
     }

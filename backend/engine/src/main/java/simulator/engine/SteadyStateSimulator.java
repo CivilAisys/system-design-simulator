@@ -41,7 +41,7 @@ public final class SteadyStateSimulator implements Simulator {
                 case LoadBalancerNode lb -> process(lb.capacityParams(), arrival, node.id(), nodeResults);
                 case ServiceNode service -> process(service.capacityParams(), arrival, node.id(), nodeResults);
                 case CachingNode cache -> process(cache.capacityParams(), arrival, node.id(), nodeResults);
-                case DatabaseNode database -> process(database.capacityParams(), arrival, node.id(), nodeResults);
+                case StorageNode storage -> process(storage.capacityParams(), arrival, node.id(), nodeResults);
             };
 
             for (Edge edge : graph.outgoing(node.id())) {
