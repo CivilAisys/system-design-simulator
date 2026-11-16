@@ -105,6 +105,31 @@ class ReadReplicaTest {
         assertRates(replica.arrivalRps(), 600, 300);
     }
 
+    @Test
+    void shardedReplicaReadSuccessUsesEachShardsReadShare() {
+        // primary 2 個 shard，最熱 75%、容量各 200：write 400 → 熱 shard 300 只處理 200，另一個 100
+        // replica 每個 shard 容量 500：熱 shard read 450 + 寫 200 = 650（處理 500），另一個 read 150 + 寫 100 = 250
+        var sharded = new DatabaseNode("db", "Primary", NodeHealth.HEALTHY, workers(2), new ShardLayout(2, 0.75));
+        SimulationResult result = run(1000, 0.6, sharded, workers(5));
+
+        // read 的通過率逐 shard 算：(450 × 500/650 + 150) / 600，不是整個節點的 750/900
+        double readPass = (450 * 500.0 / 650 + 150) / 600;
+        double writePass = 300.0 / 400;
+        assertThat(result.nodes().get("client").successRps()).isCloseTo(600 * readPass + 400 * writePass, within(EPS));
+        assertThat(result.nodes().get("replica").warnings()).containsExactly(NodeWarning.REPLICATION_LAG);
+    }
+
+    @Test
+    void duplicateOrUnknownReplicationEdgesAreReportedOnce() {
+        SimulationResult duplicate = validate(List.of(client(), database("a"), replica("r")),
+                List.of(edge("e1", "c", "a"), edge("e2", "a", "r"), edge("e3", "a", "r")));
+        SimulationResult unknown = validate(List.of(client(), replica("r")),
+                List.of(edge("e1", "c", "r"), edge("e2", "ghost", "r")));
+
+        assertThat(duplicate.errors()).extracting(ValidationError::code).containsExactly("DUPLICATE_EDGE");
+        assertThat(unknown.errors()).extracting(ValidationError::code).containsExactly("UNKNOWN_NODE");
+    }
+
     private SimulationResult validate(List<Node> nodes, List<Edge> edges) {
         return simulator.simulate(new Topology(nodes, edges));
     }

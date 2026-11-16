@@ -14,17 +14,18 @@ export type SimNodeData = {
   errors?: string[]
   // 拓撲在上次 Run 之後改過，結果和錯誤可能已經不準
   stale?: boolean
+  // Read Replica 沒有自己的 shards，沿用 primary 的（spec 4.2.3），Canvas 從連過來的 Database 算
+  mirroredShards?: number
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
-  const { node, result, errors, stale } = data
+  const { node, result, errors, stale, mirroredShards } = data
   const { icon: Icon, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
-  // Read Replica 沒有自己的 shards，沿用 primary 的配置，只能從結果看出來
-  const shards = node.params.shards ?? result?.shards?.length ?? 1
+  const shards = node.params.shards ?? mirroredShards ?? 1
 
   return (
     <div

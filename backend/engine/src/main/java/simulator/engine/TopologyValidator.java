@@ -37,7 +37,7 @@ final class TopologyValidator {
     private final Map<String, Integer> upstreams = new HashMap<>();
     // Database 連到 Read Replica 的邊：Database 算「連到 replica 的下游」，replica 算「primary 的數量」
     private final Map<String, Integer> replicaDownstreams = new HashMap<>();
-    private final Map<String, Integer> primaries = new HashMap<>();
+    private final Map<String, Set<String>> primaries = new HashMap<>();
     private final List<ValidationError> errors = new ArrayList<>();
 
     private TopologyValidator(Topology topology, TopologyGraph graph) {
@@ -50,8 +50,9 @@ final class TopologyValidator {
             if (fromDatabase && graph.node(edge.target()) instanceof ReadReplicaNode) {
                 replicaDownstreams.merge(edge.source(), 1, Integer::sum);
             }
-            if (fromDatabase) {
-                primaries.merge(edge.target(), 1, Integer::sum);
+            // 重複的邊（DUPLICATE_EDGE）只算一個 primary；不存在的 source 已經報 UNKNOWN_NODE，也算進去，不重複報錯
+            if (fromDatabase || !graph.contains(edge.source())) {
+                primaries.computeIfAbsent(edge.target(), id -> new HashSet<>()).add(edge.source());
             }
         }
     }
@@ -109,7 +110,7 @@ final class TopologyValidator {
                     : "Database " + name + " 只能連到 Read Replica");
         }
         if (node instanceof ReadReplicaNode) {
-            int primaryCount = primaries.getOrDefault(node.id(), 0);
+            int primaryCount = primaries.getOrDefault(node.id(), Set.of()).size();
             if (primaryCount != 1) {
                 nodeError(node, "REPLICA_PRIMARY_COUNT",
                         "Read Replica " + name + " 必須剛好有一個 Database 上游（primary），目前有 " + primaryCount + " 個");

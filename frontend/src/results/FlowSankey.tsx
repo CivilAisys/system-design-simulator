@@ -6,6 +6,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { totalRps, type NodeResult, type SimulationResult, type Topology } from '@/api/client'
 import type { Theme } from '@/theme'
 import { formatRps } from '@/canvas/format'
+import { NODE_KINDS } from '@/canvas/catalog'
 import { NEUTRAL_HEX, STATUS_HEX } from '@/canvas/status'
 
 // 只載入用到的部分，避免把整個 ECharts 打包進來
@@ -56,10 +57,14 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
   const dark = theme === 'dark'
   const textColor = dark ? '#e5e5e5' : '#171717'
   // 流量和邊上的 label 用同一個數字：read + write
+  const types = new Map(topology.nodes.map((node) => [node.id, node.type]))
   const edgeLinks = topology.edges.flatMap((edge) => {
     const rps = result.edges[edge.id]?.rps
     // 0 流量的邊在 Sankey 上沒有寬度，只會留下孤立的節點
     if (!rps || totalRps(rps) <= 0) return []
+    // 非同步的邊（複製）不是請求的流向：畫出來會讓 primary 看起來處理了好幾倍的流量
+    const sourceType = types.get(edge.source)
+    if (sourceType && NODE_KINDS[sourceType].outputEdgeKind === 'ASYNC') return []
     return [{ source: edge.source, target: edge.target, value: totalRps(rps), read: rps.read, write: rps.write }]
   })
   // 丟棄和拒絕都是依 read／write 的比例發生（spec 4.2），用到達率的比例拆開

@@ -33,9 +33,9 @@ export const EXAMPLES: Example[] = [
   { id: 'external-api', label: 'External API', topology: builtIn(externalApi) },
   // Database 切 4 片，容量 40,000，但最熱的 shard 分到 40%：28,000 rps 就讓它過載。把 hotShardShare 刪掉（平均分配）就撐得住
   { id: 'sharding', label: '分片熱點', topology: builtIn(sharding) },
-  // 熱門貼文的 key 都在同一個 shard：它分到一半的流量而過載，另外兩格還很閒
   // write 只到 primary，read 經 Read LB 分給兩個 replica；每個 replica 仍要套用全部 1,200 write，無法擴展寫入
   { id: 'read-replica', label: 'Read Replica', topology: builtIn(readReplica) },
+  // 熱門貼文的 key 都在同一個 shard：它分到一半的流量而過載，另外兩格還很閒
   { id: 'redis-cluster', label: 'Redis Cluster 熱點 key', topology: builtIn(redisCluster) },
 ]
 

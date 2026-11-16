@@ -1,4 +1,17 @@
-import { Archive, Boxes, Cloud, Database, DatabaseBackup, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
+import {
+  Archive,
+  Boxes,
+  Cloud,
+  Database,
+  DatabaseBackup,
+  Gauge,
+  Globe,
+  Network,
+  Server,
+  Users,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
 import type { EdgeChoiceParam, EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
