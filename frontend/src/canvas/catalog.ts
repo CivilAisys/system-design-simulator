@@ -338,3 +338,8 @@ export function newEdgeRequestClass(source: NodeType, target: NodeType): Edge['r
 export function isReplicationSource(type: NodeType): boolean {
   return NODE_KINDS[type].outputTargets?.includes('READ_REPLICA') ?? false
 }
+
+// 畫布上的分片數：Read Replica 沒有自己的 shards，沿用 primary 的（spec 4.2.3，Canvas 從連過來的 Database 算）
+export function shownShards(node: Node, mirroredShards: number | undefined): number {
+  return node.params.shards ?? mirroredShards ?? 1
+}
