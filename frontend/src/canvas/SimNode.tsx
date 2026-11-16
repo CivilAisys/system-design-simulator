@@ -2,8 +2,10 @@ import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
+import { CATEGORY_DOT } from './category'
 import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
+import { instanceStack } from './instanceStack'
 import { ShardGrid } from './ShardGrid'
 import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
@@ -21,12 +23,16 @@ export type SimNodeData = {
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
+// 疊層每一層錯開的距離
+const STACK_OFFSET = 4
+
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { node, result, errors, stale, mirroredShards } = data
   const { icon, category, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
   const shards = node.params.shards ?? mirroredShards ?? 1
+  const stack = instanceStack(node, shards)
 
   return (
     <div
@@ -39,6 +45,16 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         selected && 'outline-2 outline-offset-6 outline-primary',
       )}
     >
+      {/* 多台機器：節點後面往右下錯開的卡片。不攔截滑鼠，選取範圍和連接點不變 */}
+      {stack &&
+        Array.from({ length: stack.layers }, (_, i) => (
+          <div
+            key={i}
+            aria-hidden
+            className="pointer-events-none absolute inset-0 -z-10 rounded-card border border-input bg-card"
+            style={{ translate: `${(i + 1) * STACK_OFFSET}px ${(i + 1) * STACK_OFFSET}px`, opacity: 1 - i * 0.35 }}
+          />
+        ))}
       {/* 外框和光暈單獨一層，過載脈動時只有光暈閃，文字不跟著閃。
           驗證失敗時沒有計算結果，不會同時有狀態色。過期時畫淡、不脈動 */}
       {(errors || status) && (
@@ -77,6 +93,17 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         </p>
       ))}
       {shards > 1 && <ShardGrid count={shards} shards={result?.shards} stale={stale} />}
+      {/* 畫在狀態外框之後，不被外框蓋住 */}
+      {stack && (
+        <span
+          className={cn(
+            'absolute -top-2.5 -right-2.5 rounded-full border-2 border-canvas px-1.75 py-px text-[11px] font-bold text-card',
+            CATEGORY_DOT[category],
+          )}
+        >
+          {stack.label}
+        </span>
+      )}
       {hasOutput && <Handle type="source" position={Position.Right} />}
     </div>
   )

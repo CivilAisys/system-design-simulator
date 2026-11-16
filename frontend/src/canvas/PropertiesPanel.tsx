@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
+import { workersHint } from './instanceStack'
 import { NumberField } from './NumberField'
 import {
   checkNodeParam,
@@ -121,6 +122,15 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
             onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
           />
           {param === 'shards' && hotShareField}
+          {param === 'instances' && (
+            <p className="-mt-3 text-xs text-muted-foreground">
+              {workersHint(
+                nodeParam(node.params, 'instances'),
+                nodeParam(node.params, 'concurrency'),
+                node.params.shards ?? flowNode.data.mirroredShards ?? 1,
+              )}
+            </p>
+          )}
         </Fragment>
       ))}
       {/* 磁碟容量選填：沒設定時不估算磁碟幾天後會滿（spec 4.8） */}
