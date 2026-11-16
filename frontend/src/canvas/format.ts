@@ -29,8 +29,9 @@ export function formatOptionalRps(rps: number | null | undefined): string {
 export function formatMs(ms: number | null | undefined): string {
   if (ms == null) return DASH
   if (ms === 0) return '0 ms'
-  // 小於 0.1 ms（例如 Cache 預設的 0.01 ms）取一位小數會變成 0.0，改用兩位有效數字
-  return ms < 0.1 ? `${ms.toPrecision(2)} ms` : `${ms.toFixed(1)} ms`
+  // 小於 0.1 ms（例如 Cache 預設的 0.01 ms）取一位小數會變成 0.0，改用兩位有效數字。
+  // 門檻是 0.095：再大一點兩位有效數字會變成「0.10」，和 0.1 以上的「0.1」不一致
+  return ms < 0.095 ? `${ms.toPrecision(2)} ms` : `${ms.toFixed(1)} ms`
 }
 
 // 頻寬和儲存量用十進位單位（1 MB = 1,000,000 bytes），和網路速率的 Gbps、磁碟容量的 GB 一致
@@ -38,15 +39,15 @@ const BYTE_RATE_UNITS = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s', 'PB/s']
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
 const BIT_UNITS = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps', 'Pbps']
 
-// 單位最大到 P，超過時用最小單位的科學記號（例如 1.2e18 B/s），不再印出一長串整數
-const SCIENTIFIC_FROM = 999.5e15
+// 999.5 以上四捨五入會變成「1000」，改用下一個單位
+const NEXT_UNIT_FROM = 999.5
 
 function formatScaled(value: number, units: string[]): string {
-  if (value >= SCIENTIFIC_FROM) return `${value.toExponential(1).replace('e+', 'e')} ${units[0]}`
+  // 單位最大到 P，超過時用最小單位的科學記號（例如 1.2e18 B/s），不再印出一長串整數
+  if (value >= NEXT_UNIT_FROM * 1000 ** (units.length - 1)) return `${value.toExponential(1).replace('e+', 'e')} ${units[0]}`
   let scaled = value
   let unit = 0
-  // 999.5 以上四捨五入會變成「1000」，改用下一個單位
-  while (scaled >= 999.5 && unit < units.length - 1) {
+  while (scaled >= NEXT_UNIT_FROM && unit < units.length - 1) {
     scaled /= 1000
     unit++
   }

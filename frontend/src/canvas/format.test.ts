@@ -59,6 +59,10 @@ describe('formatMs', () => {
     expect(formatMs(0.04)).toBe('0.040 ms')
   })
 
+  it('四捨五入到 0.1 的值和 0.1 用同一個格式', () => {
+    expect(formatMs(0.0996)).toBe('0.1 ms')
+  })
+
   it('0 顯示成 0 ms', () => {
     expect(formatMs(0)).toBe('0 ms')
   })
@@ -121,6 +125,8 @@ describe('formatBitsPerSec', () => {
 
   it('超過 Pbps 時用科學記號', () => {
     expect(formatBitsPerSec(2e18)).toBe('1.6e19 bps')
+    // bytes 還在 PB/s 以內，乘 8 之後才超過
+    expect(formatBitsPerSec(125e15)).toBe('1.0e18 bps')
   })
 })
 
