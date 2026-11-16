@@ -7,16 +7,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { NODE_KINDS, type NodeParams } from './catalog'
+import { NODE_KINDS } from './catalog'
 import { formatUtilization } from './format'
 import { NumberField } from './NumberField'
 import {
   checkNodeParam,
+  EDGE_CHOICE_SPECS,
   EDGE_PARAM_SPECS,
   NODE_CHOICE_SPECS,
   NODE_PARAM_SPECS,
   nodeParam,
-  type NodeChoiceParam,
+  type ChoiceSpec,
 } from './params'
 import type { SimFlowNode } from './SimNode'
 import type { RpsFlowEdge } from './RpsEdge'
@@ -87,7 +88,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
       {choiceParams.map((param) => (
         <ChoiceField
           key={param}
-          param={param}
+          spec={NODE_CHOICE_SPECS[param]}
           value={node.params[param]}
           onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
         />
@@ -106,21 +107,21 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
   )
 }
 
-type ChoiceFieldProps = {
-  param: NodeChoiceParam
-  value: NodeParams[NodeChoiceParam]
-  onChange: (value: NonNullable<NodeParams[NodeChoiceParam]>) => void
+type ChoiceFieldProps<V extends string> = {
+  spec: ChoiceSpec<V>
+  value: V | undefined
+  onChange: (value: V) => void
 }
 
-function ChoiceField({ param, value, onChange }: ChoiceFieldProps) {
-  const { label, options } = NODE_CHOICE_SPECS[param]
+function ChoiceField<V extends string>({ spec, value, onChange }: ChoiceFieldProps<V>) {
+  const { label, options } = spec
   return (
     <div className="grid gap-1.5">
       <Label>{label}</Label>
       <Select
         value={value}
         // 選項只有 options 裡的值
-        onValueChange={(selected) => onChange(selected as NonNullable<NodeParams[NodeChoiceParam]>)}
+        onValueChange={(selected) => onChange(selected as V)}
       >
         <SelectTrigger className="w-full" aria-label={label}>
           <SelectValue />
@@ -158,6 +159,14 @@ function EdgeProperties({ edge: flowEdge, nodes, onUpdate }: EdgePropertiesProps
         <NumberField
           key={param}
           spec={EDGE_PARAM_SPECS[param]}
+          value={edge[param]}
+          onChange={(value) => onUpdate(edge.id, { [param]: value })}
+        />
+      ))}
+      {NODE_KINDS[source.type].edgeChoiceParams.map((param) => (
+        <ChoiceField
+          key={param}
+          spec={EDGE_CHOICE_SPECS[param]}
           value={edge[param]}
           onChange={(value) => onUpdate(edge.id, { [param]: value })}
         />

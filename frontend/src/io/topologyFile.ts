@@ -1,6 +1,6 @@
 import type { Edge, Node, NodeType, Topology } from '@/api/client'
 import { NODE_KINDS, NODE_TYPES, type NodeParams } from '@/canvas/catalog'
-import { NODE_CHOICE_SPECS, NODE_PARAM_SPECS } from '@/canvas/params'
+import { EDGE_CHOICE_SPECS, NODE_CHOICE_SPECS, NODE_PARAM_SPECS } from '@/canvas/params'
 
 const SUPPORTED_VERSION = 1
 // 匯入的檔案沒有 ui 座標時，這些節點排成一列，放在有座標的節點下方
@@ -209,7 +209,15 @@ function toEdge(
     }
     numbers[field] = value
   }
-  return { id, source, target, ...numbers }
+  // 省略時為 ALL：每個 class 都會走這條邊。和數值欄位一樣，給了 null 是格式錯誤
+  const requestClass = raw.requestClass === undefined ? 'ALL' : raw.requestClass
+  const classes = EDGE_CHOICE_SPECS.requestClass.options.map((option) => option.value)
+  const known = classes.find((value) => value === requestClass)
+  if (known == null) {
+    fail(`requestClass 必須是 ${classes.join('、')} 其中之一`)
+    return null
+  }
+  return { id, source, target, ...numbers, requestClass: known }
 }
 
 function endpoint(

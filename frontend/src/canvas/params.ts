@@ -13,6 +13,7 @@ export type NodeNumberParam =
   | 'quotaRps'
 export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
+export type EdgeChoiceParam = 'requestClass'
 
 export type NumberSpec = {
   label: string
@@ -29,11 +30,11 @@ export type NumberSpec = {
   slider: { min: number; max: number; scale: 'linear' | 'log'; step?: number }
 }
 
-export type ChoiceSpec = {
+export type ChoiceSpec<V extends string> = {
   label: string
   // 規則同 NumberSpec.optional
   optional?: boolean
-  options: { value: NonNullable<NodeParams[NodeChoiceParam]>; label: string }[]
+  options: { value: V; label: string }[]
 }
 
 // instances × concurrency 的上限（spec 4.5）：看乘積，不是各自檢查
@@ -74,7 +75,13 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
   limitRps: upperLimitSpec('limitRps'),
 
   // External API 的固定回應時間，範圍同邊的 latencyMs
-  latencyMs: { label: 'latencyMs', unit: 'ms', min: 0, max: 1e7, slider: { min: 0, max: 2000, scale: 'linear', step: 10 } },
+  latencyMs: {
+    label: 'latencyMs',
+    unit: 'ms',
+    min: 0,
+    max: 1e7,
+    slider: { min: 0, max: 2000, scale: 'linear', step: 10 },
+  },
   quotaRps: upperLimitSpec('quotaRps'),
 
 }
@@ -105,12 +112,24 @@ export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {
 }
 
 // 下拉選單的參數，選項的 value 就是 API 的 enum 值
-export const NODE_CHOICE_SPECS: Record<NodeChoiceParam, ChoiceSpec> = {
+export const NODE_CHOICE_SPECS: { [P in NodeChoiceParam]: ChoiceSpec<NonNullable<NodeParams[P]>> } = {
   callMode: {
     label: 'callMode',
     options: [
       { value: 'SEQUENTIAL', label: 'SEQUENTIAL（依序）' },
       { value: 'PARALLEL', label: 'PARALLEL（平行）' },
+    ],
+  },
+}
+
+// 邊的欄位一律選填，省略時的預設值在 topologyFile.ts 的 toEdge 補（spec 3.6）
+export const EDGE_CHOICE_SPECS: { [P in EdgeChoiceParam]: ChoiceSpec<Edge[P]> } = {
+  requestClass: {
+    label: 'requestClass',
+    options: [
+      { value: 'ALL', label: 'ALL（read 和 write）' },
+      { value: 'READ', label: 'READ（只有 read）' },
+      { value: 'WRITE', label: 'WRITE（只有 write）' },
     ],
   },
 }

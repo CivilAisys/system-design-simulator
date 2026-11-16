@@ -1,6 +1,6 @@
 import { Archive, Cloud, Database, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
-import type { EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
+import type { EdgeChoiceParam, EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
 export type NodeParams = Node['params']
 
@@ -23,6 +23,7 @@ type NodeKind = {
   hasOutput: boolean
   // 出邊在屬性面板顯示的參數（spec 3.4）
   edgeParams: EdgeNumberParam[]
+  edgeChoiceParams: EdgeChoiceParam[]
   // 出邊的種類，依 source 的 type 決定
   outputEdgeKind: EdgeKind
   // Run 之後節點上顯示的指標：ρ，或沒有 ρ 的 Rate Limiter、External API 改顯示拒絕量
@@ -54,8 +55,9 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     choiceParams: [],
     hasInput: false,
     hasOutput: true,
-    // weight 只對 Client／LB 的出邊有意義，callsPerRequest 只對 Service 的出邊有意義
+    // weight 只對 Client／LB 的出邊有意義，callsPerRequest、requestClass 只對 Service 的出邊有意義
     edgeParams: ['weight', 'latencyMs'],
+    edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
   },
@@ -69,6 +71,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasInput: true,
     hasOutput: true,
     edgeParams: ['weight', 'latencyMs'],
+    edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
   },
@@ -82,6 +85,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasInput: true,
     hasOutput: true,
     edgeParams: ['callsPerRequest', 'latencyMs'],
+    edgeChoiceParams: ['requestClass'],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
   },
@@ -95,6 +99,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasInput: true,
     hasOutput: true,
     edgeParams: ['latencyMs'],
+    edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
   },
@@ -109,6 +114,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasInput: true,
     hasOutput: true,
     edgeParams: ['latencyMs'],
+    edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
   },
@@ -122,6 +128,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasInput: true,
     hasOutput: false,
     edgeParams: ['latencyMs'],
+    edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
   },
@@ -136,6 +143,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasInput: true,
     hasOutput: false,
     edgeParams: ['latencyMs'],
+    edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
   },
@@ -150,6 +158,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasInput: true,
     hasOutput: true,
     edgeParams: ['latencyMs'],
+    edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'rejected',
   },
@@ -164,6 +173,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     hasInput: true,
     hasOutput: false,
     edgeParams: ['latencyMs'],
+    edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'rejected',
   },

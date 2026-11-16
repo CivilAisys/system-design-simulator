@@ -18,10 +18,15 @@ import type { RpsFlowEdge } from './RpsEdge'
 const TOPOLOGY_VERSION = 1
 
 // spec 3.4 的預設值
-const EDGE_DEFAULTS = { weight: 1, callsPerRequest: 1, latencyMs: 1 }
+const EDGE_DEFAULTS: Omit<Edge, 'id' | 'source' | 'target'> = {
+  weight: 1,
+  callsPerRequest: 1,
+  latencyMs: 1,
+  requestClass: 'ALL',
+}
 
 export type NodePatch = { name?: string; params?: Partial<NodeParams> }
-export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>>
+export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs' | 'requestClass'>>
 
 type CanvasState = {
   nodes: SimFlowNode[]

@@ -73,7 +73,7 @@ class OpenApiSyncTest {
             });
         });
 
-        assertThat(defaulted).contains("Edge.weight", "Edge.callsPerRequest", "Edge.latencyMs");
+        assertThat(defaulted).contains("Edge.weight", "Edge.callsPerRequest", "Edge.latencyMs", "Edge.requestClass");
         assertThat(requiredWithDefault).isEmpty();
     }
 }
