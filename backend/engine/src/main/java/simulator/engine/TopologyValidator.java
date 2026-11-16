@@ -26,6 +26,7 @@ final class TopologyValidator {
     static final double MAX_LATENCY_MS = 1e7;
     static final int MAX_CALLS_PER_REQUEST = 10_000;
     static final double MAX_WEIGHT = 1e6;
+    static final int MAX_SHARDS = 64;
 
     private final Topology topology;
     private final TopologyGraph graph;
@@ -122,8 +123,12 @@ final class TopologyValidator {
             case CachingNode cache -> {
                 checkCapacityParams(cache.capacityParams(), where, report);
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
+                checkShards(cache.shards(), where, report);
             }
-            case StorageNode storage -> checkCapacityParams(storage.capacityParams(), where, report);
+            case StorageNode storage -> {
+                checkCapacityParams(storage.capacityParams(), where, report);
+                checkShards(storage.shards(), where, report);
+            }
             case ExternalApiNode api -> {
                 requireBetween(api.latencyMs(), 0, MAX_LATENCY_MS, where, "latencyMs", report);
                 requirePositiveRps(api.quotaRps(), where, "quotaRps", report);
@@ -141,6 +146,19 @@ final class TopologyValidator {
         }
         requireBetween(params.serviceTimeMs(), MIN_SERVICE_TIME_MS, MAX_SERVICE_TIME_MS, where, "serviceTimeMs",
                 report);
+    }
+
+    /** instances × concurrency 的上限是對每個 shard 的限制，已經在 checkCapacityParams 檢查。 */
+    private static void checkShards(ShardLayout shards, String where, Consumer<String> report) {
+        if (shards.count() < 1 || shards.count() > MAX_SHARDS) {
+            report.accept(invalid(where, "shards", "介於 1 和 " + MAX_SHARDS + " 之間", shards.count()));
+            return;
+        }
+        // 最熱的 shard 至少分到平均值 1/N，否則它就不是最熱的
+        Double hot = shards.hotShare();
+        if (hot != null && !(hot >= 1.0 / shards.count() - 1e-12 && hot <= 1)) {
+            report.accept(invalid(where, "hotShardShare", "介於 1/" + shards.count() + " 和 1 之間", hot));
+        }
     }
 
     /** 只檢查對這個起點有意義的欄位，其他欄位計算時忽略（spec 3.4）。 */

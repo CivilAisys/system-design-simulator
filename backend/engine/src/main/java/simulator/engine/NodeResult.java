@@ -1,9 +1,12 @@
 package simulator.engine;
 
+import java.util.List;
+
 /**
  * 單一節點的計算結果。到達量、處理量、丟棄量、拒絕量永遠是數字；
  * 伺服器類欄位為 null 時代表「不適用」（Client）或「無定義」（過載時的延遲）。
  * {@code successRps} 和 {@code endToEndMs} 只有 Client 有，其他節點為 null。
+ * {@code shards} 只有分片（shards > 1）的節點有，最熱的 shard 放第一個；其他節點為 null。
  */
 public record NodeResult(
         ClassRates arrivalRps,
@@ -16,9 +19,11 @@ public record NodeResult(
         Double utilization,
         Double avgQueueMs,
         Double avgLatencyMs,
-        Status status) {
+        Status status,
+        List<ShardResult> shards) {
 
     static NodeResult client(ClassRates sent, double successRps, ClassLatencies endToEndMs) {
-        return new NodeResult(sent, sent.total(), 0, 0, successRps, endToEndMs, null, null, null, null, null);
+        return new NodeResult(sent, sent.total(), 0, 0, successRps, endToEndMs, null, null, null, null, null,
+                null);
     }
 }

@@ -40,8 +40,10 @@ public final class SteadyStateSimulator implements Simulator {
                 }
                 case LoadBalancerNode lb -> process(lb.capacityParams(), arrival, node.id(), nodeResults);
                 case ServiceNode service -> process(service.capacityParams(), arrival, node.id(), nodeResults);
-                case CachingNode cache -> process(cache.capacityParams(), arrival, node.id(), nodeResults);
-                case StorageNode storage -> process(storage.capacityParams(), arrival, node.id(), nodeResults);
+                case CachingNode cache -> process(cache.capacityParams(), cache.shards(), arrival, node.id(),
+                        nodeResults);
+                case StorageNode storage -> process(storage.capacityParams(), storage.shards(), arrival, node.id(),
+                        nodeResults);
                 case RateLimiterNode limiter -> admit(node.id(), limiter.limitRps(), 0, Status.LIMITING,
                         Status.NOT_LIMITING, arrival, nodeResults);
                 case ExternalApiNode api -> admit(node.id(), api.quotaRps(), api.latencyMs(), Status.OVER_QUOTA,
@@ -67,7 +69,12 @@ public final class SteadyStateSimulator implements Simulator {
 
     private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
             Map<String, NodeResult> nodeResults) {
-        var outcome = MmcQueue.solve(params, arrival);
+        return process(params, ShardLayout.SINGLE, arrival, nodeId, nodeResults);
+    }
+
+    private static ClassRates process(CapacityParams params, ShardLayout shards, ClassRates arrival, String nodeId,
+            Map<String, NodeResult> nodeResults) {
+        var outcome = MmcQueue.solve(params, shards, arrival);
         nodeResults.put(nodeId, outcome.result());
         return outcome.processed();
     }
@@ -82,7 +89,7 @@ public final class SteadyStateSimulator implements Simulator {
         boolean exceeded = lambda > limit;
         ClassRates passed = exceeded ? arrival.times(limit / lambda) : arrival;
         nodeResults.put(nodeId, new NodeResult(arrival, passed.total(), 0, lambda - passed.total(), null, null,
-                null, null, 0.0, latencyMs, exceeded ? over : within));
+                null, null, 0.0, latencyMs, exceeded ? over : within, null));
         return passed;
     }
 

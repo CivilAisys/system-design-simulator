@@ -8,4 +8,9 @@ public sealed interface CachingNode extends Node permits CacheNode, CdnNode {
     CapacityParams capacityParams();
 
     double hitRatio();
+
+    /** 只有 Cache 能分片，CDN 沒有。 */
+    default ShardLayout shards() {
+        return ShardLayout.SINGLE;
+    }
 }

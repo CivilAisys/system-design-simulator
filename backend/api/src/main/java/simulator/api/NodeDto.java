@@ -15,6 +15,7 @@ import simulator.engine.NodeHealth;
 import simulator.engine.ObjectStorageNode;
 import simulator.engine.RateLimiterNode;
 import simulator.engine.ServiceNode;
+import simulator.engine.ShardLayout;
 
 /** {@code state} 省略時為 HEALTHY；{@code ui} 只給前端用，後端忽略。 */
 @Schema(name = "Node")
@@ -38,9 +39,10 @@ public record NodeDto(
             case LOAD_BALANCER -> new LoadBalancerNode(id, name, health, capacityParams());
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
-            case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
+            case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"),
+                    shardLayout());
             case CDN -> new CdnNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
-            case DATABASE -> new DatabaseNode(id, name, health, capacityParams());
+            case DATABASE -> new DatabaseNode(id, name, health, capacityParams(), shardLayout());
             case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams());
             case RATE_LIMITER -> new RateLimiterNode(id, name, health, require(params.limitRps(), "limitRps"));
             case EXTERNAL_API -> new ExternalApiNode(id, name, health,
@@ -53,6 +55,11 @@ public record NodeDto(
                 require(params.instances(), "instances"),
                 require(params.concurrency(), "concurrency"),
                 require(params.serviceTimeMs(), "serviceTimeMs"));
+    }
+
+    /** {@code shards} 省略時為 1（不分片），{@code hotShardShare} 省略時平均分配。 */
+    private ShardLayout shardLayout() {
+        return new ShardLayout(params.shards() == null ? 1 : params.shards(), params.hotShardShare());
     }
 
     private <T> T require(T value, String param) {

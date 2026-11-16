@@ -11,6 +11,8 @@ export type NodeNumberParam =
   | 'limitRps'
   | 'latencyMs'
   | 'quotaRps'
+  | 'shards'
+  | 'hotShardShare'
 export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
 export type EdgeChoiceParam = 'requestClass'
@@ -83,7 +85,23 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
     slider: { min: 0, max: 2000, scale: 'linear', step: 10 },
   },
   quotaRps: upperLimitSpec('quotaRps'),
-
+  // Cache、Database 的分片（spec 4.2.2），舊檔沒有這個欄位
+  shards: {
+    label: 'shards',
+    integer: true,
+    optional: true,
+    min: 1,
+    max: 64,
+    slider: { min: 1, max: 64, scale: 'linear', step: 1 },
+  },
+  // 省略時平均分配（1/shards），所以不在 NODE_KINDS 的 defaults 裡；實際下限是 1/shards，見 checkNodeParam
+  hotShardShare: {
+    label: 'hotShardShare',
+    optional: true,
+    min: 0,
+    max: 1,
+    slider: { min: 0, max: 1, scale: 'linear', step: 0.01 },
+  },
 }
 
 export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {
@@ -159,12 +177,23 @@ const WORKER_PARTNER: Partial<Record<NodeNumberParam, NodeNumberParam>> = {
   concurrency: 'instances',
 }
 
-// 節點參數的檢查：單一參數的範圍之外，instances、concurrency 還要看和另一個的乘積（另一個取目前的值）
+// 節點參數的檢查：單一參數的範圍之外，instances、concurrency 還要看和另一個的乘積（另一個取目前的值），
+// 最熱 shard 的占比不能小於平均 1/shards
 export function checkNodeParam(params: NodeParams, param: NodeNumberParam, value: number): string | null {
   const error = checkNumber(NODE_PARAM_SPECS[param], value)
-  const partner = WORKER_PARTNER[param]
-  if (error !== null || partner === undefined) {
+  if (error !== null) {
     return error
+  }
+  if (param === 'hotShardShare' || param === 'shards') {
+    const shards = param === 'shards' ? value : (params.shards ?? 1)
+    const hot = param === 'hotShardShare' ? value : params.hotShardShare
+    return hot !== undefined && hot < 1 / shards
+      ? `hotShardShare 不能小於平均 1/${shards}（${formatShare(1 / shards)}）`
+      : null
+  }
+  const partner = WORKER_PARTNER[param]
+  if (partner === undefined) {
+    return null
   }
   const workers = value * nodeParam(params, partner)
   return workers > MAX_WORKERS
@@ -192,6 +221,11 @@ function describeRange(spec: NumberSpec): string {
 }
 
 // 和後端訊息的寫法一致，例如 0.000001、10,000,000（不用 1e-6 這種科學記號）
+// 最熱 shard 的平均占比 1/N，例如 0.333
+export function formatShare(value: number): string {
+  return value.toLocaleString('en-US', { maximumFractionDigits: 3 })
+}
+
 function formatBound(value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: 6 })
 }

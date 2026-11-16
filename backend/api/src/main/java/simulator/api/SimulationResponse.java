@@ -13,6 +13,7 @@ import simulator.engine.EdgeResult;
 import simulator.engine.EndToEndLatency;
 import simulator.engine.NodeResult;
 import simulator.engine.SimulationResult;
+import simulator.engine.ShardResult;
 import simulator.engine.Status;
 import simulator.engine.Summary;
 import simulator.engine.UndefinedReason;
@@ -112,12 +113,31 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, nullable = true) Double utilization,
             @Schema(requiredMode = REQUIRED, nullable = true) Double avgQueueMs,
             @Schema(requiredMode = REQUIRED, nullable = true) Double avgLatencyMs,
-            @Schema(requiredMode = REQUIRED, nullable = true) Status status) {
+            @Schema(requiredMode = REQUIRED, nullable = true) Status status,
+            @Schema(requiredMode = REQUIRED, nullable = true,
+                    description = "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）")
+            List<ShardResultDto> shards) {
 
         static NodeResultDto from(NodeResult node) {
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
                     node.droppedRps(), node.rejectedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()),
-                    node.capacityRps(), node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status());
+                    node.capacityRps(), node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status(),
+                    node.shards() == null ? null : node.shards().stream().map(ShardResultDto::from).toList());
+        }
+    }
+
+    @Schema(name = "ShardResult", description = "一個 shard 的結果，欄位意義同 NodeResult")
+    public record ShardResultDto(
+            @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
+            @Schema(requiredMode = REQUIRED) double throughputRps,
+            @Schema(requiredMode = REQUIRED) double droppedRps,
+            @Schema(requiredMode = REQUIRED) double utilization,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "過載時為 null") Double avgLatencyMs,
+            @Schema(requiredMode = REQUIRED) Status status) {
+
+        static ShardResultDto from(ShardResult shard) {
+            return new ShardResultDto(ClassRatesDto.from(shard.arrivalRps()), shard.throughputRps(),
+                    shard.droppedRps(), shard.utilization(), shard.avgLatencyMs(), shard.status());
         }
     }
 

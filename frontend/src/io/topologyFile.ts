@@ -125,6 +125,14 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     }
     kept[param] = value
   }
+  // 省略時平均分配，沒有預設值可以補；範圍（1/shards ～ 1）和其他參數一樣留給後端驗證
+  if (kind.numberParams.includes('shards') && params.hotShardShare !== undefined) {
+    if (!isFiniteNumber(params.hotShardShare)) {
+      fail('params.hotShardShare 必須是數字（或數值太大）')
+      return null
+    }
+    kept.hotShardShare = params.hotShardShare
+  }
   for (const param of kind.choiceParams) {
     const spec = NODE_CHOICE_SPECS[param]
     const value = paramOrDefault(params, param, spec.optional, kind.defaults)

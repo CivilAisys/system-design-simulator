@@ -103,9 +103,9 @@ system-design-simulator/
 | **Client** | 流量來源 | `rps`、`readRatio` | 依邊的 `weight` 分流 | rps=1000, readRatio=0.9 |
 | **Load Balancer** | 分流 | — | 依邊的 `weight` 分流（預設平均） | 1 × 1000, 1ms（≈1M rps） |
 | **Service** | 應用伺服器 | `callMode` | **Fan-out**：每個請求呼叫每個下游 `callsPerRequest` 次；`callMode` 決定依序（`SEQUENTIAL`）或平行（`PARALLEL`） | 2 × 200, 50ms（8,000 rps）, callMode=SEQUENTIAL |
-| **Cache** | 快取 | `hitRatio` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
+| **Cache** | 快取 | `hitRatio`、`shards`、`hotShardShare` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
 | **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
-| **Database** | 資料儲存（終點） | — | 無下游 | 1 × 100, 10ms（10,000 rps） |
+| **Database** | 資料儲存（終點） | `shards`、`hotShardShare` | 無下游 | 1 × 100, 10ms（10,000 rps） |
 | **Object Storage** | 存放圖片、影片等大型檔案（例如 S3），終點 | — | 無下游，同 Database | 1 × 10000, 20ms（≈500k rps） |
 | **Rate Limiter** | 全域限流 | `limitRps` | 放行 `min(λ, limitRps)`，超過的部分是**拒絕量**，不往下送；必須剛好一個下游 | limitRps=1000 |
 | **External API** | 第三方服務（金流、簡訊、地圖 API 等），終點 | `latencyMs`、`quotaRps` | 無下游；超過 `quotaRps` 的部分是**拒絕量**（HTTP 429） | latencyMs=100, quotaRps=1000 |
@@ -147,7 +147,7 @@ system-design-simulator/
 | 地方 | 寫法 | 示範的測試 |
 |---|---|---|
 | 後端反序列化 | DTO 欄位用包裝型別（`Double`、`Integer`），`@Schema(defaultValue = …)`；轉成 engine 物件時 `null` 換成預設值 | `SimulateEndpointTest.missingEdgeFieldsDefaultToOne`；型別錯誤見 `wrongTypeIsBadRequest` |
-| OpenAPI | 不標 `requiredMode = REQUIRED`，有 `default` | `OpenApiSyncTest.fieldsWithDefaultsAreOptional` 檢查有預設值的欄位都不在 `required` |
+| OpenAPI | 不標 `requiredMode = REQUIRED`，有 `default`。例外：`NodeParams` 的欄位不標 `default`，預設值寫在 `description`，因為 `NodeParams` 是所有 type 共用的，產生的前端型別會把有 `default` 的欄位當成必填 | `OpenApiSyncTest.fieldsWithDefaultsAreOptional` 檢查有預設值的欄位都不在 `required` |
 | 前端匯入 | 節點參數在 `params.ts` 的 spec 標 `optional: true`，省略時用該類型 `defaults` 裡的值；邊的欄位在 `topologyFile.ts` 的 `toEdge` 補；邊的下拉選單欄位（例如 `requestClass`）的選項在 `params.ts` 的 `EDGE_CHOICE_SPECS`，哪些起點會顯示寫在 `NODE_KINDS` 的 `edgeChoiceParams` | `topologyFile.test.ts` 的「選填的節點參數」、「邊省略的數值參數用預設值 1，requestClass 用 ALL」 |
 
 **新增一種 Node type**：
@@ -226,6 +226,20 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 | External API | `OVER_QUOTA`（超過配額） | `WITHIN_QUOTA`（配額內） |
 
 觸發限流是設計上預期的行為，不算故障，所以不變色、不發光。External API 超過配額會讓請求失敗，用紅色外框和紅字標出，但不脈動、不列入瓶頸。
+
+### 4.2.2 分片（Sharding）
+
+Cache 和 Database 可以分片（CDN、Object Storage 不行），這是能力而不是新的 type。資料依 key 切成 N 份放在 N 台機器上，每台只承擔一部分流量，所以 read 和 write 都能擴展；代價是熱點（hot key）會讓某個 shard 先爆掉。
+
+- 選填參數 `shards`（1–64 的整數，省略時為 1）和 `hotShardShare`（最熱的 shard 分到的流量比例）。`hotShardShare` 省略時平均分配（`1/N`）；有值時必須介於 `1/N` 和 1 之間。其他 shard 平分剩下的流量。
+- 每個 shard 都套用節點的 instances × concurrency × serviceTimeMs，各自用 4.2 的 M/M/c 計算，read／write 依相同比例分配。實際上只有「最熱的 shard」和「其他 shard」兩種流量。`instances × concurrency` 的上限（1e6）是對每個 shard 的限制。
+- 節點層級：
+  - ρ 和狀態取最熱 shard 的值（決定瓶頸）。
+  - 容量 `capacityRps` 是所有 shard 的加總（N × 單一 shard 容量）；有熱點時節點的 ρ 會比 `λ / capacityRps` 高。
+  - 處理量和丟棄量是各 shard 的加總，所以 `pass(n)` = 總處理量 ÷ 到達量（4.3.1）。
+  - 節點延遲 `W`、`avgQueueMs` 依各 shard 的流量加權平均；任一有流量的 shard 過載時為 `null`。
+- Cache 分片後每個 shard 的 `hitRatio` 相同，送往下游的是所有 shard 的 miss 加總。
+- 回應的節點結果有 `shards` 陣列（5），最熱的 shard 放第一個，每項有到達率、ρ、狀態、處理量、丟棄量、延遲。`shards = 1` 時沒有這個陣列（`null`），結果和不分片完全相同。
 
 ### 4.3 端到端平均延遲
 
@@ -331,6 +345,8 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 |---|---|
 | `rps` | 0 ～ 1,000,000,000,000（1e12） |
 | `limitRps`、`quotaRps` | > 0 且 ≤ 1e12 |
+| `shards` | 1 ～ 64 的整數 |
+| `hotShardShare` | `1/shards` ～ 1 |
 | `readRatio`、`hitRatio` | 0 ～ 1 |
 | `instances`、`concurrency` | 各自 ≥ 1 的整數，且 `instances × concurrency` ≤ 1,000,000（看乘積，不是各自檢查） |
 | `serviceTimeMs` | 0.000001 ～ 10,000,000（1e-6 ～ 1e7） |
@@ -417,7 +433,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
       "utilization": null,
       "avgQueueMs": null,
       "avgLatencyMs": null,
-      "status": null
+      "status": null,
+      "shards": null
     },
     "svc-1": {
       "arrivalRps": { "read": 900, "write": 100 },
@@ -428,7 +445,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
       "utilization": 0.125,
       "avgQueueMs": 0.0,
       "avgLatencyMs": 50.0,
-      "status": "OK"
+      "status": "OK",
+      "shards": null
     }
   },
   "edges": {
@@ -449,6 +467,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 ```
 
 驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單，不做任何計算：`nodes`、`edges` 為 `{}`，`summary` 為 `null`。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
+
+**分片的節點**：`shards` 是每個 shard 的結果陣列（`arrivalRps`、`throughputRps`、`droppedRps`、`utilization`、`avgLatencyMs`、`status`），最熱的放第一個；沒有分片的節點為 `null`（4.2.2）。
 
 **Rate Limiter、External API 節點**：`throughputRps` 是放行量；`capacityRps`、`utilization` 為 `null`，`avgQueueMs` 為 0，`avgLatencyMs` 是 Rate Limiter 的 0 或 External API 的 `latencyMs`；`status` 見 4.2.1。
 
@@ -498,6 +518,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 - 邊上的 label 顯示 RPS，粗細依流量比例。
 - Rate Limiter、External API 節點沒有 ρ，改顯示拒絕量和狀態（「限流中」／「未觸發」、「超過配額」／「配額內」）。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
+- 指標表在分片節點的名稱旁顯示 shard 數；屬性面板在 `shards` > 1 時顯示 `hotShardShare`，沒設定時顯示平均值 `1/N`。
 - 指標表「丟棄」和「拒絕」分兩欄；結果面板上方的 summary 在有拒絕時另外列出總拒絕量（丟棄率已經包含它）。
 - **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。
 - **流量粒子動畫**：Run 之後，邊上有小點沿方向流動，速度或密度依該邊 RPS 調整。

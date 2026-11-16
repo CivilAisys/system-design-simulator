@@ -13,6 +13,7 @@ import { NumberField } from './NumberField'
 import {
   checkNodeParam,
   EDGE_CHOICE_SPECS,
+  formatShare,
   EDGE_PARAM_SPECS,
   NODE_CHOICE_SPECS,
   NODE_PARAM_SPECS,
@@ -85,6 +86,20 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
         />
       ))}
+      {/* 分片時才有熱點：省略時平均分配，顯示平均值；改了之後就是明確的占比 */}
+      {numberParams.includes('shards') && (node.params.shards ?? 1) > 1 && (
+        <div className="grid gap-1">
+          <NumberField
+            spec={NODE_PARAM_SPECS.hotShardShare}
+            value={node.params.hotShardShare ?? 1 / (node.params.shards ?? 1)}
+            check={(value) => checkNodeParam(node.params, 'hotShardShare', value)}
+            onChange={(value) => onUpdate(node.id, { params: { hotShardShare: value } })}
+          />
+          <p className="text-xs text-muted-foreground">
+            最熱的 shard 分到的流量比例，平均是 1/{node.params.shards}（{formatShare(1 / (node.params.shards ?? 1))}）
+          </p>
+        </div>
+      )}
       {choiceParams.map((param) => (
         <ChoiceField
           key={param}

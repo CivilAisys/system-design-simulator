@@ -131,6 +131,31 @@ class ParamRangeTest {
     }
 
     @ParameterizedTest
+    @ValueSource(ints = {0, -1, 65})
+    void invalidShardCountIsRejected(int shards) {
+        assertInvalidParam(runShardedDatabase(new ShardLayout(shards, null)), "db", null, "shards");
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {0.2, 1.1, Double.NaN})
+    void hotShardShareOutside1OverNAnd1IsRejected(double hotShare) {
+        // 4 個 shard：最熱的至少要分到 1/4
+        assertInvalidParam(runShardedDatabase(new ShardLayout(4, hotShare)), "db", null, "hotShardShare 必須 介於 1/4 和 1");
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {0.25, 1})
+    void hotShardShareBoundsAreAccepted(double hotShare) {
+        assertThat(runShardedDatabase(new ShardLayout(4, hotShare)).errors()).isEmpty();
+    }
+
+    private SimulationResult runShardedDatabase(ShardLayout shards) {
+        return simulator.simulate(new Topology(
+                List.of(client(100, 0.9), new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY, shards)),
+                List.of(new Edge("e1", "c", "db", 1, 1, 1))));
+    }
+
+    @ParameterizedTest
     @ValueSource(doubles = {0, 1.1e12, Double.NaN})
     void invalidExternalApiQuotaIsRejected(double quotaRps) {
         assertInvalidParam(runExternalApi(100, quotaRps), "pay", null, "quotaRps");

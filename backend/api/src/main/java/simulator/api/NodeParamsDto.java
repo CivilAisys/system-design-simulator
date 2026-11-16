@@ -15,5 +15,9 @@ public record NodeParamsDto(
         @Schema(description = "CACHE, CDN") Double hitRatio,
         @Schema(description = "RATE_LIMITER") Double limitRps,
         @Schema(description = "EXTERNAL_API：固定的回應時間") Double latencyMs,
-        @Schema(description = "EXTERNAL_API：對方給的配額") Double quotaRps) {
+        @Schema(description = "EXTERNAL_API：對方給的配額") Double quotaRps,
+        // 不標 defaultValue：產生的前端型別會把有預設值的欄位當成必填，每種 type 的 params 都得帶上它（spec 3.6）
+        @Schema(description = "CACHE, DATABASE：shard 數，省略時為 1（不分片）") Integer shards,
+        @Schema(description = "CACHE, DATABASE：最熱的 shard 分到的流量比例，省略時平均分配（1/shards）")
+        Double hotShardShare) {
 }
