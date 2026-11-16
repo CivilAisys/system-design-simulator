@@ -24,11 +24,13 @@ const SINKS = [
   { id: '\u0000backlog', name: '積壓', color: STATUS_HEX.CRITICAL, rps: queuedExcess },
 ]
 
+// 浮點誤差可能留下極小的值
+const EXCESS_TOLERANCE = 1e-9
+
 function queuedExcess(node: NodeResult) {
   if (!node.warnings.includes('BACKLOG')) return 0
-  // 浮點誤差可能留下極小的值
   const excess = totalRps(node.arrivalRps) - node.throughputRps - node.droppedRps - node.rejectedRps
-  return excess > 1e-9 ? excess : 0
+  return excess > EXCESS_TOLERANCE ? excess : 0
 }
 
 type FlowSankeyProps = {

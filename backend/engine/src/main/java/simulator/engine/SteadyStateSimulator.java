@@ -139,8 +139,8 @@ public final class SteadyStateSimulator implements Simulator {
         NodeResult result = nodeResults.get(nodeId);
         double arrival = result.arrivalRps().total();
         double excessShare = arrival > 0 ? result.droppedRps() / arrival : 0;
-        double failedRead = success.failedDownstream(nodeId, true);
-        double failedWrite = success.failedDownstream(nodeId, false);
+        double failedRead = success.failedDownstreamShare(nodeId, true);
+        double failedWrite = success.failedDownstreamShare(nodeId, false);
         double excess = 0;
         double backlog = 0;
         for (Edge edge : queued) {

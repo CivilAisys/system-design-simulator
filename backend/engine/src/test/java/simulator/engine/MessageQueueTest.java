@@ -194,6 +194,29 @@ class MessageQueueTest {
     }
 
     @Test
+    void consumerOnBothPathsQueuesOnlyTheAsynchronousDownstreamFailures() {
+        // worker 同時收到同步 500 和 MQ 的 500，處理得完；它寫入的 DB 容量 500、收到 1000，通過率 0.5
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0),
+                        new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, ROOMY),
+                        new MessageQueueNode("mq", "Queue", NodeHealth.HEALTHY, BROKER),
+                        new ServiceNode("worker", "Worker", NodeHealth.HEALTHY, ROOMY, CallMode.SEQUENTIAL),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, workers(5))),
+                List.of(
+                        new Edge("e1", "client", "lb", 1, 1, 1),
+                        new Edge("direct", "lb", "worker", 1, 1, 1),
+                        new Edge("enqueue", "lb", "mq", 1, 1, 1),
+                        new Edge("g1", "mq", "worker", 1, 1, 1),
+                        new Edge("store", "worker", "db", 1, 1, 1))));
+
+        assertThat(result.edges().get("g1").backlogRps()).isCloseTo(250, within(EPS));
+        assertThat(result.nodes().get("worker").droppedRps()).isCloseTo(0, within(EPS));
+        // 同步那一半照常因 DB 失敗；送進 queue 的一半全部算成功
+        assertThat(result.summary().successRps()).isCloseTo(500 * 0.5 + 500, within(EPS));
+    }
+
+    @Test
     void queueMayOnlyFeedServices() {
         SimulationResult result = simulator.simulate(new Topology(
                 List.of(

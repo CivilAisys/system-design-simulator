@@ -33,7 +33,7 @@ final class SuccessRates {
      * 這個 class 到達節點的請求中，節點處理了、但下游失敗的比例：pass(n) − S(n)。
      * 用在 Message Queue 的 consumer：這些訊息沒有完整成功，留在 queue 裡（spec 4.2.4）。
      */
-    double failedDownstream(String nodeId, boolean read) {
+    double failedDownstreamShare(String nodeId, boolean read) {
         double failed = pass(graph.node(nodeId), read) - success.get(nodeId, read);
         return failed < TOLERANCE ? 0 : failed;
     }
