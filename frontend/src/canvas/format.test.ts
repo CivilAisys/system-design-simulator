@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   DASH,
   formatBitsPerSec,
+  formatBytes,
   formatBytesPerSec,
   formatClassRates,
+  formatDays,
   formatMs,
   formatOptionalRps,
   formatPercent,
@@ -104,5 +106,25 @@ describe('formatBitsPerSec', () => {
     expect(formatBitsPerSec(90_000_000)).toBe('720 Mbps')
     expect(formatBitsPerSec(1.9e9)).toBe('15.2 Gbps')
     expect(formatBitsPerSec(100)).toBe('800 bps')
+  })
+})
+
+describe('formatBytes', () => {
+  it('用十進位單位換算到 YB', () => {
+    expect(formatBytes(0)).toBe('0 B')
+    expect(formatBytes(17_280_000_000)).toBe('17.3 GB')
+    expect(formatBytes(6.3e15)).toBe('6.30 PB')
+    expect(formatBytes(2e24)).toBe('2.00 YB')
+  })
+})
+
+describe('formatDays', () => {
+  it('不到 1 天不顯示成 0', () => {
+    expect(formatDays(0.2)).toBe('< 1 天')
+  })
+
+  it('100 天以內保留一位小數，之後四捨五入', () => {
+    expect(formatDays(16.53)).toBe('16.5 天')
+    expect(formatDays(1234.6)).toBe(`${(1235).toLocaleString()} 天`)
   })
 })

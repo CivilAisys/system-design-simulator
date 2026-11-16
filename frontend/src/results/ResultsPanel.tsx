@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   isComputed,
   totalRps,
+  type ComputedResult,
   type SimulationResult,
   type Summary,
   type Topology,
@@ -10,10 +11,11 @@ import {
 } from '@/api/client'
 import type { Theme } from '@/theme'
 import { cn } from '@/lib/utils'
-import { formatBitsPerSec, formatBytesPerSec, formatPercent, formatRps } from '@/canvas/format'
+import { formatBitsPerSec, formatBytesPerSec, formatDays, formatPercent, formatRps } from '@/canvas/format'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 import { ErrorList } from './ErrorList'
 import { MetricsTable } from './MetricsTable'
+import { StorageTable } from './StorageTable'
 
 // ECharts 很大，切到 Sankey Tab 才載入
 const FlowSankey = lazy(() => import('./FlowSankey').then((module) => ({ default: module.FlowSankey })))
@@ -41,6 +43,7 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
         <TabsList>
           <TabsTrigger value="metrics">指標表</TabsTrigger>
           <TabsTrigger value="sankey">流量 Sankey</TabsTrigger>
+          <TabsTrigger value="storage">容量估算</TabsTrigger>
           <TabsTrigger value="errors">錯誤 ({errorCount})</TabsTrigger>
         </TabsList>
         {computed && (
@@ -65,6 +68,7 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
               <EndToEndLatencyText latencies={computed.summary.avgEndToEndMs} topology={topology} />
             </p>
             <BandwidthText summary={computed.summary} />
+            <DiskFullText topology={topology} result={computed} />
           </>
         )}
       </div>
@@ -81,6 +85,9 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
         ) : (
           empty
         )}
+      </TabsContent>
+      <TabsContent value="storage" className="min-h-0 overflow-auto">
+        {computed ? <StorageTable topology={topology} result={computed} /> : empty}
       </TabsContent>
       <TabsContent value="errors" className="min-h-0 overflow-auto">
         {result ? (
@@ -110,6 +117,20 @@ function BandwidthText({ summary }: { summary: Summary }) {
           <span className="ml-1 text-muted-foreground">（CDN 擋掉 {formatPercent(offload / egress)}）</span>
         </>
       )}
+    </p>
+  )
+}
+
+// 磁碟會滿是另一種瓶頸（spec 4.8），和 ρ 最高的瓶頸分開列出
+function DiskFullText({ topology, result }: { topology: Topology; result: ComputedResult }) {
+  const full = topology.nodes.filter((node) => result.storage[node.id]?.fillsDisk)
+  if (full.length === 0) return null
+  return (
+    <p className="text-sm text-destructive">
+      <span className="mr-2">磁碟會滿</span>
+      {full
+        .map((node) => `${node.name}（約 ${formatDays(result.storage[node.id].daysUntilFull ?? 0)}）`)
+        .join('、')}
     </p>
   )
 }

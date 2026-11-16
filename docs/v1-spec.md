@@ -105,10 +105,10 @@ system-design-simulator/
 | **Service** | 應用伺服器 | `callMode` | **Fan-out**：每個請求呼叫每個下游 `callsPerRequest` 次；`callMode` 決定依序（`SEQUENTIAL`）或平行（`PARALLEL`） | 2 × 200, 50ms（8,000 rps）, callMode=SEQUENTIAL |
 | **Cache** | 快取（元件面板的「Redis Cluster」是 `shards = 3` 的 Cache） | `hitRatio`、`shards`、`hotShardShare` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
 | **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
-| **Database** | 資料儲存（終點） | `shards`、`hotShardShare` | 只能連到 Read Replica（複製，4.2.3） | 1 × 100, 10ms（10,000 rps） |
+| **Database** | 資料儲存（終點） | `shards`、`hotShardShare`、`bytesPerWrite`、`retentionDays`、`diskGbPerShard` | 只能連到 Read Replica（複製，4.2.3） | 1 × 100, 10ms（10,000 rps）, bytesPerWrite=1000, retentionDays=365 |
 | **Read Replica** | primary Database 的唯讀副本 | — | 無下游；write 是 primary 複製過來的，read 由 Service 的 READ 邊送來 | 1 × 100, 10ms（10,000 rps） |
 | **Message Queue** | 非同步佇列（broker） | — | 每條下游邊是一個 consumer group，都收到全部訊息；Client 只等到 ack | 1 × 1000, 1ms（≈1M rps） |
-| **Object Storage** | 存放圖片、影片等大型檔案（例如 S3），終點 | — | 無下游，同 Database | 1 × 10000, 20ms（≈500k rps） |
+| **Object Storage** | 存放圖片、影片等大型檔案（例如 S3），終點 | `bytesPerWrite`、`retentionDays`、`diskGbPerShard` | 無下游，同 Database | 1 × 10000, 20ms（≈500k rps）, bytesPerWrite=1000000, retentionDays=365 |
 | **Rate Limiter** | 全域限流 | `limitRps` | 放行 `min(λ, limitRps)`，超過的部分是**拒絕量**，不往下送；必須剛好一個下游 | limitRps=1000 |
 | **External API** | 第三方服務（金流、簡訊、地圖 API 等），終點 | `latencyMs`、`quotaRps` | 無下游；超過 `quotaRps` 的部分是**拒絕量**（HTTP 429） | latencyMs=100, quotaRps=1000 |
 
@@ -119,6 +119,8 @@ system-design-simulator/
 > Object Storage 的計算和驗證都和 Database 相同（engine 裡兩者都是 `StorageNode`），只有預設值、圖示和名稱不同。容量由供應商負責，所以不支援 sharding，也不能接 Read Replica。
 >
 > Client 的 `readResponseBytes`（每個 read 回應的大小）、`writeRequestBytes`（每個 write 上傳的大小）單位是 bytes，只用來估算使用者端頻寬（4.7），不影響其他計算。
+>
+> Database、Object Storage 的 `bytesPerWrite`（每次 write 平均新增的 bytes）、`retentionDays`（資料保留天數）、`diskGbPerShard`（每個 shard 的磁碟容量，GB；省略時不估算磁碟幾天後會滿）只用來估算儲存量（4.8）。Read Replica 沿用 primary 的設定，不能另外設；Cache 不估算。
 >
 > Rate Limiter 沒有 M/M/c（沒有 instances、concurrency、serviceTimeMs），`limitRps` 是所有上游加總的全域上限，不分 Client。計算見 4.2.1。
 >
@@ -379,7 +381,9 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 | `shards` | 1 ～ 64 的整數 |
 | `hotShardShare` | `1/shards` ～ 1 |
 | `readRatio`、`hitRatio` | 0 ～ 1 |
-| `readResponseBytes`、`writeRequestBytes` | 0 ～ 1,000,000,000,000（1e12，1 TB） |
+| `readResponseBytes`、`writeRequestBytes`、`bytesPerWrite` | 0 ～ 1,000,000,000,000（1e12，1 TB） |
+| `retentionDays` | 0 ～ 100,000 |
+| `diskGbPerShard`（選填） | > 0 且 ≤ 1,000,000,000（1e9 GB） |
 | `instances`、`concurrency` | 各自 ≥ 1 的整數，且 `instances × concurrency` ≤ 1,000,000（看乘積，不是各自檢查） |
 | `serviceTimeMs` | 0.000001 ～ 10,000,000（1e-6 ～ 1e7） |
 | `latencyMs`（邊和 External API） | 0 ～ 10,000,000（1e7） |
@@ -414,6 +418,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 | 平行呼叫 | 同上，`callMode=PARALLEL` | L = 50 + max(12, 32) = 82ms |
 | Fan-out 成功率 | Client 1000 rps → Service（pass=1）→ DB-A（pass=0.9，callsPerRequest=2）、DB-B（pass=1） | S = 0.9² × 1 = 0.81，successRps=810，dropRate=0.19 |
 | 頻寬 | Client 1000 rps、readRatio=0.9、回應 10 KB、上傳 1 KB → CDN（hit=0.95） | 出口 9,000,000 B/s、入口 100,000 B/s、CDN 擋掉 8,550,000 B/s |
+| 儲存量 | write 100 rps 全部處理、bytesPerWrite=2000、retentionDays=30、shards=2、diskGbPerShard=100、2 個 Read Replica | 每日 17.28 GB、總量 518.4 GB、含副本 1,555.2 GB、每 shard 259.2 GB、約 11.6 天磁碟滿（保留期內會滿） |
 
 ### 4.7 使用者端頻寬
 
@@ -429,6 +434,23 @@ back-of-envelope 估算只算 **Client 進出的流量**。內部呼叫每條的
 - **CDN 擋掉的 origin 頻寬**（`summary.cdnOffloadBytesPerSec`）：CDN 命中的 read 由 CDN 直接回應，不必從 origin 送出。每個 CDN 擋掉 `處理的 read × hitRatio × 平均回應大小`，平均回應大小是到達這個 CDN 的 read 依來源 Client 的 `readResponseBytes` 加權平均（不同 Client 的 read 經過同一個 CDN 時）。origin 出口 = 出口 − CDN 擋掉的部分。CDN 只算它實際處理的命中，所以 CDN 過載或上游拒絕時，被丟棄或拒絕的 read 也算在 origin 出口裡，是上限值（和出口一樣是需求量；過載照常標示）。
 - 只有 CDN 算，Cache 不算：Cache 命中的回應仍由 origin 的 Service 送出。
 - CDN 放在 Service 後面時，fan-out 的子呼叫沿用 Client 的回應大小，是近似值；擋掉的量最多等於出口頻寬。
+
+### 4.8 儲存量估算
+
+back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一份（回應的 `storage`，以節點 id 為 key）。
+
+```
+每日增量 = 處理完的 write × bytesPerWrite × 86,400
+總量     = 每日增量 × retentionDays
+含副本   = 總量 × (1 + Read Replica 數)
+每 shard = 總量 ÷ shards                              # 資料平均分布：熱點指的是流量，不代表資料多
+磁碟滿   = diskGbPerShard × 10⁹ ÷ (每日增量 ÷ shards)   # 約幾天後磁碟滿
+```
+
+- 用**成功處理**的 write（丟棄依 read／write 比例發生，4.2），過載時被丟棄的 write 不算，所以過載時數字偏低；容量估算分頁照常標示過載。
+- Read Replica 數是 primary 是這個 Database 的 Read Replica 個數；Replica 存的是同一份資料，沒有自己的估算。
+- GB 是十進位（10⁹ bytes）。沒有設定 `diskGbPerShard`、或沒有寫入（資料不會增加）時，`daysUntilFull` 是 `null`。
+- **磁碟會滿**（`fillsDisk`）：`daysUntilFull < retentionDays`，也就是保留期內每個 shard 的資料會超過磁碟容量。這是另一種瓶頸，和 ρ 分開顯示，不混進「瓶頸 = ρ 最高」的規則（`bottleneckNodeId` 不變）。
 
 ---
 
@@ -515,13 +537,16 @@ back-of-envelope 估算只算 **Client 進出的流量**。內部呼叫每條的
     "bottleneckNodeId": "svc-1",
     "bandwidth": { "egressBytesPerSec": 9000000, "ingressBytesPerSec": 100000 },
     "cdnOffloadBytesPerSec": 0
-  }
+  },
+  "storage": {}
 }
 ```
 
 驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單，不做任何計算：`nodes`、`edges` 為 `{}`，`summary` 為 `null`。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
 
 **警告**：`warnings` 永遠是陣列，沒有警告時為空；Read Replica 的 `REPLICATION_LAG`（4.2.3）、consumer 的 `BACKLOG`（4.2.4）。邊結果的 `backlogRps` 只有 Message Queue 的下游邊會大於 0（4.2.4）。
+
+**儲存量**：`storage` 以 Database、Object Storage 的 id 為 key（拓撲裡沒有時是 `{}`，例如上面的範例），每筆有 `dailyBytes`、`totalBytes`、`replicas`、`totalWithReplicasBytes`、`perShardBytes`（bytes）、`daysUntilFull`（可為 `null`）、`fillsDisk`（4.8）。驗證失敗時也是 `{}`。
 
 **頻寬**：單位 bytes/s（4.7）。邊結果的 `bandwidth` 只有 Client 的邊有，其他邊為 `null`；`summary.bandwidth` 一定有。
 
@@ -580,6 +605,7 @@ back-of-envelope 估算只算 **Client 進出的流量**。內部呼叫每條的
 - **Preset**：元件面板的「Redis Cluster」是 `shards = 3` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
 - 指標表在分片節點的名稱旁顯示 shard 數；屬性面板在 `shards` > 1 時顯示 `hotShardShare`，沒設定時顯示平均值 `1/N`；設定過之後可以按「改回平均」拿掉這個參數，之後改 shard 數占比會跟著 `1/N` 走。
 - **頻寬**（4.7）：Client 的邊在 RPS 下面一行小字顯示「出 X・入 Y」；結果面板上方的 summary 列出出口、入口頻寬，有 CDN 擋掉流量時加上 origin 出口和擋掉的比例。單位自動換算（B/s、KB/s、MB/s、GB/s…，十進位），括號裡附上 bits（Mbps、Gbps…）。
+- **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每 shard、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB…，十進位）。過載的節點名稱旁標示「過載，偏低」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerShard` 預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。
 - 指標表「丟棄」和「拒絕」分兩欄；結果面板上方的 summary 在有拒絕時另外列出總拒絕量（丟棄率已經包含它）。
 - **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。複製的邊不畫，它不是請求的流向（Message Queue 送給 consumer 的訊息照畫，consumer 處理不完的流進「積壓」終點）；所以 Read Replica 的流入只有 read，丟棄裡可能含複製寫入。
 - **流量粒子動畫**：Run 之後，邊上有小點沿方向流動，速度或密度依該邊 RPS 調整。

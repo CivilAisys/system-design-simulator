@@ -42,7 +42,15 @@ function validFile() {
         id: 'db',
         type: 'DATABASE',
         name: 'DB',
-        params: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
+        params: {
+          instances: 1,
+          concurrency: 100,
+          serviceTimeMs: 10,
+          shards: 1,
+          bytesPerWrite: 2_000,
+          retentionDays: 30,
+          diskGbPerShard: 500,
+        },
         ui: { x: 900, y: 100 },
       },
     ],
@@ -141,6 +149,24 @@ describe('合法的檔案', () => {
       expect(topologyOf(file).nodes[3].params).not.toHaveProperty('hotShardShare')
     })
 
+    it('儲存量參數省略時用預設值，diskGbPerShard 不補，代表不估算磁碟', () => {
+      const file = validFile()
+      for (const param of ['bytesPerWrite', 'retentionDays', 'diskGbPerShard']) {
+        remove(file.nodes[4].params, param)
+      }
+
+      const { params } = topologyOf(file).nodes[4]
+      expect(params).toMatchObject({ bytesPerWrite: 1_000, retentionDays: 365 })
+      expect(params).not.toHaveProperty('diskGbPerShard')
+    })
+
+    it('不估算儲存量的 type 丟掉 diskGbPerShard', () => {
+      const file = validFile()
+      Object.assign(file.nodes[3].params, { diskGbPerShard: 100 })
+
+      expect(topologyOf(file).nodes[3].params).not.toHaveProperty('diskGbPerShard')
+    })
+
     it('不能分片的 type 丟掉 shards 和 hotShardShare', () => {
       const file = validFile()
       Object.assign(file.nodes[2].params, { shards: 4, hotShardShare: 0.5 })
@@ -154,6 +180,9 @@ describe('合法的檔案', () => {
       ])
       expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { hotShardShare: null }))).toEqual([
         'nodes[3]（id "cache"）：params.hotShardShare 必須是數字（或數值太大）',
+      ])
+      expect(errorsOf((f) => void Object.assign(f.nodes[4].params, { diskGbPerShard: '1' }))).toEqual([
+        'nodes[4]（id "db"）：params.diskGbPerShard 必須是數字（或數值太大）',
       ])
     })
   })

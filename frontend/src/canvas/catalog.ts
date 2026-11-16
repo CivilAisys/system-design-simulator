@@ -29,7 +29,8 @@ type NodeKind = {
   idPrefix: string
   // spec 3.3 的預設值，涵蓋 numberParams 和 choiceParams 的每個參數
   defaults: NodeParams
-  // 屬性面板依序列出的參數，也是匯入時讀取的參數。有 shards 的 type 可以分片，另外有 hotShardShare（spec 4.2.2）
+  // 屬性面板依序列出的參數，也是匯入時讀取的參數。有 shards 的 type 可以分片，另外有 hotShardShare（spec 4.2.2）；
+  // 有 retentionDays 的 type 估算儲存量，另外有 diskGbPerShard（spec 4.8）
   numberParams: NodeNumberParam[]
   choiceParams: NodeChoiceParam[]
   // 能不能有上游／下游（spec 4.5），畫布上沒有對應的 handle
@@ -47,6 +48,11 @@ type NodeKind = {
 }
 
 const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
+// 儲存量估算（spec 4.8）；另外有沒有預設值的 diskGbPerShard
+const STORAGE_PARAMS: NodeNumberParam[] = ['bytesPerWrite', 'retentionDays']
+function storageDefaults(bytesPerWrite: number): NodeParams {
+  return { bytesPerWrite, retentionDays: 365 }
+}
 
 // 左側元件面板的順序
 export const NODE_TYPES: NodeType[] = [
@@ -140,8 +146,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     label: 'Database',
     icon: Database,
     idPrefix: 'db',
-    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
-    numberParams: [...CAPACITY_PARAMS, 'shards'],
+    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1, ...storageDefaults(1_000) },
+    numberParams: [...CAPACITY_PARAMS, 'shards', ...STORAGE_PARAMS],
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
@@ -172,8 +178,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     label: 'Object Storage',
     icon: Archive,
     idPrefix: 'storage',
-    defaults: { instances: 1, concurrency: 10000, serviceTimeMs: 20 },
-    numberParams: CAPACITY_PARAMS,
+    defaults: { instances: 1, concurrency: 10000, serviceTimeMs: 20, ...storageDefaults(1_000_000) },
+    numberParams: [...CAPACITY_PARAMS, ...STORAGE_PARAMS],
     choiceParams: [],
     hasInput: true,
     hasOutput: false,

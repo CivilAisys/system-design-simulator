@@ -173,6 +173,21 @@
             "type" : "number",
             "format" : "double",
             "description" : "CACHE, DATABASE：最熱的 shard 分到的流量比例，省略時平均分配（1/shards）"
+          },
+          "bytesPerWrite" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "DATABASE, OBJECT_STORAGE：每次 write 平均新增的資料量（bytes），只用來估算儲存量，省略時 DATABASE 為 1000、OBJECT_STORAGE 為 1000000"
+          },
+          "retentionDays" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "DATABASE, OBJECT_STORAGE：資料保留天數，只用來估算儲存量，省略時為 365"
+          },
+          "diskGbPerShard" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "DATABASE, OBJECT_STORAGE：每個 shard 的磁碟容量（GB），省略時不估算磁碟幾天後會滿"
           }
         }
       },
@@ -438,9 +453,57 @@
             }, {
               "type" : "null"
             } ]
+          },
+          "storage" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/StorageEstimate"
+            },
+            "description" : "Database、Object Storage 的儲存量估算（spec 4.8），以節點 id 為 key；驗證失敗時為 {}"
           }
         },
-        "required" : [ "edges", "errors", "nodes", "summary", "valid" ]
+        "required" : [ "edges", "errors", "nodes", "storage", "summary", "valid" ]
+      },
+      "StorageEstimate" : {
+        "type" : "object",
+        "description" : "一個儲存節點的儲存量估算，單位 bytes（spec 4.8）",
+        "properties" : {
+          "dailyBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "成功處理的 write × bytesPerWrite × 86400"
+          },
+          "totalBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "dailyBytes × retentionDays"
+          },
+          "replicas" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "連到這個 Database 的 Read Replica 數"
+          },
+          "totalWithReplicasBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "totalBytes × (1 + replicas)"
+          },
+          "perShardBytes" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "totalBytes ÷ shards（資料平均分布）"
+          },
+          "daysUntilFull" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard 或沒有寫入時為 null"
+          },
+          "fillsDisk" : {
+            "type" : "boolean",
+            "description" : "磁碟在保留期內就會滿（daysUntilFull < retentionDays）"
+          }
+        },
+        "required" : [ "dailyBytes", "daysUntilFull", "fillsDisk", "perShardBytes", "replicas", "totalBytes", "totalWithReplicasBytes" ]
       },
       "Summary" : {
         "type" : "object",

@@ -13,6 +13,9 @@ import java.util.Map;
 public final class SteadyStateSimulator implements Simulator {
 
     private static final double RATIO_TOLERANCE = 1e-9;
+    private static final double SECONDS_PER_DAY = 86_400;
+    // 磁碟容量用十進位的 GB
+    private static final double BYTES_PER_GB = 1e9;
 
     @Override
     public SimulationResult simulate(Topology topology) {
@@ -94,7 +97,8 @@ public final class SteadyStateSimulator implements Simulator {
 
         return new SimulationResult(true, List.of(), inNodeOrder(topology, nodeResults),
                 inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd, bandwidth,
-                        Math.min(cdnOffload, bandwidth.egressBytesPerSec())));
+                        Math.min(cdnOffload, bandwidth.egressBytesPerSec())),
+                estimateStorage(topology, graph, nodeResults));
     }
 
     private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
@@ -179,6 +183,40 @@ public final class SteadyStateSimulator implements Simulator {
         NodeResult result = outcome.result();
         nodeResults.put(replica.id(), lagging ? result.withWarning(NodeWarning.REPLICATION_LAG) : result);
         return outcome.processed();
+    }
+
+    /**
+     * 儲存量估算（spec 4.8）：每日增量 = 處理完的 write × bytesPerWrite × 86,400，總量 = 每日增量 × retentionDays，
+     * 含副本 = 總量 × (1 + Read Replica 數)，每 shard = 總量 ÷ shards（資料平均分布，熱點是流量不是資料）。
+     */
+    private static Map<String, StorageEstimate> estimateStorage(Topology topology, TopologyGraph graph,
+            Map<String, NodeResult> nodeResults) {
+        Map<String, Integer> replicas = new HashMap<>();
+        for (Node node : topology.nodes()) {
+            if (node instanceof ReadReplicaNode) {
+                replicas.merge(graph.primaryOf(node.id()).id(), 1, Integer::sum);
+            }
+        }
+        Map<String, StorageEstimate> estimates = new LinkedHashMap<>();
+        for (Node node : topology.nodes()) {
+            if (!(node instanceof StorageNode storage)) {
+                continue;
+            }
+            NodeResult result = nodeResults.get(node.id());
+            StorageSizing sizing = storage.sizing();
+            int shards = storage.shards().count();
+            double daily = processedWrites(result.arrivalRps(), result.throughputRps()) * sizing.bytesPerWrite()
+                    * SECONDS_PER_DAY;
+            double total = daily * sizing.retentionDays();
+            int replicaCount = replicas.getOrDefault(node.id(), 0);
+            Double daysUntilFull = sizing.diskGbPerShard() == null || daily <= 0
+                    ? null
+                    : sizing.diskGbPerShard() * BYTES_PER_GB / (daily / shards);
+            boolean fillsDisk = daysUntilFull != null && daysUntilFull < sizing.retentionDays();
+            estimates.put(node.id(), new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
+                    total / shards, daysUntilFull, fillsDisk));
+        }
+        return estimates;
     }
 
     /** 處理完的 write：丟棄依 read／write 比例發生（spec 4.2）。 */

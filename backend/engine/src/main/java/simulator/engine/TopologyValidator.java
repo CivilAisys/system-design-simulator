@@ -29,6 +29,9 @@ final class TopologyValidator {
     static final int MAX_SHARDS = 64;
     // 每個請求的回應或上傳大小（bytes），1 TB
     static final double MAX_BYTES = 1e12;
+    static final double MAX_RETENTION_DAYS = 100_000;
+    // 每個 shard 的磁碟容量（GB），1 EB
+    static final double MAX_DISK_GB = 1e9;
     // hotShardShare 的下限 1/N 容許浮點誤差，前端 params.ts 用同一個值
     static final double SHARE_TOLERANCE = 1e-12;
 
@@ -164,6 +167,7 @@ final class TopologyValidator {
             case StorageNode storage -> {
                 checkCapacityParams(storage.capacityParams(), where, report);
                 checkShards(storage.shards(), where, report);
+                checkSizing(storage.sizing(), where, report);
             }
             case ReadReplicaNode replica -> checkCapacityParams(replica.capacityParams(), where, report);
             case MessageQueueNode queue -> checkCapacityParams(queue.capacityParams(), where, report);
@@ -187,7 +191,16 @@ final class TopologyValidator {
     }
 
     /** instances × concurrency 的上限是對每個 shard 的限制，已經在 checkCapacityParams 檢查。 */
-    private static void checkShards(ShardLayout shards, String where, Consumer<String> report) {
+    private static void checkSizing(StorageSizing sizing, String where, Consumer<String> report) {
+        requireBetween(sizing.bytesPerWrite(), 0, MAX_BYTES, where, "bytesPerWrite", report);
+        requireBetween(sizing.retentionDays(), 0, MAX_RETENTION_DAYS, where, "retentionDays", report);
+        Double disk = sizing.diskGbPerShard();
+        if (disk != null && !(disk > 0 && disk <= MAX_DISK_GB)) {
+            report.accept(invalid(where, "diskGbPerShard", "> 0 且 ≤ " + bound(MAX_DISK_GB), disk));
+        }
+    }
+
+        private static void checkShards(ShardLayout shards, String where, Consumer<String> report) {
         if (shards.count() < 1 || shards.count() > MAX_SHARDS) {
             report.accept(invalid(where, "shards", "介於 1 和 " + MAX_SHARDS + " 之間", shards.count()));
             return;

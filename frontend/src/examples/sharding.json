@@ -13,7 +13,8 @@
       "state": "HEALTHY",
       "ui": { "x": 560, "y": 0 } },
     { "id": "db-1", "type": "DATABASE", "name": "Orders DB",
-      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10, "shards": 4, "hotShardShare": 0.4 },
+      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10, "shards": 4, "hotShardShare": 0.4,
+                  "bytesPerWrite": 2000, "retentionDays": 365, "diskGbPerShard": 2000 },
       "state": "HEALTHY",
       "ui": { "x": 840, "y": 0 } }
   ],
