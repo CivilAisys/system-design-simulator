@@ -2,6 +2,7 @@ package simulator.engine;
 
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -74,8 +75,9 @@ final class TopologyValidator {
             errors.add(new ValidationError("NO_CLIENT", "拓撲至少要有一個 Client", null, null));
         }
         Set<String> onCycles = graph.nodesOnCycles();
+        Set<String> receivingWrites = reachedByWrites();
         for (Node node : topology.nodes()) {
-            checkNode(node, onCycles.contains(node.id()));
+            checkNode(node, onCycles.contains(node.id()), receivingWrites.contains(node.id()));
         }
         var pairs = new HashSet<String>();
         for (Edge edge : topology.edges()) {
@@ -83,7 +85,35 @@ final class TopologyValidator {
         }
     }
 
-    private void checkNode(Node node, boolean onCycle) {
+    /**
+     * write 可能到達的節點，只看拓撲不看流量：從有 write 的 Client（readRatio < 1）出發，
+     * Service 的邊只有 requestClass 包含 write 時才往下走，Database／Object Storage 的出邊（複製）不算，
+     * 其他元件原樣往下傳。用走過的節點擋住環。
+     */
+    private Set<String> reachedByWrites() {
+        Set<String> reached = new HashSet<>();
+        var pending = new ArrayDeque<String>();
+        for (Node node : topology.nodes()) {
+            if (node instanceof ClientNode client && client.readRatio() < 1 && reached.add(node.id())) {
+                pending.add(node.id());
+            }
+        }
+        while (!pending.isEmpty()) {
+            Node source = graph.node(pending.poll());
+            if (source instanceof StorageNode) {
+                continue;
+            }
+            for (Edge edge : graph.outgoing(source.id())) {
+                boolean passes = !(source instanceof ServiceNode) || edge.requestClass().includes(false);
+                if (passes && reached.add(edge.target())) {
+                    pending.add(edge.target());
+                }
+            }
+        }
+        return reached;
+    }
+
+    private void checkNode(Node node, boolean onCycle, boolean receivesWrites) {
         checkParams(node);
         String name = name(node.id());
         int downstream = downstreams.getOrDefault(node.id(), 0);
@@ -130,6 +160,10 @@ final class TopologyValidator {
             }
             if (downstream > 0) {
                 nodeError(node, "REPLICA_HAS_OUTPUT", "Read Replica " + name + " 不能有下游連線");
+            }
+            if (receivesWrites) {
+                nodeError(node, "REPLICA_RECEIVES_WRITES", "Read Replica " + name
+                        + " 是唯讀的，只能從 primary 複製寫入，write 不能從其他連線送進來（Service 的連線請改成 READ）");
             }
         }
     }

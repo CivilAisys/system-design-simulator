@@ -123,7 +123,7 @@ class ReadReplicaTest {
     void duplicateOrUnknownReplicationEdgesAreReportedOnce() {
         SimulationResult duplicate = validate(List.of(client(), database("a"), replica("r")),
                 List.of(edge("e1", "c", "a"), edge("e2", "a", "r"), edge("e3", "a", "r")));
-        SimulationResult unknown = validate(List.of(client(), replica("r")),
+        SimulationResult unknown = validate(List.of(readOnlyClient(), replica("r")),
                 List.of(edge("e1", "c", "r"), edge("e2", "ghost", "r")));
 
         assertThat(duplicate.errors()).extracting(ValidationError::code).containsExactly("DUPLICATE_EDGE");
@@ -138,6 +138,11 @@ class ReadReplicaTest {
         return new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9);
     }
 
+    /** readRatio = 1：沒有 write，可以直接連到 replica。 */
+    private static ClientNode readOnlyClient() {
+        return new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 1);
+    }
+
     private static ReadReplicaNode replica(String id) {
         return new ReadReplicaNode(id, id, NodeHealth.HEALTHY, workers(10));
     }
@@ -150,9 +155,69 @@ class ReadReplicaTest {
         return new Edge(id, source, target, 1, 1, 1);
     }
 
+    private static Edge edge(String id, String source, String target, RequestClass requestClass) {
+        return new Edge(id, source, target, 1, 1, 1, requestClass);
+    }
+
+    private static ServiceNode service(String id) {
+        return new ServiceNode(id, id, NodeHealth.HEALTHY, workers(10), CallMode.SEQUENTIAL);
+    }
+
+    private static LoadBalancerNode loadBalancer(String id) {
+        return new LoadBalancerNode(id, id, NodeHealth.HEALTHY, workers(10));
+    }
+
+    /** Client → Service ─(requestClass)→ replica，replica 的 primary 是 db。 */
+    private SimulationResult serviceToReplica(RequestClass requestClass) {
+        return validate(List.of(client(), service("s"), database("db"), replica("r")),
+                List.of(edge("e1", "c", "s"), edge("e2", "s", "db", RequestClass.WRITE),
+                        edge("e3", "s", "r", requestClass), edge("e4", "db", "r")));
+    }
+
+    /** Client → Service ─(requestClass)→ LB → 兩個 replica，primary 都是 db。 */
+    private SimulationResult serviceToReplicasThroughLb(RequestClass requestClass) {
+        return validate(
+                List.of(client(), service("s"), database("db"), loadBalancer("lb"), replica("r1"), replica("r2")),
+                List.of(edge("e1", "c", "s"), edge("e2", "s", "db", RequestClass.WRITE),
+                        edge("e3", "s", "lb", requestClass), edge("e4", "lb", "r1"), edge("e5", "lb", "r2"),
+                        edge("e6", "db", "r1"), edge("e7", "db", "r2")));
+    }
+
+    private static List<String> receivesWrites(SimulationResult result) {
+        return result.errors().stream().filter(error -> error.code().equals("REPLICA_RECEIVES_WRITES"))
+                .map(ValidationError::nodeId).toList();
+    }
+
+    @Test
+    void writesCanOnlyReachAReplicaThroughReplication() {
+        assertThat(receivesWrites(serviceToReplica(RequestClass.ALL))).containsExactly("r");
+        assertThat(receivesWrites(serviceToReplica(RequestClass.WRITE))).containsExactly("r");
+        assertThat(serviceToReplica(RequestClass.READ).errors()).isEmpty();
+
+        // LB 原樣往下傳：上游 Service 的邊有 write 就報錯，只有 READ 就合法
+        assertThat(receivesWrites(serviceToReplicasThroughLb(RequestClass.ALL))).containsExactly("r1", "r2");
+        assertThat(serviceToReplicasThroughLb(RequestClass.READ).errors()).isEmpty();
+    }
+
+    @Test
+    void clientsSendWritesUnlessTheyOnlyRead() {
+        List<Edge> edges = List.of(edge("e1", "c", "db"), edge("e2", "c", "lb"), edge("e3", "lb", "r"),
+                edge("e4", "db", "r"));
+        SimulationResult mixed = validate(List.of(client(), database("db"), loadBalancer("lb"), replica("r")), edges);
+        SimulationResult readOnly = validate(
+                List.of(readOnlyClient(), database("db"), loadBalancer("lb"), replica("r")), edges);
+        SimulationResult direct = validate(List.of(client(), database("db"), replica("r")),
+                List.of(edge("e1", "c", "db"), edge("e2", "c", "r"), edge("e3", "db", "r")));
+
+        assertThat(mixed.errors()).extracting(ValidationError::code, ValidationError::nodeId)
+                .containsExactly(tuple("REPLICA_RECEIVES_WRITES", "r"));
+        assertThat(readOnly.errors()).isEmpty();
+        assertThat(receivesWrites(direct)).containsExactly("r");
+    }
+
     @Test
     void replicaNeedsExactlyOnePrimaryAndNoDownstream() {
-        SimulationResult none = validate(List.of(client(), replica("r")), List.of(edge("e1", "c", "r")));
+        SimulationResult none = validate(List.of(readOnlyClient(), replica("r")), List.of(edge("e1", "c", "r")));
         SimulationResult two = validate(List.of(client(), database("a"), database("b"), replica("r")),
                 List.of(edge("e1", "c", "a"), edge("e2", "c", "b"), edge("e3", "a", "r"), edge("e4", "b", "r")));
         SimulationResult output = validate(List.of(client(), database("a"), replica("r"), database("d")),
