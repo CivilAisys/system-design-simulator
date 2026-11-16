@@ -17,6 +17,7 @@ import simulator.engine.NodeWarning;
 import simulator.engine.ShardResult;
 import simulator.engine.SimulationResult;
 import simulator.engine.Status;
+import simulator.engine.StorageEstimate;
 import simulator.engine.Summary;
 import simulator.engine.UndefinedReason;
 import simulator.engine.ValidationError;
@@ -32,7 +33,9 @@ public record SimulationResponse(
         @Schema(requiredMode = REQUIRED) Map<String, NodeResultDto> nodes,
         @Schema(requiredMode = REQUIRED) Map<String, EdgeResultDto> edges,
         @Schema(requiredMode = REQUIRED, nullable = true, description = "驗證失敗時為 null")
-        SummaryDto summary) {
+        SummaryDto summary,
+        @Schema(requiredMode = REQUIRED, description = "Database、Object Storage 的儲存量估算（spec 4.8），以節點 id 為 key；驗證失敗時為 {}")
+        Map<String, StorageEstimateDto> storage) {
 
     static SimulationResponse from(SimulationResult result) {
         return new SimulationResponse(
@@ -40,7 +43,8 @@ public record SimulationResponse(
                 result.errors().stream().map(ValidationErrorDto::from).toList(),
                 mapValues(result.nodes(), NodeResultDto::from),
                 mapValues(result.edges(), EdgeResultDto::from),
-                result.summary() == null ? null : SummaryDto.from(result.summary()));
+                result.summary() == null ? null : SummaryDto.from(result.summary()),
+                mapValues(result.storage(), StorageEstimateDto::from));
     }
 
     private static <A, B> Map<String, B> mapValues(Map<String, A> source, Function<A, B> mapper) {
@@ -169,6 +173,28 @@ public record SimulationResponse(
 
         static BandwidthDto from(Bandwidth bandwidth) {
             return new BandwidthDto(bandwidth.egressBytesPerSec(), bandwidth.ingressBytesPerSec());
+        }
+    }
+
+    @Schema(name = "StorageEstimate", description = "一個儲存節點的儲存量估算，單位 bytes（spec 4.8）")
+    public record StorageEstimateDto(
+            @Schema(requiredMode = REQUIRED, description = "成功處理的 write × bytesPerWrite × 86400") double dailyBytes,
+            @Schema(requiredMode = REQUIRED, description = "dailyBytes × retentionDays") double totalBytes,
+            @Schema(requiredMode = REQUIRED, description = "連到這個 Database 的 Read Replica 數") int replicas,
+            @Schema(requiredMode = REQUIRED, description = "totalBytes × (1 + replicas)") double totalWithReplicasBytes,
+            @Schema(requiredMode = REQUIRED, description = "totalBytes ÷ shards（資料平均分布）") double perShardBytes,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard、沒有寫入或寫入量小到天數超出範圍時為 null")
+            Double daysUntilFull,
+            @Schema(requiredMode = REQUIRED, description = "磁碟在保留期內就會滿（daysUntilFull < retentionDays）")
+            boolean fillsDisk,
+            @Schema(requiredMode = REQUIRED, description = "計算時用的 retentionDays") double retentionDays,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "計算時用的 diskGbPerShard，沒有設定時為 null")
+            Double diskGbPerShard) {
+
+        static StorageEstimateDto from(StorageEstimate estimate) {
+            return new StorageEstimateDto(estimate.dailyBytes(), estimate.totalBytes(), estimate.replicas(),
+                    estimate.totalWithReplicasBytes(), estimate.perShardBytes(), estimate.daysUntilFull(),
+                    estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerShard());
         }
     }
 

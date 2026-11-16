@@ -17,7 +17,7 @@
       "state": "HEALTHY",
       "ui": { "x": 840, "y": 0 } },
     { "id": "storage-1", "type": "OBJECT_STORAGE", "name": "Media Storage",
-      "params": { "instances": 1, "concurrency": 10000, "serviceTimeMs": 20 },
+      "params": { "instances": 1, "concurrency": 10000, "serviceTimeMs": 20, "bytesPerWrite": 2000000, "retentionDays": 3650 },
       "state": "HEALTHY",
       "ui": { "x": 840, "y": 220 } }
   ],

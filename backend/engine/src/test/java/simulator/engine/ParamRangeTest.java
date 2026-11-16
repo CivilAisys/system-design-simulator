@@ -158,6 +158,21 @@ class ParamRangeTest {
                 List.of(new Edge("e1", "c", "db", 1, 1, 1))));
     }
 
+    static Stream<StorageSizing> invalidSizings() {
+        return Stream.of(new StorageSizing(-1, 30, null), new StorageSizing(1.1e12, 30, null),
+                new StorageSizing(Double.NaN, 30, null), new StorageSizing(1000, -1, null),
+                new StorageSizing(1000, 100_001, null), new StorageSizing(1000, 30, 0.0),
+                new StorageSizing(1000, 30, 1.1e9), new StorageSizing(1000, 30, Double.NaN));
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidSizings")
+    void invalidStorageSizingIsRejected(StorageSizing sizing) {
+        var storage = new ObjectStorageNode("s3", "S3", NodeHealth.HEALTHY, CAPACITY, sizing);
+        assertInvalidParam(simulator.simulate(new Topology(List.of(client(100, 0.9), storage),
+                List.of(new Edge("e1", "c", "s3", 1, 1, 1)))), "s3", null, "「S3」");
+    }
+
     @ParameterizedTest
     @ValueSource(doubles = {0, 1.1e12, Double.NaN})
     void invalidExternalApiQuotaIsRejected(double quotaRps) {
@@ -241,7 +256,8 @@ class ParamRangeTest {
                 new LoadBalancerNode("lb", "LB", NodeHealth.HEALTHY, maxed),
                 new ServiceNode("s", "API", NodeHealth.HEALTHY, maxed, CallMode.PARALLEL),
                 new CacheNode("cache", "Redis", NodeHealth.HEALTHY, maxed, 0),
-                new DatabaseNode("db", "DB", NodeHealth.HEALTHY, new CapacityParams(1, 1, 1e7)));
+                new DatabaseNode("db", "DB", NodeHealth.HEALTHY, new CapacityParams(1, 1, 1e7),
+                        new ShardLayout(1, null), new StorageSizing(1e12, 100_000, 1e-9)));
         List<Edge> edges = List.of(
                 new Edge("e1", "c1", "lb", 1e6, 1, 1e7), new Edge("e2", "c2", "lb", 1e6, 1, 1e7),
                 new Edge("e3", "lb", "s", 1e6, 1, 1e7), new Edge("e4", "s", "cache", 1, 10_000, 1e7),

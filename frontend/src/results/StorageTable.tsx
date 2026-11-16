@@ -1,0 +1,105 @@
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
+import type { ComputedResult, Topology } from '@/api/client'
+import { DASH, formatBytes, formatDays } from '@/canvas/format'
+
+type StorageTableProps = {
+  topology: Topology
+  result: ComputedResult
+}
+
+// 容量估算（spec 4.8）：每個 Database、Object Storage 一列。磁碟會滿是另一種瓶頸，和 ρ 的瓶頸分開標示
+export function StorageTable({ topology, result }: StorageTableProps) {
+  const rows = topology.nodes.filter((node) => result.storage[node.id])
+  if (rows.length === 0) {
+    return <p className="p-4 text-sm text-muted-foreground">拓撲裡沒有 Database 或 Object Storage</p>
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>節點</TableHead>
+          <TableHead className="text-right" title="成功處理的 write × bytesPerWrite × 86,400">
+            每日增量
+          </TableHead>
+          <TableHead className="text-right" title="每日增量 × retentionDays">
+            總量
+          </TableHead>
+          <TableHead className="text-right" title="總量 × (1 + Read Replica 數)">
+            含副本
+          </TableHead>
+          <TableHead className="text-right" title="總量 ÷ shards，資料平均分布（熱點指的是流量）">
+            每 shard
+          </TableHead>
+          <TableHead className="text-right" title="diskGbPerShard ÷ 每 shard 每日增量；沒有設定磁碟容量時不估算">
+            磁碟滿
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((node) => {
+          const estimate = result.storage[node.id]
+          // 過載時被丟棄的 write 不算進儲存量
+          const overloaded = result.nodes[node.id]?.status === 'OVERLOADED'
+          return (
+            <TableRow key={node.id}>
+              <TableCell className="font-medium">
+                {node.name}
+                {overloaded && (
+                  <span
+                    className="ml-2 text-xs text-destructive"
+                    title="只算成功處理的 write，被丟棄的不算，數字偏低"
+                  >
+                    過載，偏低
+                  </span>
+                )}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">{formatBytes(estimate.dailyBytes)}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {formatBytes(estimate.totalBytes)}
+                <div className="text-xs text-muted-foreground">保留 {estimate.retentionDays.toLocaleString()} 天</div>
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {formatBytes(estimate.totalWithReplicasBytes)}
+                {estimate.replicas > 0 && (
+                  <div className="text-xs text-muted-foreground">{estimate.replicas} 個 replica</div>
+                )}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">{formatBytes(estimate.perShardBytes)}</TableCell>
+              <TableCell className={cn('text-right tabular-nums', estimate.fillsDisk && 'text-destructive')}>
+                <DiskCell
+                  daysUntilFull={estimate.daysUntilFull}
+                  diskGb={estimate.diskGbPerShard}
+                  fillsDisk={estimate.fillsDisk}
+                />
+              </TableCell>
+            </TableRow>
+          )
+        })}
+      </TableBody>
+    </Table>
+  )
+}
+
+function DiskCell({
+  daysUntilFull,
+  diskGb,
+  fillsDisk,
+}: {
+  daysUntilFull: number | null
+  diskGb: number | null
+  fillsDisk: boolean
+}) {
+  if (diskGb == null) return DASH
+  // 有磁碟容量但沒有寫入：資料不會增加
+  if (daysUntilFull == null) return '不會滿'
+  return (
+    <>
+      約 {formatDays(daysUntilFull)}
+      <div className={cn('text-xs', !fillsDisk && 'text-muted-foreground')}>
+        {fillsDisk ? '保留期內就會滿' : '保留期內不會滿'}・{formatBytes(diskGb * 1e9)}
+      </div>
+    </>
+  )
+}

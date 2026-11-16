@@ -58,6 +58,9 @@ export function PropertiesPanel({ nodes, edges, nodeResults, onUpdateNode, onUpd
   )
 }
 
+// 按「設定磁碟容量」時先填的值
+const NEW_DISK_GB = 1000
+
 type NodePropertiesProps = {
   node: SimFlowNode
   result: NodeResult | undefined
@@ -113,6 +116,38 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           </div>
         </div>
       )}
+      {/* 磁碟容量選填：沒設定時不估算磁碟幾天後會滿（spec 4.8） */}
+      {numberParams.includes('retentionDays') &&
+        (node.params.diskGbPerShard === undefined ? (
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto justify-start p-0 text-xs"
+            onClick={() => onUpdate(node.id, { params: { diskGbPerShard: NEW_DISK_GB } })}
+          >
+            設定磁碟容量，估算幾天後會滿
+          </Button>
+        ) : (
+          <div className="grid gap-1">
+            <NumberField
+              spec={NODE_PARAM_SPECS.diskGbPerShard}
+              value={node.params.diskGbPerShard}
+              check={(value) => checkNodeParam(node.params, 'diskGbPerShard', value)}
+              onChange={(value) => onUpdate(node.id, { params: { diskGbPerShard: value } })}
+            />
+            <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+              <span>每個 shard 的磁碟容量</span>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto shrink-0 p-0 text-xs"
+                onClick={() => onUpdate(node.id, { clearParams: ['diskGbPerShard'] })}
+              >
+                不估算
+              </Button>
+            </div>
+          </div>
+        ))}
       {choiceParams.map((param) => (
         <ChoiceField
           key={param}

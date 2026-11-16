@@ -15,6 +15,9 @@ export type NodeNumberParam =
   | 'quotaRps'
   | 'shards'
   | 'hotShardShare'
+  | 'bytesPerWrite'
+  | 'retentionDays'
+  | 'diskGbPerShard'
 export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
 export type EdgeChoiceParam = 'requestClass'
@@ -50,7 +53,7 @@ function upperLimitSpec(label: string): NumberSpec {
   return { label, unit: 'rps', min: 0, minExclusive: true, max: 1e12, slider: { min: 1, max: 1_000_000, scale: 'log' } }
 }
 
-// Client 的回應、上傳大小，只用來估算頻寬（spec 4.7），舊檔沒有這個欄位；上限 1 TB
+// Client 的回應、上傳大小（頻寬，spec 4.7）和儲存節點每次 write 的大小（儲存量，spec 4.8），舊檔沒有這些欄位；上限 1 TB
 function bytesSpec(label: string): NumberSpec {
   return {
     label,
@@ -117,6 +120,26 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
     min: 0,
     max: 1,
     slider: { min: 0, max: 1, scale: 'linear', step: 0.01 },
+  },
+  // Database、Object Storage 的儲存量估算（spec 4.8），舊檔沒有這些欄位
+  bytesPerWrite: bytesSpec('bytesPerWrite'),
+  retentionDays: {
+    label: 'retentionDays',
+    unit: '天',
+    optional: true,
+    min: 0,
+    max: 100_000,
+    slider: { min: 1, max: 36_500, scale: 'log' },
+  },
+  // 省略時不估算磁碟幾天後會滿，所以不在 NODE_KINDS 的 defaults 裡，在 PropertiesPanel 另外顯示
+  diskGbPerShard: {
+    label: 'diskGbPerShard',
+    unit: 'GB',
+    optional: true,
+    min: 0,
+    minExclusive: true,
+    max: 1e9,
+    slider: { min: 1, max: 1_000_000, scale: 'log' },
   },
 }
 

@@ -51,7 +51,8 @@ class SimulateEndpointTest {
         byte[] example = readExample("basic-web-app.json");
         JsonNode body = simulate(example);
 
-        assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "nodes", "edges", "summary");
+        assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "nodes", "edges", "summary",
+                "storage");
         assertThat(body.get("valid").asBoolean()).isTrue();
         assertThat(body.get("errors")).isEmpty();
 
@@ -220,6 +221,11 @@ class SimulateEndpointTest {
         JsonNode even = simulate(mapper.writeValueAsBytes(example));
         assertThat(even.at("/nodes/db-1/utilization").asDouble()).isCloseTo(0.7, within(1e-9));
         assertThat(even.at("/summary/dropRate").asDouble()).isZero();
+        // 儲存量：write 2,800/s × 2 KB × 86,400 = 483.84 GB/天，每 shard 120.96 GB/天，2 TB 的磁碟約 16.5 天就滿
+        assertThat(even.at("/storage/db-1/dailyBytes").asDouble()).isCloseTo(2_800 * 2_000 * 86_400.0, within(1e-3));
+        assertThat(even.at("/storage/db-1/daysUntilFull").asDouble())
+                .isCloseTo(2_000e9 / (2_800 * 2_000 * 86_400.0 / 4), within(1e-9));
+        assertThat(even.at("/storage/db-1/fillsDisk").asBoolean()).isTrue();
     }
 
     // 「Redis Cluster 熱點 key」範例要示範的情境：一個 shard 過載，其他 shard 還很閒
@@ -440,6 +446,39 @@ class SimulateEndpointTest {
     }
 
     @Test
+    void omittedStorageSizingUsesDefaults() throws Exception {
+        // straight-topology.json 的 Database 沒有 bytesPerWrite、retentionDays、diskGbPerShard：1000 bytes、365 天、不估磁碟
+        JsonNode body = mapper.readTree(postTopology(straightTopology())
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        JsonNode storage = body.at("/storage/db-1");
+        assertThat(fieldNames(body.get("storage"))).containsExactly("db-1");
+        assertThat(fieldNames(storage)).containsExactlyInAnyOrder("dailyBytes", "totalBytes", "replicas",
+                "totalWithReplicasBytes", "perShardBytes", "daysUntilFull", "fillsDisk", "retentionDays", "diskGbPerShard");
+        assertThat(storage.get("dailyBytes").asDouble()).isCloseTo(100 * 1_000 * 86_400.0, within(1e-3));
+        assertThat(storage.get("totalBytes").asDouble()).isCloseTo(100 * 1_000 * 86_400.0 * 365, within(1.0));
+        assertThat(storage.get("daysUntilFull").isNull()).isTrue();
+    }
+
+    @Test
+    void storageSizingParamsAreRead() throws Exception {
+        ObjectNode topology = straightTopology();
+        set(topology, "/nodes/2/params/bytesPerWrite", mapper.getNodeFactory().numberNode(500));
+        set(topology, "/nodes/2/params/retentionDays", mapper.getNodeFactory().numberNode(10));
+        set(topology, "/nodes/2/params/diskGbPerShard", mapper.getNodeFactory().numberNode(1));
+
+        JsonNode storage = mapper.readTree(postTopology(topology)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).at("/storage/db-1");
+
+        // 100 write/s × 500 bytes × 86,400 = 4.32 GB/天，1 GB 的磁碟不到一天就滿
+        assertThat(storage.get("totalBytes").asDouble()).isCloseTo(100 * 500 * 86_400.0 * 10, within(1e-3));
+        assertThat(storage.get("daysUntilFull").asDouble()).isCloseTo(1e9 / (100 * 500 * 86_400.0), within(1e-9));
+        assertThat(storage.get("fillsDisk").asBoolean()).isTrue();
+    }
+
+    @Test
     void omittedShardsMeanNoSharding() throws Exception {
         // straight-topology.json 的 Database 沒有 shards、hotShardShare：等於 1 個 shard，回應沒有 shards 陣列
         JsonNode body = mapper.readTree(postTopology(straightTopology())
@@ -555,6 +594,7 @@ class SimulateEndpointTest {
         assertThat(body.get("nodes")).isEmpty();
         assertThat(body.get("edges")).isEmpty();
         assertThat(body.get("summary").isNull()).isTrue();
+        assertThat(body.get("storage")).isEmpty();
     }
 
     @Test

@@ -23,7 +23,13 @@ public record NodeParamsDto(
         // 不標 defaultValue：產生的前端型別會把有預設值的欄位當成必填，每種 type 的 params 都得帶上它（spec 3.6）
         @Schema(description = "CACHE, DATABASE：shard 數，省略時為 1（不分片）") Integer shards,
         @Schema(description = "CACHE, DATABASE：最熱的 shard 分到的流量比例，省略時平均分配（1/shards）")
-        Double hotShardShare) {
+        Double hotShardShare,
+        @Schema(description = "DATABASE, OBJECT_STORAGE：每次 write 平均新增的資料量（bytes），只用來估算儲存量，省略時 DATABASE 為 1000、OBJECT_STORAGE 為 1000000")
+        Double bytesPerWrite,
+        @Schema(description = "DATABASE, OBJECT_STORAGE：資料保留天數，只用來估算儲存量，省略時為 365")
+        Double retentionDays,
+        @Schema(description = "DATABASE, OBJECT_STORAGE：每個 shard 的磁碟容量（GB），省略時不估算磁碟幾天後會滿")
+        Double diskGbPerShard) {
 
     // 有 M/M/c 處理能力參數的 type
     static final String CAPACITY_TYPES =

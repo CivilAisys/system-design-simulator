@@ -278,8 +278,12 @@ class SteadyStateSimulatorTest {
         // λ = 1000：concurrency 5 時過載（成功率 < 1），20 時沒有過載（端到端延遲是數字）
         var params = new CapacityParams(1, concurrency, 10);
 
-        SimulationResult objectStorage = runInto(new ObjectStorageNode("storage", "S3", NodeHealth.HEALTHY, params));
-        SimulationResult database = runInto(new DatabaseNode("storage", "DB", NodeHealth.HEALTHY, params));
+        // 儲存量估算的預設值不同（spec 4.8），比較時用同一組
+        var sizing = new StorageSizing(1_000, 30, 100.0);
+        SimulationResult objectStorage = runInto(new ObjectStorageNode("storage", "S3", NodeHealth.HEALTHY, params,
+                sizing));
+        SimulationResult database = runInto(new DatabaseNode("storage", "DB", NodeHealth.HEALTHY, params,
+                ShardLayout.SINGLE, sizing));
 
         assertThat(objectStorage.valid()).isTrue();
         assertThat(objectStorage).isEqualTo(database);

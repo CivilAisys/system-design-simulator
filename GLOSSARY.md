@@ -124,6 +124,13 @@ _Avoid_: throughput（那是請求數）
 **Origin offload（CDN 擋掉的 origin 頻寬）**:
 出口頻寬裡由 CDN 命中直接送出、不必從後端（origin）送出的部分。
 
+**Storage estimate（儲存量估算）**:
+Database、Object Storage 依成功處理的 write、每次 write 新增的資料量和保留天數，推算的每日增量、總量、含副本總量和每個 shard 的用量。
+
+**Disk full（磁碟會滿）**:
+保留期內每個 shard 的資料會超過磁碟容量。和 ρ 的瓶頸是不同的指標，分開顯示。
+_Avoid_: bottleneck（那是 ρ 最高的節點）
+
 ### 負載與延遲
 
 **Worker**:

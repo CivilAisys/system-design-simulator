@@ -7,6 +7,8 @@ package simulator.engine;
 public sealed interface StorageNode extends Node permits DatabaseNode, ObjectStorageNode {
     CapacityParams capacityParams();
 
+    StorageSizing sizing();
+
     /** 只有 Database 能分片，Object Storage 的容量由供應商負責，沒有分片。 */
     default ShardLayout shards() {
         return ShardLayout.SINGLE;
