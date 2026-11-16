@@ -12,5 +12,6 @@ public record NodeParamsDto(
         @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE") Integer concurrency,
         @Schema(description = "LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE") Double serviceTimeMs,
         @Schema(description = "SERVICE") CallMode callMode,
-        @Schema(description = "CACHE, CDN") Double hitRatio) {
+        @Schema(description = "CACHE, CDN") Double hitRatio,
+        @Schema(description = "RATE_LIMITER") Double limitRps) {
 }

@@ -1,7 +1,14 @@
 import type { Edge } from '@/api/client'
 import type { NodeParams } from './catalog'
 
-export type NodeNumberParam = 'rps' | 'readRatio' | 'instances' | 'concurrency' | 'serviceTimeMs' | 'hitRatio'
+export type NodeNumberParam =
+  | 'rps'
+  | 'readRatio'
+  | 'instances'
+  | 'concurrency'
+  | 'serviceTimeMs'
+  | 'hitRatio'
+  | 'limitRps'
 export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
 
@@ -56,6 +63,15 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
     slider: { min: 0.01, max: 10_000, scale: 'log' },
   },
   hitRatio: { label: 'hitRatio', min: 0, max: 1, slider: { min: 0, max: 1, scale: 'linear', step: 0.01 } },
+  // 0 等於全部拒絕，要停用就刪掉節點（spec 4.5），所以要 > 0；上限同 rps
+  limitRps: {
+    label: 'limitRps',
+    unit: 'rps',
+    min: 0,
+    minExclusive: true,
+    max: 1e12,
+    slider: { min: 1, max: 1_000_000, scale: 'log' },
+  },
 }
 
 export const EDGE_PARAM_SPECS: Record<EdgeNumberParam, NumberSpec> = {

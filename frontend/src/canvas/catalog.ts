@@ -1,4 +1,4 @@
-import { Archive, Database, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
+import { Archive, Database, Gauge, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
 import type { EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
@@ -30,7 +30,16 @@ type NodeKind = {
 const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
 
 // 左側元件面板的順序
-export const NODE_TYPES: NodeType[] = ['CLIENT', 'LOAD_BALANCER', 'SERVICE', 'CACHE', 'CDN', 'DATABASE', 'OBJECT_STORAGE']
+export const NODE_TYPES: NodeType[] = [
+  'CLIENT',
+  'LOAD_BALANCER',
+  'SERVICE',
+  'CACHE',
+  'CDN',
+  'DATABASE',
+  'OBJECT_STORAGE',
+  'RATE_LIMITER',
+]
 
 export const NODE_KINDS: Record<NodeType, NodeKind> = {
   CLIENT: {
@@ -117,6 +126,19 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     choiceParams: [],
     hasInput: true,
     hasOutput: false,
+    edgeParams: ['latencyMs'],
+    outputEdgeKind: 'SYNC',
+  },
+  // 沒有 M/M/c：只有全域上限 limitRps，超過的部分拒絕（spec 3.3）
+  RATE_LIMITER: {
+    label: 'Rate Limiter',
+    icon: Gauge,
+    idPrefix: 'limiter',
+    defaults: { limitRps: 1000 },
+    numberParams: ['limitRps'],
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: true,
     edgeParams: ['latencyMs'],
     outputEdgeKind: 'SYNC',
   },

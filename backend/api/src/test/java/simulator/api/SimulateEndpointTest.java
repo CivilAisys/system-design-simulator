@@ -33,7 +33,7 @@ import org.springframework.test.web.servlet.ResultActions;
 @AutoConfigureMockMvc
 class SimulateEndpointTest {
 
-    private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps",
+    private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps", "rejectedRps",
             "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status");
     private static final List<String> SERVER_FIELDS = List.of("capacityRps", "utilization", "avgQueueMs",
             "avgLatencyMs", "status");
@@ -96,8 +96,8 @@ class SimulateEndpointTest {
         assertRates(edges.at("/e4/rps"), 180, 100);
 
         JsonNode summary = body.get("summary");
-        assertThat(fieldNames(summary)).containsExactlyInAnyOrder("offeredRps", "successRps", "dropRate",
-                "avgEndToEndMs", "bottleneckNodeId");
+        assertThat(fieldNames(summary)).containsExactlyInAnyOrder("offeredRps", "successRps", "rejectedRps",
+                "dropRate", "avgEndToEndMs", "bottleneckNodeId");
         assertThat(summary.get("offeredRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("successRps").asDouble()).isEqualTo(1000);
         assertThat(summary.get("dropRate").asDouble()).isZero();
@@ -164,6 +164,24 @@ class SimulateEndpointTest {
         JsonNode unshielded = simulate(mapper.writeValueAsBytes(example));
         assertRates(unshielded.at("/nodes/svc-1/arrivalRps"), 19000, 1000);
         assertThat(unshielded.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
+    }
+
+    // 「Rate Limiter」範例要示範的情境：限流讓原本會過載的 API 回到穩態，拒絕的部分算進丟棄率
+    @Test
+    void rateLimiterExampleProtectsBackend() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("rate-limiter.json"));
+        JsonNode limited = simulate(mapper.writeValueAsBytes(example));
+        assertThat(limited.at("/nodes/limiter-1/status").asText()).isEqualTo("LIMITING");
+        assertThat(limited.at("/nodes/limiter-1/rejectedRps").asDouble()).isCloseTo(6000, within(1e-6));
+        assertThat(limited.at("/nodes/svc-1/status").asText()).isEqualTo("WARN");
+        assertThat(limited.at("/summary/rejectedRps").asDouble()).isCloseTo(6000, within(1e-6));
+        assertThat(limited.at("/summary/dropRate").asDouble()).isCloseTo(0.5, within(1e-9));
+        assertThat(limited.at("/summary/bottleneckNodeId").asText()).isEqualTo("svc-1");
+
+        set(example, "/nodes/1/params/limitRps", mapper.getNodeFactory().numberNode(1e12));
+        JsonNode unlimited = simulate(mapper.writeValueAsBytes(example));
+        assertThat(unlimited.at("/nodes/limiter-1/status").asText()).isEqualTo("NOT_LIMITING");
+        assertThat(unlimited.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
     }
 
     static Stream<String> exampleFiles() throws Exception {
@@ -268,7 +286,7 @@ class SimulateEndpointTest {
                 // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
                 Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
-                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE]"),
+                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE, OBJECT_STORAGE, RATE_LIMITER]"),
                 Arguments.of("/nodes/0/name", "123", "nodes[0].name, expected a string"),
                 Arguments.of("/nodes", "{}", "nodes, expected an array"));
     }

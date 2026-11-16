@@ -197,6 +197,18 @@ class TopologyValidationTest {
     }
 
     @Test
+    void rateLimiterWithoutExactlyOneDownstreamIsRejected() {
+        var limiter = new RateLimiterNode("rl", "Limiter", NodeHealth.HEALTHY, 1000);
+        SimulationResult none = run(List.of(client("c"), limiter), List.of(edge("e1", "c", "rl")));
+        SimulationResult two = run(List.of(client("c"), limiter, database("a"), database("b")),
+                List.of(edge("e1", "c", "rl"), edge("e2", "rl", "a"), edge("e3", "rl", "b")));
+
+        assertErrors(none, tuple("RATE_LIMITER_DOWNSTREAM_COUNT", "rl", null));
+        assertErrors(two, tuple("RATE_LIMITER_DOWNSTREAM_COUNT", "rl", null));
+        assertThat(two.errors().getFirst().message()).contains("2");
+    }
+
+    @Test
     void clientWithoutDownstreamIsRejected() {
         assertErrors(run(List.of(client("c")), List.of()), tuple("NO_DOWNSTREAM", "c", null));
     }

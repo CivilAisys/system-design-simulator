@@ -82,6 +82,10 @@ final class TopologyValidator {
             nodeError(node, "CACHE_DOWNSTREAM_COUNT", (node instanceof CdnNode ? "CDN " : "Cache ") + name
                     + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
         }
+        if (node instanceof RateLimiterNode && downstream != 1) {
+            nodeError(node, "RATE_LIMITER_DOWNSTREAM_COUNT",
+                    "Rate Limiter " + name + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
+        }
         // Object Storage 沿用 Database 的錯誤碼，訊息用它自己的 type 名稱
         if (node instanceof StorageNode && downstream > 0) {
             nodeError(node, "DATABASE_HAS_OUTPUT",
@@ -117,6 +121,12 @@ final class TopologyValidator {
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
             }
             case StorageNode storage -> checkCapacityParams(storage.capacityParams(), where, report);
+            case RateLimiterNode limiter -> {
+                // 0 等於全部拒絕，要停用就刪掉節點
+                if (!(limiter.limitRps() > 0 && limiter.limitRps() <= MAX_RPS)) {
+                    report.accept(invalid(where, "limitRps", "> 0 且 ≤ " + bound(MAX_RPS), limiter.limitRps()));
+                }
+            }
         }
     }
 

@@ -42,6 +42,7 @@ public final class SteadyStateSimulator implements Simulator {
                 case ServiceNode service -> process(service.capacityParams(), arrival, node.id(), nodeResults);
                 case CachingNode cache -> process(cache.capacityParams(), arrival, node.id(), nodeResults);
                 case StorageNode storage -> process(storage.capacityParams(), arrival, node.id(), nodeResults);
+                case RateLimiterNode limiter -> limit(limiter, arrival, nodeResults);
             };
 
             for (Edge edge : graph.outgoing(node.id())) {
@@ -68,10 +69,21 @@ public final class SteadyStateSimulator implements Simulator {
         return outcome.processed();
     }
 
+    /** 放行 min(λ, limitRps)，read／write 依比例放行，其餘拒絕（spec 4.2.1）。 */
+    private static ClassRates limit(RateLimiterNode limiter, ClassRates arrival, Map<String, NodeResult> nodeResults) {
+        double lambda = arrival.total();
+        boolean limiting = lambda > limiter.limitRps();
+        ClassRates passed = limiting ? arrival.times(limiter.limitRps() / lambda) : arrival;
+        nodeResults.put(limiter.id(), new NodeResult(arrival, passed.total(), 0, lambda - passed.total(), null, null,
+                null, null, 0.0, 0.0, limiting ? Status.LIMITING : Status.NOT_LIMITING));
+        return passed;
+    }
+
     private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults,
             EndToEndLatencies endToEnd) {
         double offered = 0;
         double succeeded = 0;
+        double rejected = 0;
         List<NodeResult> clients = new ArrayList<>();
         String bottleneck = null;
         double highest = Double.NEGATIVE_INFINITY;
@@ -82,6 +94,7 @@ public final class SteadyStateSimulator implements Simulator {
                 succeeded += result.successRps();
                 clients.add(result);
             }
+            rejected += nodeResults.get(node.id()).rejectedRps();
             Double utilization = nodeResults.get(node.id()).utilization();
             if (utilization != null && utilization > highest) {
                 highest = utilization;
@@ -90,7 +103,7 @@ public final class SteadyStateSimulator implements Simulator {
         }
         // 沒有流量時沒有東西被丟
         double dropRate = offered > 0 ? cleanRatio(1 - succeeded / offered) : 0;
-        return new Summary(offered, succeeded, dropRate, endToEnd.average(clients), bottleneck);
+        return new Summary(offered, succeeded, rejected, dropRate, endToEnd.average(clients), bottleneck);
     }
 
     /**

@@ -106,6 +106,7 @@ system-design-simulator/
 | **Cache** | 快取 | `hitRatio` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
 | **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
 | **Database** | 資料儲存（終點） | — | 無下游 | 1 × 100, 10ms（10,000 rps） |
+| **Rate Limiter** | 全域限流 | `limitRps` | 放行 `min(λ, limitRps)`，超過的部分是**拒絕量**，不往下送；必須剛好一個下游 | limitRps=1000 |
 | **Object Storage** | 存放圖片、影片等大型檔案（例如 S3），終點 | — | 無下游，同 Database | 1 × 10000, 20ms（≈500k rps） |
 
 > Cache 的 write 直接往下送，等於把 cache-aside 的「寫 DB、刪 cache」簡化成穿透。
@@ -113,6 +114,8 @@ system-design-simulator/
 > CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`，4.3、4.3.1 的「Cache」公式也適用於 CDN），只有預設值、圖示和名稱不同，讓架構圖和匯出的 JSON 看得出是 CDN。位置不限制，不一定要接在 Client 後面。
 >
 > Object Storage 的計算和驗證都和 Database 相同（engine 裡兩者都是 `StorageNode`），只有預設值、圖示和名稱不同。容量由供應商負責，所以不支援 sharding，也不能接 Read Replica。
+>
+> Rate Limiter 沒有 M/M/c（沒有 instances、concurrency、serviceTimeMs），`limitRps` 是所有上游加總的全域上限，不分 Client。計算見 4.2.1。
 
 ### 3.4 邊（Edge）
 
@@ -194,6 +197,13 @@ public interface Simulator {
   - 延遲記為 `null`（佇列會無限成長，穩態下沒有定義）
   - 狀態 = `OVERLOADED`
 
+### 4.2.1 Rate Limiter
+
+- 放行量 = `min(λ, limitRps)`，read／write 依比例放行；**拒絕量** = `λ − 放行量`，不往下送。
+- 拒絕量和過載造成的丟棄量是不同的指標（回應的 `rejectedRps`、`droppedRps`），但都算進失敗率：`pass(n) = 放行量 / λ`（4.3.1），`summary.rejectedRps` 是所有 Rate Limiter 拒絕量的總和。
+- 節點延遲 `W` 記為 0，`avgQueueMs` 也是 0。**簡化假設**：limiter 本身不會成為瓶頸。端到端延遲只算被放行的請求。
+- 沒有容量和 ρ（`capacityRps`、`utilization` 為 `null`），不列入瓶頸候選。狀態不套用 4.4 的 ρ 分級：`λ > limitRps` 時為 `LIMITING`（限流中），否則為 `NOT_LIMITING`（未觸發，`λ` 剛好等於上限也不拒絕）。觸發限流是設計上預期的行為，不算故障，所以不變色、不發光。
+
 **數值穩定性**：c 可能上百（例如 2 × 200 = 400），直接算 `a^c / c!` 會溢位。改用 Erlang B 遞迴再轉成 Erlang C：
 
 ```
@@ -215,6 +225,7 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 | Service（`PARALLEL`） | `W(n) + max_i [ callsPerRequest_i × (edge_i.latencyMs×2 + L(child_i)) ]`（各下游同時呼叫，取最慢的；同一個下游呼叫多次時仍依序） |
 | Cache（read） | `W(n) + (1 − hitRatio) × (edge.latencyMs×2 + L(child))` |
 | Cache（write） | `W(n) + edge.latencyMs×2 + L(child)` |
+| Rate Limiter | `W(n) + edge.latencyMs×2 + L(child)`，`W(n) = 0` |
 
 Client 本身沒有 W（記為 0）。
 
@@ -255,10 +266,11 @@ Service 有 fan-out 時，下游的 RPS 是「子呼叫」而不是「使用者�
 | Service（依序或平行都一樣） | `pass(n) × Π S(child_i)^callsPerRequest_i`（任何一個子呼叫失敗，整個請求就失敗） |
 | Cache（read） | `pass(n) × (hitRatio + (1 − hitRatio) × S(child))` |
 | Cache（write） | `pass(n) × S(child)` |
+| Rate Limiter | `pass(n) × S(child)`，`pass(n) = 放行量 / 到達量`（拒絕也算失敗） |
 
 Client 的 `pass` 記為 1。彙總：
 - `successRps = Σ_client Σ_class client 的該 class rps × S(client, class)`
-- `dropRate = 1 − successRps / offeredRps`，限制在 [0, 1]，浮點誤差造成的極小值（|x| < 1e-9）歸零；`offeredRps = 0` 時沒有東西被丟，記為 0
+- `dropRate = 1 − successRps / offeredRps`（丟棄和拒絕都算），限制在 [0, 1]，浮點誤差造成的極小值（|x| < 1e-9）歸零；`offeredRps = 0` 時沒有東西被丟，記為 0
 
 > **簡化假設**：各節點的丟棄彼此獨立。
 
@@ -271,7 +283,9 @@ Client 的 `pass` 記為 1。彙總：
 | 0.9 – 1.0 | `CRITICAL` | 橘 |
 | ≥ 1.0 | `OVERLOADED` | 紅 |
 
-**瓶頸** = ρ 最高的節點。Client 不處理請求，ρ 為 `null`，不列入瓶頸候選。
+Rate Limiter 的狀態不看 ρ，只有 `LIMITING`（限流中）和 `NOT_LIMITING`（未觸發），中性灰、不發光（4.2.1）。
+
+**瓶頸** = ρ 最高的節點。Client 和 Rate Limiter 的 ρ 為 `null`，不列入瓶頸候選。
 
 ### 4.5 驗證規則
 
@@ -282,6 +296,7 @@ Client 的 `pass` 記為 1。彙總：
 | Client 不能有上游 | `CLIENT_HAS_INPUT` |
 | Database、Object Storage 不能有下游（Object Storage 沿用同一個錯誤碼，訊息寫 Object Storage） | `DATABASE_HAS_OUTPUT` |
 | Cache、CDN 必須剛好一個下游（CDN 沿用同一個錯誤碼，訊息寫 CDN） | `CACHE_DOWNSTREAM_COUNT` |
+| Rate Limiter 必須剛好一個下游 | `RATE_LIMITER_DOWNSTREAM_COUNT` |
 | Client／LB 至少一個下游（Service 可以是終點，代表不依賴其他元件的服務） | `NO_DOWNSTREAM` |
 | 邊的 source / target 必須存在 | `UNKNOWN_NODE` |
 | 同一對 source → target 只能有一條邊 | `DUPLICATE_EDGE` |
@@ -291,15 +306,16 @@ Client 的 `pass` 記為 1。彙總：
 
 - `NO_CLIENT` 兩個都是 `null`（沒有可以指的節點）。
 - `CYCLE_DETECTED` 在環上的每個節點各一個錯誤；環下游、夾在兩個環中間的節點不算。
-- `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`NO_DOWNSTREAM` 附 `nodeId`。
+- `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`RATE_LIMITER_DOWNSTREAM_COUNT`、`NO_DOWNSTREAM` 附 `nodeId`。
 - `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則，但仍算在另一端的上下游數量裡（畫布上看得到這條邊，不重複報錯）。
-- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。
+- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。Rate Limiter 的 `limitRps` 也必須 > 0：0 等於全部拒絕，要停用就刪掉節點。
 
 參數的合法範圍。上限擋掉會讓 Run 太慢（worker 數決定 Erlang C 的計算量）或結果溢位成 `Infinity` 的極端數值；屬性面板的輸入框用同一組範圍，匯入超出範圍的檔案時不擋，Run 之後在錯誤分頁顯示。
 
 | 參數 | 合法範圍 |
 |---|---|
 | `rps` | 0 ～ 1,000,000,000,000（1e12） |
+| `limitRps` | > 0 且 ≤ 1e12 |
 | `readRatio`、`hitRatio` | 0 ～ 1 |
 | `instances`、`concurrency` | 各自 ≥ 1 的整數，且 `instances × concurrency` ≤ 1,000,000（看乘積，不是各自檢查） |
 | `serviceTimeMs` | 0.000001 ～ 10,000,000（1e-6 ～ 1e7） |
@@ -376,6 +392,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
       "arrivalRps": { "read": 900, "write": 100 },
       "throughputRps": 1000,
       "droppedRps": 0,
+      "rejectedRps": 0,
       "successRps": 1000,
       "endToEndMs": {
         "read":  { "ms": 52.0, "approximate": false, "overloadedNodeIds": [], "undefinedReason": null },
@@ -391,6 +408,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
       "arrivalRps": { "read": 900, "write": 100 },
       "throughputRps": 1000,
       "droppedRps": 0,
+      "rejectedRps": 0,
       "capacityRps": 8000,
       "utilization": 0.125,
       "avgQueueMs": 0.0,
@@ -404,6 +422,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
   "summary": {
     "offeredRps": 1000,
     "successRps": 1000,
+    "rejectedRps": 0,
     "dropRate": 0.0,
     "avgEndToEndMs": {
       "read":  { "ms": 52.0, "approximate": false, "overloadedNodeIds": [], "undefinedReason": null },
@@ -416,6 +435,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 
 驗證失敗時一樣回 200，`valid: false`，`errors` 為錯誤清單，不做任何計算：`nodes`、`edges` 為 `{}`，`summary` 為 `null`。拓撲有問題是使用者的編輯狀態，不是 HTTP 錯誤。
 
+**Rate Limiter 節點**：`throughputRps` 是放行量；`capacityRps`、`utilization` 為 `null`，`avgQueueMs`、`avgLatencyMs` 為 0，`status` 是 `LIMITING` 或 `NOT_LIMITING`（4.2.1）。
+
 **Client 節點**：`arrivalRps` 是它送出的流量；`successRps` 和 `endToEndMs` 只有 Client 才有，代表這個 Client 的請求有多少成功、平均要等多久。其餘描述伺服器的欄位（容量、使用率、排隊、延遲、狀態）都是 `null`；非 Client 節點的 `endToEndMs` 也是 `null`。
 
 **`null` 和 `0` 的語意不同**：
@@ -423,7 +444,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 - `0` 表示「這個量存在，數值剛好是零」，例如沒有流量的 Service `utilization: 0`、Client `droppedRps: 0`。
 - `null` 有兩種意思：**不適用**（Client 的 `utilization`、`status` 等）和**無定義**（過載時的延遲，見 4.2、4.3）。
 - 前端把 `null` 顯示為「—」，不能當成 0。「無定義」的情況要附上原因；`status: null` 的節點不變色、不發光。
-- 流量類欄位（`arrivalRps`、`throughputRps`、`droppedRps`）永遠是數字，不會是 `null`。`successRps` 只有 Client 有：Client 一律是數字，其他節點是 `null`（不適用，fan-out 後下游的子呼叫數不是使用者請求數）。
+- 流量類欄位（`arrivalRps`、`throughputRps`、`droppedRps`、`rejectedRps`）永遠是數字，不會是 `null`。`rejectedRps` 只有 Rate Limiter 會大於 0（4.2.1），`summary.rejectedRps` 是它們的總和。`successRps` 只有 Client 有：Client 一律是數字，其他節點是 `null`（不適用，fan-out 後下游的子呼叫數不是使用者請求數）。
 
 ---
 
@@ -441,9 +462,10 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 │ ▢ CDN    │                      │API  ρ=.8│(黃) │ serviceTime   │
 │ ▢ DB     │                      └─────────┘     │ ━━●━━━━ 50ms  │
 │ ▢ Object │          （React Flow 畫布）           │ ρ ████░ 0.80  │
+│ ▢ Limiter│                                     │               │
 ├──────────┴─────────────────────────────────────┴───────────────┤
 │ [指標表] [流量 Sankey] [錯誤 (0)]                                    │
-│ 節點    λ      容量    ρ     延遲    丟棄   狀態                        │
+│ 節點    λ     容量   ρ    延遲   丟棄   拒絕   狀態                   │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -458,7 +480,10 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 **互動規則**
 - 自訂 React Flow 節點：顯示名稱、類型圖示、ρ 和狀態色；Run 之後才會出現指標。
 - 邊上的 label 顯示 RPS，粗細依流量比例。
+- Rate Limiter 節點沒有 ρ，改顯示拒絕量和「限流中」／「未觸發」。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
+- 指標表「丟棄」和「拒絕」分兩欄；結果面板上方的 summary 在有拒絕時另外列出總拒絕量（丟棄率已經包含它）。
+- **流量 Sankey**：沒被送往下游的流量各自流進「丟棄」（紅）和「拒絕」（灰）兩個終點，分開顯示。
 - **流量粒子動畫**：Run 之後，邊上有小點沿方向流動，速度或密度依該邊 RPS 調整。
 - **節點發光**：節點外框依狀態（4.4）顯示綠、黃、橘、紅的光暈；`OVERLOADED` 時脈動。
 - **主題**：預設深色，工具列可切換淺色。

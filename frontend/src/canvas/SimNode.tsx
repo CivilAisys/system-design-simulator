@@ -2,8 +2,8 @@ import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
-import { formatUtilization } from './format'
-import { STATUS_GLOW, STATUS_TEXT } from './status'
+import { formatRps, formatUtilization } from './format'
+import { STATUS_GLOW, STATUS_LABEL, STATUS_TEXT } from './status'
 import { errorsTitle } from './validation'
 
 export type SimNodeData = {
@@ -52,8 +52,13 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       </div>
       {result && (
         <div className="mt-1 flex items-baseline justify-between gap-3 text-xs">
-          <span className="text-muted-foreground">ρ {formatUtilization(result.utilization)}</span>
-          {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{status}</span>}
+          {/* Rate Limiter 沒有 ρ，改顯示拒絕量 */}
+          <span className="text-muted-foreground">
+            {node.type === 'RATE_LIMITER'
+              ? `拒絕 ${formatRps(result.rejectedRps)}`
+              : `ρ ${formatUtilization(result.utilization)}`}
+          </span>
+          {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
         </div>
       )}
       {hasOutput && <Handle type="source" position={Position.Right} />}

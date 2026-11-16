@@ -45,6 +45,13 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
               <span className={cn(computed.summary.dropRate > 0 && 'text-destructive')}>
                 {formatPercent(computed.summary.dropRate)}
               </span>
+              {/* 有 Rate Limiter 擋下請求時才顯示，丟棄率已經包含它 */}
+              {computed.summary.rejectedRps > 0 && (
+                <>
+                  <span className="mx-2 text-muted-foreground">拒絕</span>
+                  {formatRps(computed.summary.rejectedRps)}
+                </>
+              )}
             </p>
             <p className="text-sm">
               <span className="mr-2 text-muted-foreground">平均端到端延遲</span>
