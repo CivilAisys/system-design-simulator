@@ -1,4 +1,4 @@
-import { Database, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
+import { Database, Globe, Network, Server, Users, Zap, type LucideIcon } from 'lucide-react'
 import type { Node, NodeType } from '@/api/client'
 import type { EdgeNumberParam, NodeChoiceParam, NodeNumberParam } from './params'
 
@@ -30,7 +30,7 @@ type NodeKind = {
 const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
 
 // 左側元件面板的順序
-export const NODE_TYPES: NodeType[] = ['CLIENT', 'LOAD_BALANCER', 'SERVICE', 'CACHE', 'DATABASE']
+export const NODE_TYPES: NodeType[] = ['CLIENT', 'LOAD_BALANCER', 'SERVICE', 'CACHE', 'CDN', 'DATABASE']
 
 export const NODE_KINDS: Record<NodeType, NodeKind> = {
   CLIENT: {
@@ -75,6 +75,19 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     icon: Zap,
     idPrefix: 'cache',
     defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8 },
+    numberParams: [...CAPACITY_PARAMS, 'hitRatio'],
+    choiceParams: [],
+    hasInput: true,
+    hasOutput: true,
+    edgeParams: ['latencyMs'],
+    outputEdgeKind: 'SYNC',
+  },
+  // 計算和 Cache 相同（spec 3.3），只有預設值、圖示和名稱不同
+  CDN: {
+    label: 'CDN',
+    icon: Globe,
+    idPrefix: 'cdn',
+    defaults: { instances: 10, concurrency: 1000, serviceTimeMs: 1, hitRatio: 0.95 },
     numberParams: [...CAPACITY_PARAMS, 'hitRatio'],
     choiceParams: [],
     hasInput: true,

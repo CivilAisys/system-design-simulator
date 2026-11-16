@@ -5,6 +5,7 @@ import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 import io.swagger.v3.oas.annotations.media.Schema;
 import simulator.engine.CacheNode;
 import simulator.engine.CapacityParams;
+import simulator.engine.CdnNode;
 import simulator.engine.ClientNode;
 import simulator.engine.DatabaseNode;
 import simulator.engine.LoadBalancerNode;
@@ -35,6 +36,7 @@ public record NodeDto(
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
             case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
+            case CDN -> new CdnNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
             case DATABASE -> new DatabaseNode(id, name, health, capacityParams());
         };
     }

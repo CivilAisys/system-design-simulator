@@ -13,7 +13,7 @@
 - 結果視覺化：節點變色、邊上 RPS、指標表、Sankey
 - 畫布效果：邊上的流量粒子動畫、節點依 ρ 發光、深色主題（可切換淺色），見第 6 節
 - 拓撲驗證與錯誤提示
-- JSON 匯入／匯出、內建範例（基本 Web App；0.2.0 加入讀寫分流、Fan-out、過載，各示範一個重點）
+- JSON 匯入／匯出、內建範例（基本 Web App；0.2.0 加入讀寫分流、Fan-out、過載，0.3.0 起每個新元件各加一個，各示範一個重點）
 
 ### 1.2 不做什麼（Non-goals）
 - ❌ 時間推進的動態模擬、p99 等百分位數（→ 階段二 DES）
@@ -104,9 +104,12 @@ system-design-simulator/
 | **Load Balancer** | 分流 | — | 依邊的 `weight` 分流（預設平均） | 1 × 1000, 1ms（≈1M rps） |
 | **Service** | 應用伺服器 | `callMode` | **Fan-out**：每個請求呼叫每個下游 `callsPerRequest` 次；`callMode` 決定依序（`SEQUENTIAL`）或平行（`PARALLEL`） | 2 × 200, 50ms（8,000 rps）, callMode=SEQUENTIAL |
 | **Cache** | 快取 | `hitRatio` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
+| **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
 | **Database** | 資料儲存（終點） | — | 無下游 | 1 × 100, 10ms（10,000 rps） |
 
 > Cache 的 write 直接往下送，等於把 cache-aside 的「寫 DB、刪 cache」簡化成穿透。
+>
+> CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`，4.3、4.3.1 的「Cache」公式也適用於 CDN），只有預設值、圖示和名稱不同，讓架構圖和匯出的 JSON 看得出是 CDN。位置不限制，不一定要接在 Client 後面。
 
 ### 3.4 邊（Edge）
 
@@ -274,7 +277,7 @@ Client 的 `pass` 記為 1。彙總：
 | 不能有環 | `CYCLE_DETECTED` |
 | Client 不能有上游 | `CLIENT_HAS_INPUT` |
 | Database 不能有下游 | `DATABASE_HAS_OUTPUT` |
-| Cache 必須剛好一個下游 | `CACHE_DOWNSTREAM_COUNT` |
+| Cache、CDN 必須剛好一個下游（CDN 沿用同一個錯誤碼，訊息寫 CDN） | `CACHE_DOWNSTREAM_COUNT` |
 | Client／LB 至少一個下游（Service 可以是終點，代表不依賴其他元件的服務） | `NO_DOWNSTREAM` |
 | 邊的 source / target 必須存在 | `UNKNOWN_NODE` |
 | 同一對 source → target 只能有一條邊 | `DUPLICATE_EDGE` |

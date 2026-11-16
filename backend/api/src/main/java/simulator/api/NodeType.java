@@ -5,5 +5,6 @@ public enum NodeType {
     LOAD_BALANCER,
     SERVICE,
     CACHE,
+    CDN,
     DATABASE
 }

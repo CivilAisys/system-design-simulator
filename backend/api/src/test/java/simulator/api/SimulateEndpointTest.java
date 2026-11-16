@@ -151,6 +151,21 @@ class SimulateEndpointTest {
         assertThat(parallel.get("ms").asDouble()).isLessThan(sequential);
     }
 
+    // 「CDN」範例要示範的情境：CDN 擋掉大部分 read，origin 負載低；hitRatio 降到 0 時 origin 過載
+    @Test
+    void cdnExampleShieldsOrigin() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("cdn.json"));
+        JsonNode shielded = simulate(mapper.writeValueAsBytes(example));
+        // read 19000 只有 5% miss 往下送，write 1000 全部穿透；Web API 容量 2 × 200 / 50ms = 8000
+        assertRates(shielded.at("/nodes/svc-1/arrivalRps"), 950, 1000);
+        assertThat(shielded.at("/nodes/svc-1/status").asText()).isEqualTo("OK");
+
+        set(example, "/nodes/1/params/hitRatio", mapper.getNodeFactory().numberNode(0));
+        JsonNode unshielded = simulate(mapper.writeValueAsBytes(example));
+        assertRates(unshielded.at("/nodes/svc-1/arrivalRps"), 19000, 1000);
+        assertThat(unshielded.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
+    }
+
     static Stream<String> exampleFiles() throws Exception {
         List<String> files;
         try (Stream<Path> listing = Files.list(examplesDir())) {
@@ -253,7 +268,7 @@ class SimulateEndpointTest {
                 // 超出 32 位元整數：Jackson 只給得出欄位，給不出預期的型別
                 Arguments.of("/nodes/1/params/instances", "3000000000", "nodes[1].params.instances"),
                 Arguments.of("/nodes/0/type", "1",
-                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, DATABASE]"),
+                        "nodes[0].type, expected one of [CLIENT, LOAD_BALANCER, SERVICE, CACHE, CDN, DATABASE]"),
                 Arguments.of("/nodes/0/name", "123", "nodes[0].name, expected a string"),
                 Arguments.of("/nodes", "{}", "nodes, expected an array"));
     }

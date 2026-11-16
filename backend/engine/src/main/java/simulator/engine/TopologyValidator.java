@@ -77,9 +77,10 @@ final class TopologyValidator {
         if (TopologyGraph.splitsByWeight(node) && downstream == 0) {
             nodeError(node, "NO_DOWNSTREAM", name + " 沒有下游，請求沒有地方送");
         }
-        if (node instanceof CacheNode && downstream != 1) {
-            nodeError(node, "CACHE_DOWNSTREAM_COUNT",
-                    "Cache " + name + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
+        // CDN 沿用 Cache 的錯誤碼，訊息用它自己的 type 名稱
+        if (node instanceof CachingNode && downstream != 1) {
+            nodeError(node, "CACHE_DOWNSTREAM_COUNT", (node instanceof CdnNode ? "CDN " : "Cache ") + name
+                    + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
         }
         if (node instanceof DatabaseNode && downstream > 0) {
             nodeError(node, "DATABASE_HAS_OUTPUT", "Database " + name + " 不能有下游連線");
@@ -109,7 +110,7 @@ final class TopologyValidator {
             }
             case LoadBalancerNode lb -> checkCapacityParams(lb.capacityParams(), where, report);
             case ServiceNode service -> checkCapacityParams(service.capacityParams(), where, report);
-            case CacheNode cache -> {
+            case CachingNode cache -> {
                 checkCapacityParams(cache.capacityParams(), where, report);
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
             }
