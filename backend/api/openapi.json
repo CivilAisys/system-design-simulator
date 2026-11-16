@@ -153,6 +153,16 @@
             "type" : "number",
             "format" : "double",
             "description" : "EXTERNAL_API：對方給的配額"
+          },
+          "shards" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "CACHE, DATABASE：shard 數，省略時為 1（不分片）"
+          },
+          "hotShardShare" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "CACHE, DATABASE：最熱的 shard 分到的流量比例，省略時平均分配（1/shards）"
           }
         }
       },
@@ -307,9 +317,47 @@
           "status" : {
             "type" : [ "string", "null" ],
             "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED", "LIMITING", "NOT_LIMITING", "OVER_QUOTA", "WITHIN_QUOTA" ]
+          },
+          "shards" : {
+            "type" : [ "array", "null" ],
+            "description" : "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）",
+            "items" : {
+              "$ref" : "#/components/schemas/ShardResult"
+            }
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "rejectedRps", "status", "successRps", "throughputRps", "utilization" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "rejectedRps", "shards", "status", "successRps", "throughputRps", "utilization" ]
+      },
+      "ShardResult" : {
+        "type" : "object",
+        "description" : "一個 shard 的結果，欄位意義同 NodeResult",
+        "properties" : {
+          "arrivalRps" : {
+            "$ref" : "#/components/schemas/ClassRates"
+          },
+          "throughputRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "droppedRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "utilization" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "avgLatencyMs" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "過載時為 null"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED", "LIMITING", "NOT_LIMITING", "OVER_QUOTA", "WITHIN_QUOTA" ]
+          }
+        },
+        "required" : [ "arrivalRps", "avgLatencyMs", "droppedRps", "status", "throughputRps", "utilization" ]
       },
       "SimulationResult" : {
         "type" : "object",

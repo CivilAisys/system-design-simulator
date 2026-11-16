@@ -49,6 +49,14 @@ _Avoid_: third-party service、外部服務
 存放圖片、影片等大型檔案的儲存服務（例如 S3），行為和 Database 相同，只有預設值和名稱不同。
 _Avoid_: blob storage、S3（具體產品名）
 
+**Shard（分片）**:
+Cache 或 Database 依 key 切出來的一份資料和承擔它的機器，每個 shard 都套用節點的處理能力參數。
+_Avoid_: partition、分區
+
+**Hot shard（熱點 shard）**:
+因為熱門 key 而分到最多流量的 shard，它的 ρ 決定整個節點的 ρ 和狀態。
+_Avoid_: hot key（hot key 是原因，hot shard 是結果）
+
 ### 流量
 
 **Request class（請求類別）**:

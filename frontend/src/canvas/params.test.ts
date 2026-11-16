@@ -84,6 +84,20 @@ describe('checkNodeParam', () => {
   it('其他參數只看自己的範圍', () => {
     expect(checkNodeParam(params, 'serviceTimeMs', 1e7)).toBeNull()
   })
+
+  it('最熱 shard 的占比不能小於平均 1/shards', () => {
+    const sharded: NodeParams = { shards: 4 }
+    expect(checkNodeParam(sharded, 'hotShardShare', 0.25)).toBeNull()
+    expect(checkNodeParam(sharded, 'hotShardShare', 0.2)).toBe('hotShardShare 不能小於平均 1/4（0.25）')
+  })
+
+  it('減少 shard 數時，已設定的占比不能小於新的平均', () => {
+    const hot: NodeParams = { shards: 4, hotShardShare: 0.4 }
+    expect(checkNodeParam(hot, 'shards', 3)).toBeNull()
+    expect(checkNodeParam(hot, 'shards', 2)).toBe('hotShardShare 不能小於平均 1/2（0.5）')
+    // 沒設定時平均分配，shard 數怎麼改都合法
+    expect(checkNodeParam({ shards: 4 }, 'shards', 2)).toBeNull()
+  })
 })
 
 describe('sliderRange', () => {

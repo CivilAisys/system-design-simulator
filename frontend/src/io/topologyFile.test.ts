@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Topology } from '@/api/client'
 import { initialTopology } from '@/canvas/initialTopology'
-import { NODE_CHOICE_SPECS, NODE_PARAM_SPECS } from '@/canvas/params'
+import { NODE_CHOICE_SPECS } from '@/canvas/params'
 import { parseTopology, serializeTopology, toTopology } from './topologyFile'
 
 // 每種類型各一個節點，邊涵蓋三種出邊參數（weight、callsPerRequest、只有 latencyMs）
@@ -29,14 +29,14 @@ function validFile() {
         id: 'cache',
         type: 'CACHE',
         name: 'Redis',
-        params: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8 },
+        params: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, shards: 3, hotShardShare: 0.5 },
         ui: { x: 900, y: -100 },
       },
       {
         id: 'db',
         type: 'DATABASE',
         name: 'DB',
-        params: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
+        params: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
         ui: { x: 900, y: 100 },
       },
     ],
@@ -106,30 +106,45 @@ describe('合法的檔案', () => {
     ])
   })
 
-  // 還沒有真正的選填節點參數（#63 的 shards 會是第一個），先暫時把 hitRatio 和 callMode 當成選填來示範
   describe('選填的節點參數', () => {
+    // 還沒有真正選填的下拉選單參數，先暫時把 callMode 當成選填來示範
     beforeEach(() => {
-      NODE_PARAM_SPECS.hitRatio.optional = true
       NODE_CHOICE_SPECS.callMode.optional = true
     })
     afterEach(() => {
-      delete NODE_PARAM_SPECS.hitRatio.optional
       delete NODE_CHOICE_SPECS.callMode.optional
     })
 
     it('省略時用該類型的預設值', () => {
       const file = validFile()
       delete (file.nodes[2].params as { callMode?: string }).callMode
-      delete (file.nodes[3].params as { hitRatio?: number }).hitRatio
+      remove(file.nodes[3].params, 'shards')
 
       const [, , svc, cache] = topologyOf(file).nodes
       expect(svc.params.callMode).toBe('SEQUENTIAL')
-      expect(cache.params.hitRatio).toBe(0.8)
+      expect(cache.params.shards).toBe(1)
+    })
+
+    it('hotShardShare 省略時不補，代表平均分配', () => {
+      const file = validFile()
+      remove(file.nodes[3].params, 'hotShardShare')
+
+      expect(topologyOf(file).nodes[3].params).not.toHaveProperty('hotShardShare')
+    })
+
+    it('不能分片的 type 丟掉 shards 和 hotShardShare', () => {
+      const file = validFile()
+      Object.assign(file.nodes[2].params, { shards: 4, hotShardShare: 0.5 })
+
+      expect(topologyOf(file).nodes[2].params).toEqual(validFile().nodes[2].params)
     })
 
     it('給了錯的型別仍然是格式錯誤', () => {
-      expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { hitRatio: '0.5' }))).toEqual([
-        'nodes[3]（id "cache"）：缺少數值參數 params.hitRatio（或數值太大）',
+      expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { shards: '2' }))).toEqual([
+        'nodes[3]（id "cache"）：缺少數值參數 params.shards（或數值太大）',
+      ])
+      expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { hotShardShare: null }))).toEqual([
+        'nodes[3]（id "cache"）：params.hotShardShare 必須是數字（或數值太大）',
       ])
     })
   })
@@ -411,30 +426,31 @@ describe('沒有座標的節點', () => {
 // 合法檔案再加一個 CDN 擋在 Client 和 LB 之間
 function withCdn() {
   const file = validFile()
-  file.nodes.push({
+  const cdn = {
     id: 'cdn',
     type: 'CDN',
     name: 'Edge',
     params: { instances: 10, concurrency: 1000, serviceTimeMs: 1, hitRatio: 0.95 },
     ui: { x: 0, y: 200 },
-  })
-  file.edges[0] = edge('e1', 'client', 'cdn', 5)
-  file.edges.push(edge('e6', 'cdn', 'lb', 30))
-  return file
+  }
+  return {
+    ...file,
+    nodes: [...file.nodes, cdn],
+    edges: [edge('e1', 'client', 'cdn', 5), ...file.edges.slice(1), edge('e6', 'cdn', 'lb', 30)],
+  }
 }
 
 // 合法檔案再加一個 Service 呼叫的 Object Storage
 function withObjectStorage() {
   const file = validFile()
-  file.nodes.push({
+  const storage = {
     id: 'storage',
     type: 'OBJECT_STORAGE',
     name: 'Media',
     params: { instances: 1, concurrency: 10000, serviceTimeMs: 20 },
     ui: { x: 900, y: 300 },
-  })
-  file.edges.push(edge('e6', 'svc', 'storage', 5))
-  return file
+  }
+  return { ...file, nodes: [...file.nodes, storage], edges: [...file.edges, edge('e6', 'svc', 'storage', 5)] }
 }
 
 // 合法檔案再加一個 Rate Limiter 擋在 Client 和 LB 之間

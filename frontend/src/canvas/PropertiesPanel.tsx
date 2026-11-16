@@ -14,6 +14,7 @@ import {
   checkNodeParam,
   EDGE_CHOICE_SPECS,
   EDGE_PARAM_SPECS,
+  formatShare,
   NODE_CHOICE_SPECS,
   NODE_PARAM_SPECS,
   nodeParam,
@@ -85,6 +86,33 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
         />
       ))}
+      {/* 分片時才有熱點：省略時平均分配，顯示平均值；改了之後就是明確的占比 */}
+      {numberParams.includes('shards') && (node.params.shards ?? 1) > 1 && (
+        <div className="grid gap-1">
+          <NumberField
+            spec={NODE_PARAM_SPECS.hotShardShare}
+            value={node.params.hotShardShare ?? 1 / (node.params.shards ?? 1)}
+            check={(value) => checkNodeParam(node.params, 'hotShardShare', value)}
+            onChange={(value) => onUpdate(node.id, { params: { hotShardShare: value } })}
+          />
+          <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+            <span>
+              最熱的 shard 分到的流量比例，平均是 1/{node.params.shards}（{formatShare(1 / (node.params.shards ?? 1))}）
+            </span>
+            {/* 設定過占比之後，shard 數改了也不會跟著變；改回平均就會跟著 1/N 走 */}
+            {node.params.hotShardShare !== undefined && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto shrink-0 p-0 text-xs"
+                onClick={() => onUpdate(node.id, { clearParams: ['hotShardShare'] })}
+              >
+                改回平均
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       {choiceParams.map((param) => (
         <ChoiceField
           key={param}

@@ -15,7 +15,7 @@ type NodeKind = {
   idPrefix: string
   // spec 3.3 的預設值，涵蓋 numberParams 和 choiceParams 的每個參數
   defaults: NodeParams
-  // 屬性面板依序列出的參數，也是匯入時讀取的參數
+  // 屬性面板依序列出的參數，也是匯入時讀取的參數。有 shards 的 type 可以分片，另外有 hotShardShare（spec 4.2.2）
   numberParams: NodeNumberParam[]
   choiceParams: NodeChoiceParam[]
   // 能不能有上游／下游（spec 4.5），畫布上沒有對應的 handle
@@ -93,8 +93,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     label: 'Cache',
     icon: Zap,
     idPrefix: 'cache',
-    defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8 },
-    numberParams: [...CAPACITY_PARAMS, 'hitRatio'],
+    defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, shards: 1 },
+    numberParams: [...CAPACITY_PARAMS, 'hitRatio', 'shards'],
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
@@ -122,8 +122,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     label: 'Database',
     icon: Database,
     idPrefix: 'db',
-    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10 },
-    numberParams: CAPACITY_PARAMS,
+    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1 },
+    numberParams: [...CAPACITY_PARAMS, 'shards'],
     choiceParams: [],
     hasInput: true,
     hasOutput: false,

@@ -53,6 +53,10 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
             <TableRow key={node.id}>
               <TableCell className="font-medium">
                 {node.name}
+                {/* 分片的節點：ρ 和狀態是最熱的 shard，容量是所有 shard 的加總 */}
+                {metrics.shards && (
+                  <span className="ml-2 text-xs text-muted-foreground">{metrics.shards.length} shards</span>
+                )}
                 {node.id === bottleneckId && (
                   <Badge variant="outline" className="ml-2">
                     瓶頸

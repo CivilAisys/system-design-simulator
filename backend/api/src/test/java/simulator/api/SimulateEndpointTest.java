@@ -34,7 +34,8 @@ import org.springframework.test.web.servlet.ResultActions;
 class SimulateEndpointTest {
 
     private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps", "rejectedRps",
-            "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status");
+            "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status",
+            "shards");
     private static final List<String> SERVER_FIELDS = List.of("capacityRps", "utilization", "avgQueueMs",
             "avgLatencyMs", "status");
 
@@ -197,6 +198,24 @@ class SimulateEndpointTest {
         assertThat(body.at("/summary/bottleneckNodeId").asText()).isNotEqualTo("ext-1");
     }
 
+    // 「分片熱點」範例要示範的情境：4 個 shard 但有熱點，容量撐不到 4 倍；平均分配時撐得住
+    @Test
+    void shardingExampleHotShardOverloads() throws Exception {
+        ObjectNode example = (ObjectNode) mapper.readTree(readExample("sharding.json"));
+        JsonNode hot = simulate(mapper.writeValueAsBytes(example));
+        // 28,000 × 0.4 = 11,200 > 每個 shard 的 10,000
+        assertThat(hot.at("/nodes/db-1/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(hot.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(40_000, within(1e-6));
+        assertThat(hot.at("/nodes/db-1/shards/0/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(hot.at("/nodes/db-1/shards/1/status").asText()).isEqualTo("OK");
+        assertThat(hot.at("/summary/bottleneckNodeId").asText()).isEqualTo("db-1");
+
+        remove(example, "/nodes/3/params/hotShardShare");
+        JsonNode even = simulate(mapper.writeValueAsBytes(example));
+        assertThat(even.at("/nodes/db-1/utilization").asDouble()).isCloseTo(0.7, within(1e-9));
+        assertThat(even.at("/summary/dropRate").asDouble()).isZero();
+    }
+
     static Stream<String> exampleFiles() throws Exception {
         List<String> files;
         try (Stream<Path> listing = Files.list(examplesDir())) {
@@ -338,6 +357,36 @@ class SimulateEndpointTest {
         assertThat(body.at("/edges/e1/rps/read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(body.at("/edges/e2/rps/read").asDouble()).isCloseTo(900, within(1e-6));
         assertThat(body.at("/nodes/db-1/arrivalRps/read").asDouble()).isCloseTo(900, within(1e-6));
+    }
+
+    @Test
+    void omittedShardsMeanNoSharding() throws Exception {
+        // straight-topology.json 的 Database 沒有 shards、hotShardShare：等於 1 個 shard，回應沒有 shards 陣列
+        JsonNode body = mapper.readTree(postTopology(straightTopology())
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertThat(body.at("/nodes/db-1/shards").isNull()).isTrue();
+        assertThat(body.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(10_000, within(1e-6));
+    }
+
+    @Test
+    void shardedDatabaseReportsEachShardHottestFirst() throws Exception {
+        ObjectNode topology = straightTopology();
+        set(topology, "/nodes/2/params/shards", mapper.getNodeFactory().numberNode(4));
+        set(topology, "/nodes/2/params/hotShardShare", mapper.getNodeFactory().numberNode(0.4));
+
+        JsonNode body = mapper.readTree(postTopology(topology)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        JsonNode shards = body.at("/nodes/db-1/shards");
+        assertThat(shards.size()).isEqualTo(4);
+        assertThat(fieldNames(shards.get(0))).containsExactlyInAnyOrder("arrivalRps", "throughputRps", "droppedRps",
+                "utilization", "avgLatencyMs", "status");
+        assertThat(shards.get(0).at("/arrivalRps/read").asDouble()).isCloseTo(360, within(1e-6));
+        assertThat(shards.get(1).at("/arrivalRps/read").asDouble()).isCloseTo(180, within(1e-6));
+        assertThat(body.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(40_000, within(1e-6));
     }
 
     @Test

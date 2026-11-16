@@ -8,6 +8,7 @@ import mediaStorage from './media-storage.json'
 import overload from './overload.json'
 import rateLimiter from './rate-limiter.json'
 import readWriteSplit from './read-write-split.json'
+import sharding from './sharding.json'
 
 export type Example = { id: string; label: string; topology: Topology }
 
@@ -28,6 +29,8 @@ export const EXAMPLES: Example[] = [
   { id: 'rate-limiter', label: 'Rate Limiter', topology: builtIn(rateLimiter) },
   // 結帳呼叫第三方金流：300ms 的固定延遲佔掉大半端到端延遲，1,500 rps 超過 1,000 的配額，三分之一被拒絕
   { id: 'external-api', label: 'External API', topology: builtIn(externalApi) },
+  // Database 切 4 片，容量 40,000，但最熱的 shard 分到 40%：28,000 rps 就讓它過載。把 hotShardShare 刪掉（平均分配）就撐得住
+  { id: 'sharding', label: '分片熱點', topology: builtIn(sharding) },
 ]
 
 // JSON import 的型別太寬（type 是 string），走和匯入檔案相同的檢查來取得 Topology
