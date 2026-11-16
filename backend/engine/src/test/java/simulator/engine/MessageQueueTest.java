@@ -111,23 +111,63 @@ class MessageQueueTest {
         assertThat(result.summary().dropRate()).isCloseTo(0.5, within(EPS));
     }
 
-    @Test
-    void failuresBehindTheConsumerDoNotAffectClientSuccess() {
-        // worker 處理得完，但它寫入的 DB 容量只有 100：worker → DB 的丟棄是非同步路徑的失敗
-        SimulationResult result = simulator.simulate(new Topology(
+    /** Client（write 100%）→ MQ ─→ worker → DB，worker 每則訊息寫 DB callsPerRequest 次。 */
+    private SimulationResult consumeIntoDatabase(int workerSlots, int callsPerRequest, int dbSlots) {
+        return simulator.simulate(new Topology(
                 List.of(
                         new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0),
                         new MessageQueueNode("mq", "Queue", NodeHealth.HEALTHY, BROKER),
-                        new ServiceNode("worker", "Worker", NodeHealth.HEALTHY, ROOMY, CallMode.SEQUENTIAL),
-                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, workers(1))),
+                        new ServiceNode("worker", "Worker", NodeHealth.HEALTHY, workers(workerSlots),
+                                CallMode.SEQUENTIAL),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, workers(dbSlots))),
                 List.of(
                         new Edge("e1", "client", "mq", 1, 1, 1),
                         new Edge("g1", "mq", "worker", 1, 1, 1),
-                        new Edge("store", "worker", "db", 1, 1, 1))));
+                        new Edge("store", "worker", "db", 1, callsPerRequest, 1))));
+    }
 
+    @Test
+    void failuresBehindTheConsumerStayInTheQueue() {
+        // worker 處理得完，但它寫入的 DB 容量只有 200：80% 的訊息沒有完整成功，留在 queue 裡
+        SimulationResult result = consumeIntoDatabase(100, 1, 2);
+        NodeResult worker = result.nodes().get("worker");
+
+        assertThat(result.edges().get("g1").backlogRps()).isCloseTo(800, within(EPS));
+        assertThat(worker.droppedRps()).isCloseTo(0, within(EPS));
+        assertThat(worker.warnings()).containsExactly(NodeWarning.BACKLOG);
+        // DB 照常顯示自己的丟棄
         assertThat(result.nodes().get("db").status()).isEqualTo(Status.OVERLOADED);
+        assertThat(result.nodes().get("db").droppedRps()).isCloseTo(800, within(EPS));
+        // Client 的成功率只看 broker
         assertThat(result.summary().dropRate()).isZero();
         assertThat(result.summary().avgEndToEndMs().write().ms()).isNotNull();
+    }
+
+    @Test
+    void overloadedConsumerAndFailingDownstreamBothCountAsBacklog() {
+        // worker 容量 600：處理不完的 400 + 處理了但 DB（容量 300）丟掉的 300
+        SimulationResult result = consumeIntoDatabase(6, 1, 3);
+
+        assertThat(result.edges().get("g1").backlogRps()).isCloseTo(400 + 300, within(EPS));
+        assertThat(result.nodes().get("worker").droppedRps()).isCloseTo(0, within(EPS));
+        assertThat(result.nodes().get("worker").warnings()).containsExactly(NodeWarning.BACKLOG);
+        assertThat(result.summary().dropRate()).isZero();
+    }
+
+    @Test
+    void backlogCountsMessagesNotFanOutCalls() {
+        // 每則訊息寫 DB 2 次，DB 收到 2000、容量 1000：每次寫入成功率 0.5，兩次都成功的訊息只有 25%
+        SimulationResult result = consumeIntoDatabase(100, 2, 10);
+
+        assertThat(result.edges().get("g1").backlogRps()).isCloseTo(1000 * (1 - 0.5 * 0.5), within(EPS));
+    }
+
+    @Test
+    void healthyConsumerPathHasNoBacklog() {
+        SimulationResult result = consumeIntoDatabase(100, 1, 100);
+
+        assertThat(result.edges().get("g1").backlogRps()).isZero();
+        assertThat(result.nodes().get("worker").warnings()).isEmpty();
     }
 
     @Test

@@ -10,6 +10,9 @@ import java.util.Map;
  */
 final class SuccessRates {
 
+    // 下游全部成功時 pass − S 應該是 0，浮點誤差可能留下極小的正值
+    private static final double TOLERANCE = 1e-9;
+
     private final TopologyGraph graph;
     private final Map<String, NodeResult> nodeResults;
     private final UpstreamPass<Double> success;
@@ -24,6 +27,15 @@ final class SuccessRates {
     /** Client 送出的請求中，每秒有幾個完整成功。 */
     double client(String clientId, ClassRates sent) {
         return sent.read() * success.get(clientId, true) + sent.write() * success.get(clientId, false);
+    }
+
+    /**
+     * 這個 class 到達節點的請求中，節點處理了、但下游失敗的比例：pass(n) − S(n)。
+     * 用在 Message Queue 的 consumer：這些訊息沒有完整成功，留在 queue 裡（spec 4.2.4）。
+     */
+    double failedDownstream(String nodeId, boolean read) {
+        double failed = pass(graph.node(nodeId), read) - success.get(nodeId, read);
+        return failed < TOLERANCE ? 0 : failed;
     }
 
     private double success(Node node, boolean read, Map<String, Double> children) {
