@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
-import type { ParamGuide } from './paramGuide'
+import { outOfRangeHint, type ParamGuide } from './paramGuide'
 import { ParamInfo } from './ParamInfo'
 import { ParamLabel } from './ParamLabel'
 import { checkNumber, fromSlider, parseDraft, sliderRange, syncDraft, toSlider, type NumberSpec } from './params'
@@ -38,6 +38,8 @@ export function NumberField({
   }
 
   const error = check(parseDraft(draft))
+  // 不合法時只顯示錯誤，不同時出現黃字
+  const hint = error === null ? outOfRangeHint(guide, spec.unit, parseDraft(draft)) : null
 
   function onInput(text: string) {
     setDraft(text)
@@ -75,7 +77,7 @@ export function NumberField({
         onChange={(event) => onInput(event.target.value)}
         onBlur={() => setDraft(syncDraft(draft, value))}
         aria-invalid={error !== null}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
       />
       <Slider
         {...sliderRange(spec)}
@@ -86,6 +88,11 @@ export function NumberField({
       {error && (
         <p id={`${id}-error`} className="text-xs text-destructive">
           {error}
+        </p>
+      )}
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs text-warn-ink">
+          {hint}
         </p>
       )}
     </div>

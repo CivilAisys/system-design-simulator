@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { NodeType } from '@/api/client'
+import { initialTopology } from './initialTopology'
 import { canFeed, NEW_DISK_GB, newEdgeLatencyMs, NODE_KINDS, NODE_TYPES } from './catalog'
-import { edgeParamGuide, formatGuideRange, GUIDES, nodeParamGuide } from './paramGuide'
+import { edgeParamGuide, formatGuideRange, GUIDES, nodeParamGuide, outOfRangeHint } from './paramGuide'
 import type { NodeNumberParam } from './params'
 
 function guidedNodeParams(type: NodeType): string[] {
@@ -74,5 +75,55 @@ describe('formatGuideRange', () => {
   it('bytes 換成 KB、MB，兩端各自帶單位', () => {
     expect(formatGuideRange({ min: 1_000, max: 1_000_000 }, 'bytes')).toBe('1 KB–1 MB')
     expect(formatGuideRange({ min: 100, max: 100_000 }, 'bytes')).toBe('100 B–100 KB')
+  })
+})
+
+describe('outOfRangeHint', () => {
+  const serviceTime = GUIDES.SERVICE.node.serviceTimeMs
+
+  it('超出範圍時顯示範圍，格式同 tooltip', () => {
+    expect(outOfRangeHint(serviceTime, 'ms', 5000)).toBe('⚠ 超出常見範圍（5–200 ms）')
+    expect(outOfRangeHint(serviceTime, 'ms', 1)).toBe('⚠ 超出常見範圍（5–200 ms）')
+    expect(outOfRangeHint(GUIDES.CLIENT.node.readResponseBytes, 'bytes', 5_000_000)).toBe('⚠ 超出常見範圍（1 KB–1 MB）')
+  })
+
+  it('剛好等於 min 或 max 不算超出', () => {
+    expect(outOfRangeHint(serviceTime, 'ms', 5)).toBeNull()
+    expect(outOfRangeHint(serviceTime, 'ms', 200)).toBeNull()
+    expect(outOfRangeHint(serviceTime, 'ms', 50)).toBeNull()
+  })
+
+  it('沒有範圍的參數永遠不顯示', () => {
+    expect(outOfRangeHint(GUIDES.CLIENT.node.rps, 'rps', 1e9)).toBeNull()
+    expect(outOfRangeHint(GUIDES.CACHE.node.hotShare, undefined, 0.99)).toBeNull()
+    expect(outOfRangeHint(undefined, 'ms', 1e9)).toBeNull()
+  })
+
+  it('連到 External API 的邊用覆寫的範圍', () => {
+    expect(outOfRangeHint(edgeParamGuide('SERVICE', 'EXTERNAL_API', 'latencyMs'), 'ms', 1)).toBe(
+      '⚠ 超出常見範圍（10–100 ms）',
+    )
+    expect(outOfRangeHint(edgeParamGuide('SERVICE', 'DATABASE', 'latencyMs'), 'ms', 1)).toBeNull()
+  })
+})
+
+describe('起始拓撲', () => {
+  it('打開時沒有任何黃字', () => {
+    const types = new Map(initialTopology.nodes.map((n) => [n.id, n.type]))
+    for (const node of initialTopology.nodes) {
+      for (const [param, value] of Object.entries(node.params)) {
+        if (typeof value === 'number') {
+          const guide = nodeParamGuide(node.type, param as NodeNumberParam)
+          expect({ param, hint: outOfRangeHint(guide, undefined, value) }).toEqual({ param, hint: null })
+        }
+      }
+    }
+    for (const edge of initialTopology.edges) {
+      const guide = edgeParamGuide(types.get(edge.source)!, types.get(edge.target)!, 'latencyMs')
+      expect({ edge: edge.id, hint: outOfRangeHint(guide, 'ms', edge.latencyMs!) }).toEqual({
+        edge: edge.id,
+        hint: null,
+      })
+    }
   })
 })
