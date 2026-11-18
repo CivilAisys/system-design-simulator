@@ -386,7 +386,7 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 | `rps` | 0 ～ 1,000,000,000,000（1e12） |
 | `limitRps`、`quotaRps` | > 0 且 ≤ 1e12 |
 | `hotShare`（選填，Cache） | `1/instances` ～ 1，且 `instances` ≥ 2 |
-| `replicas`（Cache） | 0 ～ 5 的整數 |
+| `replicas`（選填，Cache） | 0 ～ 5 的整數 |
 | `readRatio`、`hitRatio` | 0 ～ 1 |
 | `readResponseBytes`、`writeRequestBytes`、`bytesPerWrite` | 0 ～ 1,000,000,000,000（1e12，1 TB） |
 | `retentionDays` | 0 ～ 100,000 |

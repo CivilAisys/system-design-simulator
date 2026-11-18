@@ -8,10 +8,12 @@ package simulator.engine;
 public record CacheNode(String id, String name, NodeHealth health, CapacityParams capacityParams, double hitRatio,
         Double hotShare, int replicas) implements CachingNode {
 
+    public static final int DEFAULT_REPLICAS = 0;
+
     /** 沒有從節點。 */
     public CacheNode(String id, String name, NodeHealth health, CapacityParams capacityParams, double hitRatio,
             Double hotShare) {
-        this(id, name, health, capacityParams, hitRatio, hotShare, 0);
+        this(id, name, health, capacityParams, hitRatio, hotShare, DEFAULT_REPLICAS);
     }
 
     /** 沒有熱點、沒有從節點。 */

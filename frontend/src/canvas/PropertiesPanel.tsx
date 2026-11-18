@@ -84,6 +84,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
   const utilization = result?.utilization ?? null
   const status = result?.status ?? null
 
+  const replicas = replicasHint(node)
   // 多台的 Cache 才有熱點：沒設定時所有機器共用一條佇列。緊接在 instances 後面顯示（spec 4.2.2）
   const instances = nodeParam(node.params, 'instances')
   const hotShareField =
@@ -141,10 +142,10 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
             <>
               <p className="-mt-3 text-xs text-muted-foreground">
                 {workersHint(instances, nodeParam(node.params, 'concurrency'))}
-                {(node.params.replicas ?? 0) > 0 && (
+                {replicas && (
                   <>
                     <br />
-                    {replicasHint(instances, node.params.replicas ?? 0)}
+                    {replicas}
                   </>
                 )}
                 {node.params.hotShare !== undefined && (

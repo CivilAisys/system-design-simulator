@@ -71,8 +71,13 @@ export function replicaLabel(node: Node): string | null {
   return `${withCommas(instances)} 主 ${withCommas(instances * replicas)} 從`
 }
 
-// 有從節點時 workersHint 下面再一行：從節點只做備援，不算在處理流量的台數裡
-export function replicasHint(instances: number, replicas: number): string {
+// 有從節點時 workersHint 下面再一行：從節點只做備援，不算在處理流量的台數裡。沒有從節點時是 null
+export function replicasHint(node: Node): string | null {
+  const replicas = node.params.replicas ?? 0
+  if (replicas <= 0) {
+    return null
+  }
+  const instances = node.params.instances ?? 1
   return `另有 ${withCommas(instances * replicas)} 個從節點，共 ${withCommas(instances * (1 + replicas))} 個節點；從節點不分擔流量`
 }
 

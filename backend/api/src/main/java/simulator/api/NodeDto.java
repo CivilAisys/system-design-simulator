@@ -44,7 +44,7 @@ public record NodeDto(
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
             case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"),
-                    params.hotShare(), params.replicas() == null ? 0 : params.replicas());
+                    params.hotShare(), params.replicas() == null ? CacheNode.DEFAULT_REPLICAS : params.replicas());
             case CDN -> new CdnNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
             case DATABASE -> new DatabaseNode(id, name, health, capacityParams(), sizing(DatabaseNode.DEFAULT_SIZING));
             case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams(),
