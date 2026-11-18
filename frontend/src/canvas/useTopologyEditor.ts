@@ -123,6 +123,7 @@ export function useTopologyEditor(initial: Topology) {
       edit((state) => ({
         ...state,
         nodes: [...state.nodes.map((n) => withSelected(n, false)), { ...toFlowNode(node), selected: true }],
+        edges: state.edges.map((e) => withSelected(e, false)),
       }))
     },
     [usedIds, edit],
