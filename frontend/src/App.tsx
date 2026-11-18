@@ -58,6 +58,7 @@ function Simulator() {
   const propertiesFloating = !propertiesPinned && hasSingleSelection(editor.nodes, editor.edges)
   // 通知和畫布右緣的距離：浮出的面板蓋住畫布右側時，通知移到它的左邊
   const toastRight = TOAST_GAP + (propertiesFloating ? FLOATING_PANEL_INSET : 0)
+  const pinButton = useRefocusAfterToggle(propertiesPinned)
   useEditShortcuts({ undo, redo, copy: editor.copy, paste: editor.paste })
   useAutosave(topology, restored)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
@@ -222,6 +223,8 @@ function Simulator() {
             theme={theme}
             position="top-right"
             offset={{ top: TOAST_GAP, right: toastRight }}
+            // 視窗窄於 600px 時 sonner 改用 mobileOffset
+            mobileOffset={{ top: TOAST_GAP, right: toastRight }}
             closeButton
             style={{ position: 'absolute', width: `min(356px, calc(100% - ${toastRight + TOAST_GAP}px))` }}
             toastOptions={{ style: { width: '100%' } }}
@@ -240,7 +243,9 @@ function Simulator() {
           />
         </main>
         {/* 細條在前、面板在後，切換釘選時面板還是同一個元素，焦點留在釘選按鈕上 */}
-        {!propertiesPinned && <PropertiesRail onPin={togglePropertiesPinned} />}
+        {!propertiesPinned && (
+          <PropertiesRail onPin={pinButton.wrap(togglePropertiesPinned)} buttonRef={pinButton.railRef} />
+        )}
         {(propertiesPinned || propertiesFloating) && (
           <PropertiesPanel
             nodes={editor.nodes}
@@ -251,7 +256,8 @@ function Simulator() {
             onUpdateNode={editor.updateNode}
             onUpdateEdge={editor.updateEdge}
             pinned={propertiesPinned}
-            onTogglePin={togglePropertiesPinned}
+            onTogglePin={pinButton.wrap(togglePropertiesPinned)}
+            pinButtonRef={pinButton.panelRef}
           />
         )}
       </SidebarProvider>
@@ -274,6 +280,27 @@ function Simulator() {
       </section>
     </div>
   )
+}
+
+// 用按鈕切換釘選時，按鈕所在的細條或面板可能跟著消失，焦點會掉到 body。
+// 這時把焦點交給現在看得到的那個釘選按鈕，鍵盤使用者不必從頭 Tab 回來
+function useRefocusAfterToggle(pinned: boolean) {
+  const panelRef = useRef<HTMLButtonElement>(null)
+  const railRef = useRef<HTMLButtonElement>(null)
+  const pending = useRef(false)
+  useEffect(() => {
+    if (!pending.current) return
+    pending.current = false
+    if (document.activeElement == null || document.activeElement === document.body) {
+      const button = pinned ? panelRef.current : railRef.current
+      button?.focus()
+    }
+  }, [pinned])
+  const wrap = (toggle: () => void) => () => {
+    pending.current = true
+    toggle()
+  }
+  return { panelRef, railRef, wrap }
 }
 
 type EditActions = { undo: () => void; redo: () => void; copy: () => void; paste: () => boolean }

@@ -1,4 +1,4 @@
-import { Fragment, useId, type ReactNode } from 'react'
+import { Fragment, useId, type ReactNode, type Ref } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { PanelRightOpen, Pin, PinOff, Trash2 } from 'lucide-react'
 import { totalRps, type EdgeResult, type NodeResult } from '@/api/client'
@@ -43,6 +43,7 @@ type PropertiesPanelProps = {
   // 釘住時固定在畫布右側；沒釘住時浮在畫布上（App 只在剛好選了一個時放出來）
   pinned: boolean
   onTogglePin: () => void
+  pinButtonRef?: Ref<HTMLButtonElement>
 }
 
 // 只在剛好選了一個 Node 或一條 Edge 時顯示它的參數
@@ -56,6 +57,7 @@ export function PropertiesPanel({
   onUpdateEdge,
   pinned,
   onTogglePin,
+  pinButtonRef,
 }: PropertiesPanelProps) {
   const selectedNodes = nodes.filter((n) => n.selected)
   const selectedEdges = edges.filter((e) => e.selected)
@@ -97,6 +99,7 @@ export function PropertiesPanel({
       <div className="flex items-center justify-between border-b py-1 pr-2 pl-4 text-xs font-medium text-muted-foreground">
         屬性
         <Button
+          ref={pinButtonRef}
           variant="ghost"
           size="icon-sm"
           onClick={onTogglePin}
@@ -112,10 +115,11 @@ export function PropertiesPanel({
 }
 
 // 沒釘住時畫布右側留下的細條，按一下釘回去
-export function PropertiesRail({ onPin }: { onPin: () => void }) {
+export function PropertiesRail({ onPin, buttonRef }: { onPin: () => void; buttonRef?: Ref<HTMLButtonElement> }) {
   return (
     <div className="flex w-9 shrink-0 flex-col items-center gap-2 border-l py-1">
       <Button
+        ref={buttonRef}
         variant="ghost"
         size="icon-sm"
         onClick={onPin}
