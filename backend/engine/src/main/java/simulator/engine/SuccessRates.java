@@ -48,12 +48,9 @@ final class SuccessRates {
             case ServiceNode service -> edges.stream()
                     .mapToDouble(edge -> Math.pow(children.get(edge.target()), graph.visits(edge, read)))
                     .reduce(1, (a, b) -> a * b);
-            // 只有沒命中的部分（write 是全部）要靠下游成功
-            case CachingNode cache -> {
-                Edge edge = edges.getFirst();
-                double miss = graph.visits(edge, read);
-                yield (1 - miss) + miss * children.get(edge.target());
-            }
+            // 只有沒命中的部分（write 是全部）要靠下游成功；CDN 的下游依 weight 加權
+            case CachingNode cache -> (1 - edges.stream().mapToDouble(edge -> graph.visits(edge, read)).sum())
+                    + weightedSum(edges, children, read);
             // 複製是非同步的，replica 跟不上不影響 primary 上的請求
             case StorageNode storage -> 1;
             // read 的丟棄由 pass(n) 扣掉；複製寫入的丟棄只產生警告

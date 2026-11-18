@@ -103,7 +103,7 @@ system-design-simulator/
 | **Load Balancer** | 分流 | — | 依邊的 `weight` 分流（預設平均） | 1 × 1000, 1ms（≈1M rps） |
 | **Service** | 應用伺服器 | `callMode` | **Fan-out**：每個請求呼叫每個下游 `callsPerRequest` 次；`callMode` 決定依序（`SEQUENTIAL`）或平行（`PARALLEL`） | 2 × 200, 50ms（8,000 rps）, callMode=SEQUENTIAL |
 | **Cache** | 快取（元件面板的「Redis Cluster」是 3 主 3 從的 Cache） | `hitRatio`、`hotShare`、`replicas` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
-| **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
+| **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache，但可以有多個下游，依邊的 `weight` 分配（同 LB），例如靜態檔案送到 Object Storage、API 送到 LB | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
 | **Database** | 資料儲存（終點） | `bytesPerWrite`、`retentionDays`、`diskGbPerInstance` | 只能連到 Read Replica（複製，4.2.3） | 1 × 100, 10ms（10,000 rps）, bytesPerWrite=1000, retentionDays=365 |
 | **Read Replica** | primary Database 的唯讀副本 | — | 無下游；write 是 primary 複製過來的，read 由 Service 的 READ 邊送來 | 1 × 100, 10ms（10,000 rps） |
 | **Message Queue** | 非同步佇列（broker） | — | 每條下游邊是一個 consumer group，都收到全部訊息；Client 只等到 ack | 1 × 1000, 1ms（≈1M rps） |
@@ -113,7 +113,7 @@ system-design-simulator/
 
 > Cache 的 write 直接往下送，等於把 cache-aside 的「寫 DB、刪 cache」簡化成穿透。
 >
-> CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`，4.3、4.3.1 的「Cache」公式也適用於 CDN），只有預設值、圖示和名稱不同，讓架構圖和存下來的 JSON 看得出是 CDN。位置不限制，不一定要接在 Client 後面。
+> CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`），只有預設值、圖示和名稱不同，以及 CDN 可以有多個下游：沒命中的 read 和全部 write 依邊的 `weight` 分配（4.3、4.3.1 的 CDN 公式）。讓架構圖和存下來的 JSON 看得出是 CDN。位置不限制，不一定要接在 Client 後面。
 >
 > Object Storage 的計算和驗證都和 Database 相同（engine 裡兩者都是 `StorageNode`），只有預設值、圖示和名稱不同。容量由供應商負責，所以不能接 Read Replica。
 >
@@ -130,12 +130,12 @@ system-design-simulator/
 | 欄位 | 意義 | 預設 |
 |---|---|---|
 | `source` / `target` | 節點 id | — |
-| `weight` | 分流權重（Client、LB 用） | 1 |
+| `weight` | 分流權重（Client、LB、CDN 用） | 1 |
 | `callsPerRequest` | 每個請求呼叫幾次（Service 用） | 1 |
 | `latencyMs` | 網路延遲（單程） | 1 |
 | `requestClass` | 哪個 class 的請求會走這條邊（Service 用）：`ALL`、`READ`、`WRITE` | `ALL` |
 
-- 欄位只在對應的起點有意義：`weight` 只用在 Client／LB 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（存檔一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
+- 欄位只在對應的起點有意義：`weight` 只用在 Client／LB／CDN 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（存檔一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
 - `requestClass`：一個 class 的請求只呼叫 `requestClass` 符合的下游（`ALL` 兩種都符合），例如 Service ─(READ)→ Read Replica、Service ─(WRITE)→ primary，或 CQRS 的讀寫分流。流量、延遲（4.3）、成功率（4.3.1）都只算符合的下游；沒有任何符合的下游時，Service 就是這個 class 的終點。Client／LB 的邊不支援（要依 class 重新正規化權重，還要處理某個 class 沒有邊可走的情況）。畫布上 `READ`／`WRITE` 的邊在標籤前面顯示「R」／「W」，邊上的 RPS 和粒子只有那個 class 的流量。
 - 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
 - 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去。讀入存檔時只擋自己連自己，經過其他節點的環照樣讀入，Run 之後在錯誤分頁顯示。
@@ -289,6 +289,8 @@ Cache 保留一個熱點的教學點：Redis Cluster 一個主就是一個 shard
 | Service（`PARALLEL`） | `W(n) + max_i [ callsPerRequest_i × (edge_i.latencyMs×2 + L(child_i)) ]`（各下游同時呼叫，取最慢的；同一個下游呼叫多次時仍依序） |
 | Cache（read） | `W(n) + (1 − hitRatio) × (edge.latencyMs×2 + L(child))` |
 | Cache（write） | `W(n) + edge.latencyMs×2 + L(child)` |
+| CDN（read） | `W(n) + (1 − hitRatio) × Σ (weight_i / Σweight) × (edge_i.latencyMs×2 + L(child_i))` |
+| CDN（write） | `W(n) + Σ (weight_i / Σweight) × (edge_i.latencyMs×2 + L(child_i))` |
 | Rate Limiter | `W(n) + edge.latencyMs×2 + L(child)`，`W(n) = 0` |
 
 Client 本身沒有 W（記為 0）。
@@ -302,7 +304,7 @@ Client 本身沒有 W（記為 0）。
 | `OVERLOADED` | 路徑上有節點過載，系統不在穩態。`overloadedNodeIds` 列出這些節點 |
 | `NO_TRAFFIC` | 沒有這個 class 的請求，沒有平均可言 |
 
-Client 或 LB 沒有下游時請求沒有地方送，這種拓撲會被驗證規則 `NO_DOWNSTREAM`（4.5）擋下，不會進到計算。前端要在 `null` 旁邊顯示原因（例如「DB 過載，穩態延遲無定義」），並搭配 `successRps`（4.3.1）讓使用者看到還有多少請求成功。原因和過載節點由後端判斷，前端只負責顯示。
+Client、LB 或 CDN 沒有下游時請求沒有地方送，這種拓撲會被驗證規則 `NO_DOWNSTREAM`（4.5）擋下，不會進到計算。前端要在 `null` 旁邊顯示原因（例如「DB 過載，穩態延遲無定義」），並搭配 `successRps`（4.3.1）讓使用者看到還有多少請求成功。原因和過載節點由後端判斷，前端只負責顯示。
 
 **多個 Client**：每個 Client 各自的端到端延遲 `L(client, class)` 放在回應 `nodes` 中該 Client 的 `endToEndMs`。`summary.avgEndToEndMs` 用各 Client 該 class 的請求數加權平均：
 
@@ -330,6 +332,8 @@ Service 有 fan-out 時，下游的 RPS 是「子呼叫」而不是「使用者�
 | Service（依序或平行都一樣） | `pass(n) × Π S(child_i)^callsPerRequest_i`（任何一個子呼叫失敗，整個請求就失敗；只乘 `requestClass` 符合這個 class 的下游） |
 | Cache（read） | `pass(n) × (hitRatio + (1 − hitRatio) × S(child))` |
 | Cache（write） | `pass(n) × S(child)` |
+| CDN（read） | `pass(n) × (hitRatio + (1 − hitRatio) × Σ (weight_i / Σweight) × S(child_i))` |
+| CDN（write） | `pass(n) × Σ (weight_i / Σweight) × S(child_i)` |
 | Rate Limiter | `pass(n) × S(child)`，`pass(n) = 放行量 / 到達量`（拒絕也算失敗） |
 
 Client 的 `pass` 記為 1。彙總：
@@ -362,11 +366,11 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 | Read Replica 必須剛好有一個 Database 上游（primary） | `REPLICA_PRIMARY_COUNT` |
 | Read Replica 不能有下游 | `REPLICA_HAS_OUTPUT` |
 | Read Replica 是唯讀的：write 只能經由複製邊送到（4.2.3） | `REPLICA_RECEIVES_WRITES` |
-| Cache、CDN 必須剛好一個下游（CDN 沿用同一個錯誤碼，訊息寫 CDN） | `CACHE_DOWNSTREAM_COUNT` |
+| Cache 必須剛好一個下游 | `CACHE_DOWNSTREAM_COUNT` |
 | Rate Limiter 必須剛好一個下游 | `RATE_LIMITER_DOWNSTREAM_COUNT` |
 | External API 不能有下游 | `EXTERNAL_API_HAS_OUTPUT` |
 | Message Queue 只能連到 Service（consumer group 的 consumer 數量用 Service 的 instances 表示） | `QUEUE_CONSUMER_TYPE` |
-| Client／LB／Message Queue 至少一個下游（Service 可以是終點，代表不依賴其他元件的服務） | `NO_DOWNSTREAM` |
+| Client／LB／CDN／Message Queue 至少一個下游（Service 可以是終點，代表不依賴其他元件的服務） | `NO_DOWNSTREAM` |
 | 邊的 source / target 必須存在 | `UNKNOWN_NODE` |
 | 同一對 source → target 只能有一條邊 | `DUPLICATE_EDGE` |
 | 參數範圍（見下方合法範圍） | `INVALID_PARAM` |
@@ -377,7 +381,7 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 - `CYCLE_DETECTED` 在環上的每個節點各一個錯誤；環下游、夾在兩個環中間的節點不算。
 - `CLIENT_HAS_INPUT`、`DATABASE_HAS_OUTPUT`、`CACHE_DOWNSTREAM_COUNT`、`RATE_LIMITER_DOWNSTREAM_COUNT`、`EXTERNAL_API_HAS_OUTPUT`、`REPLICA_PRIMARY_COUNT`、`REPLICA_HAS_OUTPUT`、`REPLICA_RECEIVES_WRITES`、`QUEUE_CONSUMER_TYPE`、`NO_DOWNSTREAM` 附 `nodeId`。
 - `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則，但仍算在另一端的上下游數量裡（畫布上看得到這條邊，不重複報錯）。
-- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。Rate Limiter 的 `limitRps`、External API 的 `quotaRps` 也必須 > 0：0 等於全部拒絕，要停用就刪掉節點。
+- `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB／CDN 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。Rate Limiter 的 `limitRps`、External API 的 `quotaRps` 也必須 > 0：0 等於全部拒絕，要停用就刪掉節點。
 
 參數的合法範圍。上限擋掉會讓 Run 太慢（worker 數決定 Erlang C 的計算量）或結果溢位成 `Infinity` 的極端數值；屬性面板的輸入框用同一組範圍，讀入超出範圍的存檔時不擋，Run 之後在錯誤分頁顯示。
 

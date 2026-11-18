@@ -186,14 +186,22 @@ class TopologyValidationTest {
     }
 
     @Test
-    void cdnWithTwoDownstreamsIsRejectedLikeCache() {
+    void cdnMaySplitAcrossDownstreams() {
         SimulationResult result = run(
                 List.of(client("c"), new CdnNode("cdn", "Edge", NodeHealth.HEALTHY, CAPACITY, 0.95), database("a"),
                         database("b")),
                 List.of(edge("e1", "c", "cdn"), edge("e2", "cdn", "a"), edge("e3", "cdn", "b")));
 
-        assertErrors(result, tuple("CACHE_DOWNSTREAM_COUNT", "cdn", null));
-        assertThat(result.errors().getFirst().message()).startsWith("CDN 「Edge」");
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
+    void cdnWithoutDownstreamIsRejected() {
+        SimulationResult result = run(
+                List.of(client("c"), new CdnNode("cdn", "Edge", NodeHealth.HEALTHY, CAPACITY, 0.95)),
+                List.of(edge("e1", "c", "cdn")));
+
+        assertErrors(result, tuple("NO_DOWNSTREAM", "cdn", null));
     }
 
     @Test

@@ -84,14 +84,15 @@ final class TopologyGraph {
         return nodes.get(edge.source()) instanceof MessageQueueNode;
     }
 
-    /** Client／LB 依 weight 比例分流（spec 3.3）。 */
+    /** Client／LB／CDN 依 weight 比例分流（spec 3.3）。 */
     static boolean splitsByWeight(Node node) {
-        return node instanceof ClientNode || node instanceof LoadBalancerNode;
+        return node instanceof ClientNode || node instanceof LoadBalancerNode || node instanceof CdnNode;
     }
 
     /**
      * 上游的一個請求平均往這條邊送幾次（spec 3.3、3.4）：Client／LB 依 weight 比例分流，
      * Service 呼叫 callsPerRequest 次（requestClass 不符合的 class 為 0），Cache 的 read 只有沒命中的部分往下送，
+     * CDN 沒命中的 read 和全部 write 再依 weight 分給各個下游，
      * Rate Limiter 放行的請求全部送往唯一的下游，Database 處理完的 write 複製到 Read Replica。
      * 流量和端到端延遲共用這條規則。
      */
@@ -101,7 +102,8 @@ final class TopologyGraph {
             case ClientNode client -> edge.weight() / totalWeight(source.id());
             case LoadBalancerNode lb -> edge.weight() / totalWeight(source.id());
             case ServiceNode service -> edge.requestClass().includes(read) ? edge.callsPerRequest() : 0;
-            case CachingNode cache -> read ? 1 - cache.hitRatio() : 1;
+            case CachingNode cache -> (read ? 1 - cache.hitRatio() : 1)
+                    * (cache instanceof CdnNode ? edge.weight() / totalWeight(source.id()) : 1);
             // Database 只能連到 Read Replica：處理完的 write 全部複製過去，read 不會
             case StorageNode storage -> read ? 0 : 1;
             case ReadReplicaNode replica -> 0;
