@@ -113,7 +113,7 @@ system-design-simulator/
 
 > Cache 的 write 直接往下送，等於把 cache-aside 的「寫 DB、刪 cache」簡化成穿透。
 >
-> CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`），只有預設值、圖示和名稱不同，以及 CDN 可以有多個下游：沒命中的 read 和全部 write 依邊的 `weight` 分配（4.3、4.3.1 的 CDN 公式）。讓架構圖和存下來的 JSON 看得出是 CDN。位置不限制，不一定要接在 Client 後面。
+> CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`），只有預設值、圖示和名稱不同，讓架構圖和存下來的 JSON 看得出是 CDN。唯一的差別是 CDN 可以有多個下游：沒命中的 read 和全部 write 依邊的 `weight` 分配（4.3、4.3.1 的 CDN 公式）。位置不限制，不一定要接在 Client 後面。
 >
 > Object Storage 的計算和驗證都和 Database 相同（engine 裡兩者都是 `StorageNode`），只有預設值、圖示和名稱不同。容量由供應商負責，所以不能接 Read Replica。
 >
@@ -136,7 +136,7 @@ system-design-simulator/
 | `requestClass` | 哪個 class 的請求會走這條邊（Service 用）：`ALL`、`READ`、`WRITE` | `ALL` |
 
 - 欄位只在對應的起點有意義：`weight` 只用在 Client／LB／CDN 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（存檔一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
-- `requestClass`：一個 class 的請求只呼叫 `requestClass` 符合的下游（`ALL` 兩種都符合），例如 Service ─(READ)→ Read Replica、Service ─(WRITE)→ primary，或 CQRS 的讀寫分流。流量、延遲（4.3）、成功率（4.3.1）都只算符合的下游；沒有任何符合的下游時，Service 就是這個 class 的終點。Client／LB 的邊不支援（要依 class 重新正規化權重，還要處理某個 class 沒有邊可走的情況）。畫布上 `READ`／`WRITE` 的邊在標籤前面顯示「R」／「W」，邊上的 RPS 和粒子只有那個 class 的流量。
+- `requestClass`：一個 class 的請求只呼叫 `requestClass` 符合的下游（`ALL` 兩種都符合），例如 Service ─(READ)→ Read Replica、Service ─(WRITE)→ primary，或 CQRS 的讀寫分流。流量、延遲（4.3）、成功率（4.3.1）都只算符合的下游；沒有任何符合的下游時，Service 就是這個 class 的終點。Client／LB／CDN 的邊不支援（要依 class 重新正規化權重，還要處理某個 class 沒有邊可走的情況）。畫布上 `READ`／`WRITE` 的邊在標籤前面顯示「R」／「W」，邊上的 RPS 和粒子只有那個 class 的流量。
 - 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
 - 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去。讀入存檔時只擋自己連自己，經過其他節點的環照樣讀入，Run 之後在錯誤分頁顯示。
 

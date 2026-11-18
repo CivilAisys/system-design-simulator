@@ -102,8 +102,8 @@ final class TopologyGraph {
             case ClientNode client -> edge.weight() / totalWeight(source.id());
             case LoadBalancerNode lb -> edge.weight() / totalWeight(source.id());
             case ServiceNode service -> edge.requestClass().includes(read) ? edge.callsPerRequest() : 0;
-            case CachingNode cache -> (read ? 1 - cache.hitRatio() : 1)
-                    * (cache instanceof CdnNode ? edge.weight() / totalWeight(source.id()) : 1);
+            case CacheNode cache -> read ? 1 - cache.hitRatio() : 1;
+            case CdnNode cdn -> (read ? 1 - cdn.hitRatio() : 1) * edge.weight() / totalWeight(source.id());
             // Database 只能連到 Read Replica：處理完的 write 全部複製過去，read 不會
             case StorageNode storage -> read ? 0 : 1;
             case ReadReplicaNode replica -> 0;

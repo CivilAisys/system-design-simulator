@@ -1,6 +1,7 @@
 package simulator.engine;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
@@ -62,6 +63,32 @@ class CdnTest {
         double read = 900 * (0.5 + 0.5 * (0.75 + 0.25 * passB));
         double write = 100 * (0.75 + 0.25 * passB);
         assertThat(result.nodes().get("client").successRps()).isCloseTo(read + write, within(EPS));
+    }
+
+    @Test
+    void offloadDoesNotDependOnTheSplit() {
+        // CDN 擋掉的頻寬只看命中的 read；沒命中的回應大小依 3:1 跟著邊往下送
+        SimulationResult result = run(new CapacityParams(1, 10_000, 20));
+        double bytesPerRead = ClientNode.DEFAULT_READ_RESPONSE_BYTES;
+
+        assertThat(result.summary().cdnOffloadBytesPerSec()).isCloseTo(900 * 0.5 * bytesPerRead, within(EPS));
+    }
+
+    @Test
+    void cdnEdgeWeightMustBePositive() {
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 1000, 0.9),
+                        new CdnNode("cdn", "Edge", NodeHealth.HEALTHY, AMPLE, 0.5),
+                        new ObjectStorageNode("a", "Media", NodeHealth.HEALTHY, AMPLE),
+                        new ObjectStorageNode("b", "Uploads", NodeHealth.HEALTHY, AMPLE)),
+                List.of(
+                        new Edge("e1", "client", "cdn", 1, 1, 0),
+                        new Edge("e2", "cdn", "a", 0, 1, 0),
+                        new Edge("e3", "cdn", "b", 1, 1, 0))));
+
+        assertThat(result.errors()).extracting(ValidationError::code, ValidationError::edgeId)
+                .containsExactly(tuple("INVALID_PARAM", "e2"));
     }
 
     @Test
