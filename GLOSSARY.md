@@ -7,7 +7,7 @@
 ### 架構
 
 **Topology（拓撲）**:
-使用者組出的整個架構，由 Node 和 Edge 構成，也是匯入／匯出的單位。
+使用者組出的整個架構，由 Node 和 Edge 構成，也是自動存檔的單位。
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
@@ -33,7 +33,7 @@ _Avoid_: server、app、backend
 擋在下游前面的快取，read 命中時不往下送，write 一律往下送。
 
 **CDN**:
-放在 Client 和後端（origin）之間的快取，行為和 Cache 相同，只有預設值和名稱不同。
+放在 Client 和後端（origin）之間的快取，行為和 Cache 相同，只有預設值和名稱不同；但可以有多個下游，依邊的 weight 分配（例如靜態檔案送到 Object Storage、API 送到 LB）。
 
 **Read Replica**:
 primary Database 的唯讀副本：分擔 read，但要套用 primary 的所有寫入，所以無法擴展寫入。
@@ -68,15 +68,19 @@ _Avoid_: third-party service、外部服務
 _Avoid_: blob storage、S3（具體產品名）
 
 **Shard（分片）**:
-Cache 或 Database 依 key 切出來的一份資料和承擔它的機器，每個 shard 都套用節點的處理能力參數。
+依 key 切出來的一份資料。模型裡沒有分片參數：`instances` 是處理流量的節點數，資料怎麼切照圖補充說明（spec 4.2.2）。Redis Cluster 一個主節點就是一個 shard。
 _Avoid_: partition、分區
 
 **Redis Cluster**:
-元件面板上的 preset，就是 shards = 3 的 Cache，匯出的 JSON 裡 type 仍是 CACHE。
+元件面板上的 preset，就是 instances = 3、replicas = 1（3 主 3 從）的 Cache，JSON 裡 type 仍是 CACHE。
 
-**Hot shard（熱點 shard）**:
-因為熱門 key 而分到最多流量的 shard，它的 ρ 決定整個節點的 ρ 和狀態。
-_Avoid_: hot key（hot key 是原因，hot shard 是結果）
+**叢集內從節點（Cache 的 replicas）**:
+Cache 每個主節點的從節點數，只是標記、不影響計算：從節點預設不分擔讀取，只做備援。`instances` 只算主節點。
+_Avoid_: Read Replica（那是 Database 的獨立元件，會分擔 read）
+
+**Hot spot（熱點）**:
+Cache 的 `hotShare`：最熱的那台分到較多流量，它的 ρ 決定整個節點的 ρ 和狀態。熱門 key 是原因，最熱的那台是結果。
+_Avoid_: hot shard（模型裡沒有 shard）
 
 ### 流量
 
@@ -125,10 +129,10 @@ _Avoid_: throughput（那是請求數）
 出口頻寬裡由 CDN 命中直接送出、不必從後端（origin）送出的部分。
 
 **Storage estimate（儲存量估算）**:
-Database、Object Storage 依成功處理的 write、每次 write 新增的資料量和保留天數，推算的每日增量、總量、含副本總量和每個 shard 的用量。
+Database、Object Storage 依成功處理的 write、每次 write 新增的資料量和保留天數，推算的每日增量、總量、含副本總量和每台機器的用量。
 
 **Disk full（磁碟會滿）**:
-保留期內每個 shard 的資料會超過磁碟容量。和 ρ 的瓶頸是不同的指標，分開顯示。
+保留期內每台機器的資料會超過磁碟容量。和 ρ 的瓶頸是不同的指標，分開顯示。
 _Avoid_: bottleneck（那是 ρ 最高的節點）
 
 ### 負載與延遲

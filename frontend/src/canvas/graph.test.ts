@@ -32,7 +32,7 @@ describe('createsCycle', () => {
   })
 
   it('現有的邊已經有環時照樣判斷，不會無限迴圈', () => {
-    // 匯入的檔案可以有環
+    // 讀入的存檔可以有環
     const edges = [edge('a', 'b'), edge('b', 'a'), edge('c', 'd')]
     expect(createsCycle(edges, 'b', 'c')).toBe(false)
     expect(createsCycle(edges, 'd', 'a')).toBe(false)

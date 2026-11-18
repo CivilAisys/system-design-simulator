@@ -12,9 +12,10 @@ import simulator.engine.ClassLatencies;
 import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
 import simulator.engine.EndToEndLatency;
+import simulator.engine.HotSpot;
+import simulator.engine.InstanceResult;
 import simulator.engine.NodeResult;
 import simulator.engine.NodeWarning;
-import simulator.engine.ShardResult;
 import simulator.engine.SimulationResult;
 import simulator.engine.Status;
 import simulator.engine.StorageEstimate;
@@ -121,8 +122,8 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, nullable = true) Double avgLatencyMs,
             @Schema(requiredMode = REQUIRED, nullable = true) Status status,
             @Schema(requiredMode = REQUIRED, nullable = true,
-                    description = "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）")
-            List<ShardResultDto> shards,
+                    description = "只有設定了 hotShare 的 Cache 有：最熱的那台和其他台的結果（spec 4.2.2）")
+            HotSpotDto hotSpot,
             @Schema(requiredMode = REQUIRED, description = "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）；BACKLOG：consumer 處理不完 Message Queue 的訊息（spec 4.2.4）")
             List<NodeWarning> warnings) {
 
@@ -130,13 +131,24 @@ public record SimulationResponse(
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
                     node.droppedRps(), node.rejectedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()),
                     node.capacityRps(), node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status(),
-                    node.shards() == null ? null : node.shards().stream().map(ShardResultDto::from).toList(),
+                    HotSpotDto.from(node.hotSpot()),
                     node.warnings());
         }
     }
 
-    @Schema(name = "ShardResult", description = "一個 shard 的結果，欄位意義同 NodeResult")
-    public record ShardResultDto(
+    @Schema(name = "HotSpot")
+    public record HotSpotDto(
+            @Schema(requiredMode = REQUIRED, description = "最熱的那台") InstanceResultDto hottest,
+            @Schema(requiredMode = REQUIRED, description = "其他台合起來（共用一條佇列）") InstanceResultDto others) {
+
+        static HotSpotDto from(HotSpot hotSpot) {
+            return hotSpot == null ? null
+                    : new HotSpotDto(InstanceResultDto.from(hotSpot.hottest()), InstanceResultDto.from(hotSpot.others()));
+        }
+    }
+
+    @Schema(name = "InstanceResult", description = "節點裡一部分機器的結果，欄位意義同 NodeResult；多台時是合起來的流量，ρ 是每台相同的使用率")
+    public record InstanceResultDto(
             @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
             @Schema(requiredMode = REQUIRED) double throughputRps,
             @Schema(requiredMode = REQUIRED) double droppedRps,
@@ -144,9 +156,9 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, nullable = true, description = "過載時為 null") Double avgLatencyMs,
             @Schema(requiredMode = REQUIRED) Status status) {
 
-        static ShardResultDto from(ShardResult shard) {
-            return new ShardResultDto(ClassRatesDto.from(shard.arrivalRps()), shard.throughputRps(),
-                    shard.droppedRps(), shard.utilization(), shard.avgLatencyMs(), shard.status());
+        static InstanceResultDto from(InstanceResult instance) {
+            return new InstanceResultDto(ClassRatesDto.from(instance.arrivalRps()), instance.throughputRps(),
+                    instance.droppedRps(), instance.utilization(), instance.avgLatencyMs(), instance.status());
         }
     }
 
@@ -182,19 +194,21 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, description = "dailyBytes × retentionDays") double totalBytes,
             @Schema(requiredMode = REQUIRED, description = "連到這個 Database 的 Read Replica 數") int replicas,
             @Schema(requiredMode = REQUIRED, description = "totalBytes × (1 + replicas)") double totalWithReplicasBytes,
-            @Schema(requiredMode = REQUIRED, description = "totalBytes ÷ shards（資料平均分布）") double perShardBytes,
-            @Schema(requiredMode = REQUIRED, nullable = true, description = "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard、沒有寫入或寫入量小到天數超出範圍時為 null")
+            @Schema(requiredMode = REQUIRED, description = "有 Read Replica 複製跟不上（REPLICATION_LAG），實際副本量會比 totalWithReplicasBytes 少")
+            boolean replicasLagging,
+            @Schema(requiredMode = REQUIRED, description = "totalBytes ÷ instances（資料平均分布）") double perInstanceBytes,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "每台機器的磁碟幾天後會滿；OBJECT_STORAGE、沒有設定 diskGbPerInstance、沒有寫入或寫入量小到天數超出範圍時為 null")
             Double daysUntilFull,
             @Schema(requiredMode = REQUIRED, description = "磁碟在保留期內就會滿（daysUntilFull < retentionDays）")
             boolean fillsDisk,
             @Schema(requiredMode = REQUIRED, description = "計算時用的 retentionDays") double retentionDays,
-            @Schema(requiredMode = REQUIRED, nullable = true, description = "計算時用的 diskGbPerShard，沒有設定時為 null")
-            Double diskGbPerShard) {
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "計算時用的 diskGbPerInstance，沒有設定時和 OBJECT_STORAGE 為 null")
+            Double diskGbPerInstance) {
 
         static StorageEstimateDto from(StorageEstimate estimate) {
             return new StorageEstimateDto(estimate.dailyBytes(), estimate.totalBytes(), estimate.replicas(),
-                    estimate.totalWithReplicasBytes(), estimate.perShardBytes(), estimate.daysUntilFull(),
-                    estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerShard());
+                    estimate.totalWithReplicasBytes(), estimate.replicasLagging(), estimate.perInstanceBytes(), estimate.daysUntilFull(),
+                    estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerInstance());
         }
     }
 

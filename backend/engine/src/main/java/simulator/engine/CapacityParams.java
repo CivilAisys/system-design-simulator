@@ -16,6 +16,11 @@ public record CapacityParams(int instances, int concurrency, double serviceTimeM
         return 1000.0 / serviceTimeMs;
     }
 
+    /** 同樣的每台參數，換成 {@code count} 台。 */
+    CapacityParams withInstances(int count) {
+        return new CapacityParams(count, concurrency, serviceTimeMs);
+    }
+
     /** Capacity（容量）c × μ：每秒最多能處理的請求數。 */
     public double capacityRps() {
         return workers() * serviceRate();

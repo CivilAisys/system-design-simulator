@@ -7,7 +7,7 @@ import java.util.List;
 import simulator.engine.Topology;
 import simulator.engine.TopologyFormatException;
 
-/** 拓撲的 JSON 格式，也是匯入／匯出的檔案格式。 */
+/** 拓撲的 JSON 格式，也是前端自動存檔的格式。 */
 @Schema(name = "Topology")
 public record TopologyDto(
         @Schema(requiredMode = REQUIRED, example = "1") Integer version,

@@ -41,9 +41,12 @@ type NodeKind = {
   idPrefix: string
   // spec 3.3 的預設值，涵蓋 numberParams 和 choiceParams 的每個參數
   defaults: NodeParams
-  // 屬性面板依序列出的參數，也是匯入時讀取的參數。有 shards 的 type 可以分片，另外有 hotShardShare（spec 4.2.2）；
-  // 有 retentionDays 的 type 估算儲存量，另外有 diskGbPerShard（spec 4.8）
+  // 屬性面板依序列出的參數，也是讀入存檔時讀取的參數。有 retentionDays 的 type 估算儲存量（spec 4.8）
   numberParams: NodeNumberParam[]
+  // 另外有沒有預設值的 diskGbPerInstance：每台機器的磁碟容量（Object Storage 由供應商負責，沒有）
+  hasDisk?: boolean
+  // 另外有沒有預設值的 hotShare：最熱那台的流量占比（spec 4.2.2）
+  hasHotShare?: boolean
   choiceParams: NodeChoiceParam[]
   // 能不能有上游／下游（spec 4.5），畫布上沒有對應的 handle
   hasInput: boolean
@@ -60,7 +63,7 @@ type NodeKind = {
 }
 
 const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
-// 儲存量估算（spec 4.8）；另外有沒有預設值的 diskGbPerShard
+// 儲存量估算（spec 4.8）；Database 另外有沒有預設值的 diskGbPerInstance
 const STORAGE_PARAMS: NodeNumberParam[] = ['bytesPerWrite', 'retentionDays']
 function storageDefaults(bytesPerWrite: number): NodeParams {
   return { bytesPerWrite, retentionDays: 365 }
@@ -133,8 +136,9 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     icon: Zap,
     category: 'DATA',
     idPrefix: 'cache',
-    defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, shards: 1 },
-    numberParams: [...CAPACITY_PARAMS, 'hitRatio', 'shards'],
+    defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, replicas: 0 },
+    numberParams: [...CAPACITY_PARAMS, 'hitRatio', 'replicas'],
+    hasHotShare: true,
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
@@ -154,7 +158,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
-    edgeParams: ['latencyMs'],
+    // 可以有多個下游，依 weight 分配（同 LB）
+    edgeParams: ['weight', 'latencyMs'],
     edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
@@ -164,8 +169,9 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     icon: Database,
     category: 'DATA',
     idPrefix: 'db',
-    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1, ...storageDefaults(1_000) },
-    numberParams: [...CAPACITY_PARAMS, 'shards', ...STORAGE_PARAMS],
+    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, ...storageDefaults(1_000) },
+    numberParams: [...CAPACITY_PARAMS, ...STORAGE_PARAMS],
+    hasDisk: true,
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
@@ -176,7 +182,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     outputTargets: ['READ_REPLICA'],
     nodeMetric: 'utilization',
   },
-  // primary 的唯讀副本：write 是 primary 複製過來的，read 由 Service 的 READ 邊送來；分片沿用 primary（spec 4.2.3）
+  // primary 的唯讀副本：write 是 primary 複製過來的，read 由 Service 的 READ 邊送來（spec 4.2.3）
   READ_REPLICA: {
     label: 'Read Replica',
     icon: DatabaseBackup,
@@ -272,8 +278,8 @@ export type PaletteItem = {
 
 // preset 放在它的 type 後面
 const PRESETS: PaletteItem[] = [
-  // Redis Cluster = 分片的 Cache（spec 4.2.2）
-  { id: 'REDIS_CLUSTER', type: 'CACHE', label: 'Redis Cluster', icon: Boxes, params: { shards: 3 } },
+  // Redis Cluster = 3 主 3 從的 Cache（spec 4.2.2）
+  { id: 'REDIS_CLUSTER', type: 'CACHE', label: 'Redis Cluster', icon: Boxes, params: { instances: 3, replicas: 1 } },
 ]
 
 export const PALETTE: PaletteItem[] = NODE_TYPES.flatMap((type) => {
@@ -339,7 +345,3 @@ export function isReplicationSource(type: NodeType): boolean {
   return NODE_KINDS[type].outputTargets?.includes('READ_REPLICA') ?? false
 }
 
-// 畫布上的分片數：Read Replica 沒有自己的 shards，沿用 primary 的（spec 4.2.3，Canvas 從連過來的 Database 算）
-export function shownShards(node: Node, mirroredShards: number | undefined): number {
-  return node.params.shards ?? mirroredShards ?? 1
-}

@@ -9,7 +9,7 @@ export type TopologyStorage = Pick<Storage, 'getItem' | 'setItem'>
 // 存檔讀不回來時是 error（第一個格式錯誤），畫布回到 fallback
 export type Restored = { topology: Topology; error: string | null }
 
-// 讀上次自動存的畫布，和匯入走同一套檢查。沒有存檔或瀏覽器不允許存取時直接用 fallback，不算錯誤
+// 讀上次自動存的畫布，和拓撲檔走同一套檢查。沒有存檔或瀏覽器不允許存取時直接用 fallback，不算錯誤
 export function restoreTopology(fallback: Topology, storage = browserStorage()): Restored {
   let text: string | null = null
   try {
@@ -24,7 +24,7 @@ export function restoreTopology(fallback: Topology, storage = browserStorage()):
   return parsed.ok ? { topology: parsed.topology, error: null } : { topology: fallback, error: parsed.errors[0] }
 }
 
-// 存成和匯出檔相同的內容
+// 存成第 5 節的 Request 格式
 export function saveTopology(topology: Topology, storage = browserStorage()) {
   try {
     storage?.setItem(STORAGE_KEY, serializeTopology(topology))

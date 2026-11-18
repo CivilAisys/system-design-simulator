@@ -1,16 +1,9 @@
-import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import { ChevronDown, Download, Loader2, Moon, Network, Play, Redo2, Sun, Undo2, Upload } from 'lucide-react'
+import { Loader2, Moon, Network, Play, Redo2, RotateCcw, Sun, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
@@ -25,9 +18,8 @@ import { findFreePosition } from '@/canvas/placement'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
 import { isAlerting } from '@/canvas/status'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
-import { EXAMPLES } from '@/examples'
 import { restoreTopology, saveTopology, type Restored } from '@/io/autosave'
-import { downloadTopology, parseTopology, serializeTopology } from '@/io/topologyFile'
+import { serializeTopology } from '@/io/topologyFile'
 import { cn } from '@/lib/utils'
 import { ResultsPanel } from '@/results/ResultsPanel'
 import { ResultsResizer } from '@/results/ResultsResizer'
@@ -58,7 +50,6 @@ function Simulator() {
     // 上一次的瓶頸通知會和 Run 失敗互相矛盾
     onError: bottleneck.clear,
   })
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [resultsHeight, setResultsHeight] = useResultsHeight()
   useEditShortcuts({ undo, redo, copy: editor.copy, paste: editor.paste })
   useAutosave(topology, restored)
@@ -69,7 +60,7 @@ function Simulator() {
     if (fitRequest > 0) void fitView({ duration: 300 })
   }, [fitRequest, fitView])
 
-  // 匯入和載入範例共用：換掉畫布，通知上可以復原
+  // 回到起始拓撲：換掉畫布，通知上可以復原
   function loadTopology(next: Topology, message: string) {
     const loadId = editor.load(next)
     resetForNewTopology()
@@ -81,7 +72,7 @@ function Simulator() {
     })
   }
 
-  // 整份拓撲換掉（匯入、載入範例，或復原／重做跨過它們）：清掉另一份拓撲的結果和通知，
+  // 整份拓撲換掉（回到起始拓撲，或復原／重做跨過它）：清掉另一份拓撲的結果和通知，
   // 把整張圖放進畫面；Auto-run 開啟時會自動 Run
   function resetForNewTopology() {
     reset()
@@ -89,7 +80,7 @@ function Simulator() {
     setFitRequest((n) => n + 1)
   }
 
-  // 復原或重做跨過了匯入、載入範例，那則通知上的「復原」已經不適用
+  // 復原或重做跨過了回到起始拓撲，那則通知上的「復原」已經不適用
   function travelledAcrossLoad() {
     resetForNewTopology()
     toast.dismiss(LOAD_TOAST)
@@ -109,32 +100,6 @@ function Simulator() {
     } else {
       toast.info('換掉之後又改過畫布，請用工具列的「復原」一步步回去')
     }
-  }
-
-  async function importFile(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget
-    const file = input.files?.[0]
-    // 清掉選取，同一個檔案改過之後可以再匯入一次
-    input.value = ''
-    if (!file) {
-      return
-    }
-    let text: string
-    try {
-      text = await file.text()
-    } catch {
-      toast.error(`匯入失敗：讀不到 ${file.name}`)
-      return
-    }
-    const parsed = parseTopology(text)
-    if (!parsed.ok) {
-      const [first, ...rest] = parsed.errors
-      toast.error(`匯入失敗：${file.name} 格式錯誤`, {
-        description: rest.length > 0 ? `${first}（另有 ${rest.length} 個錯誤）` : first,
-      })
-      return
-    }
-    loadTopology(parsed.topology, `已匯入 ${file.name}`)
   }
 
   // 點擊元件面板時放在目前畫面的中央；被占了就往外找最近的空位
@@ -224,43 +189,10 @@ function Simulator() {
               <Redo2 />
             </Button>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={importFile}
-          />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-            <Upload />
-            匯入
+          <Button variant="outline" size="sm" onClick={() => loadTopology(initialTopology, '已回到起始拓撲')}>
+            <RotateCcw />
+            起始拓撲
           </Button>
-          <Button variant="outline" size="sm" onClick={() => downloadTopology(topology)}>
-            <Download />
-            匯出
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                範例
-                <ChevronDown />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => loadTopology(initialTopology, '已回到起始拓撲')}>
-                起始拓撲
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {EXAMPLES.map((example) => (
-                <DropdownMenuItem
-                  key={example.id}
-                  onSelect={() => loadTopology(example.topology, `已載入範例「${example.label}」`)}
-                >
-                  {example.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
         <Button
           variant="outline"
@@ -384,7 +316,7 @@ function useAutosave(topology: Topology, restored: Restored) {
 
 const RESTORE_TOAST = 'restore'
 
-// 匯入、載入範例的通知，同一時間只留最新的一則
+// 回到起始拓撲的通知，同一時間只留最新的一則
 const LOAD_TOAST = 'load'
 const LOAD_TOAST_MS = 10_000
 

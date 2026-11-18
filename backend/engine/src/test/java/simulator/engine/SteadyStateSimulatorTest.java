@@ -279,11 +279,11 @@ class SteadyStateSimulatorTest {
         var params = new CapacityParams(1, concurrency, 10);
 
         // 儲存量估算的預設值不同（spec 4.8），比較時用同一組
-        var sizing = new StorageSizing(1_000, 30, 100.0);
+        var sizing = new StorageSizing(1_000, 30, null);
         SimulationResult objectStorage = runInto(new ObjectStorageNode("storage", "S3", NodeHealth.HEALTHY, params,
                 sizing));
         SimulationResult database = runInto(new DatabaseNode("storage", "DB", NodeHealth.HEALTHY, params,
-                ShardLayout.SINGLE, sizing));
+                sizing));
 
         assertThat(objectStorage.valid()).isTrue();
         assertThat(objectStorage).isEqualTo(database);

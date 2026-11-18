@@ -53,9 +53,11 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
             <TableRow key={node.id} className={cn(status === 'OVERLOADED' && 'bg-over-row')}>
               <TableCell className="font-semibold text-foreground">
                 {node.name}
-                {/* 分片的節點：ρ 和狀態是最熱的 shard，容量是所有 shard 的加總 */}
-                {metrics.shards && (
-                  <span className="ml-2 text-xs text-muted-foreground">{metrics.shards.length} shards</span>
+                {/* 有熱點的 Cache：ρ 和狀態是最熱的那台，容量是所有機器的加總 */}
+                {metrics.hotSpot && (
+                  <span className="ml-2 text-xs text-muted-foreground" title="ρ 和狀態是最熱的那台，容量是所有機器的加總">
+                    熱點
+                  </span>
                 )}
                 {node.id === bottleneckId && (
                   <Badge variant="outline" className="ml-2">

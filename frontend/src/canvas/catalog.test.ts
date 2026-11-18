@@ -43,12 +43,12 @@ describe('元件面板', () => {
     expect(grouped).toEqual(CATEGORIES.map((category) => category.id))
   })
 
-  it('Redis Cluster 是 shards = 3 的 Cache，其他參數用 Cache 的預設值', () => {
+  it('Redis Cluster 是 3 主 3 從的 Cache，其他參數用 Cache 的預設值', () => {
     const cluster = PALETTE.find((item) => item.id === 'REDIS_CLUSTER')!
     const node = newNode(cluster, new Set(['cache-1']), { x: 0, y: 0 })
 
     expect(node).toMatchObject({ id: 'cache-2', type: 'CACHE', name: 'Redis Cluster 2' })
-    expect(node.params).toEqual({ ...NODE_KINDS.CACHE.defaults, shards: 3 })
+    expect(node.params).toEqual({ ...NODE_KINDS.CACHE.defaults, instances: 3, replicas: 1 })
     for (const param of NODE_KINDS.CACHE.numberParams) {
       expect(checkNodeParam(node.params, param, node.params[param]!)).toBeNull()
     }

@@ -1,6 +1,5 @@
 package simulator.engine;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /** 單一節點的 M/M/c 穩態計算（spec 4.2）。 */
@@ -32,60 +31,41 @@ final class MmcQueue {
     }
 
     /**
-     * 分片的節點（spec 4.2.2）：每個 shard 各自是一個 M/M/c，只有「最熱的 shard」和「其他 shard」兩種流量。
-     * 節點的 ρ 和狀態取最熱的 shard，處理量和丟棄量加總，延遲依流量加權平均，任一有流量的 shard 過載時為 null。
-     * 只有一個 shard 時和沒有分片完全相同。
+     * 有熱點的 Cache（spec 4.2.2）：最熱的那台單獨是一個 M/M/c（c = concurrency），分到 {@code hotShare} 的流量；
+     * 其他 instances − 1 台共用一條佇列，處理剩下的流量。節點的 ρ 和狀態取 ρ 較高的一邊，處理量和丟棄量加總，
+     * 延遲依流量加權平均，任一邊有流量且過載時為 null。{@code hotShare} 為 null 時所有機器共用一條佇列；
+     * 有值時 instances 至少 2（TopologyValidator 檢查）。
      */
-    static Outcome solve(CapacityParams params, ShardLayout layout, ClassRates arrival) {
-        if (layout.count() == 1) {
+    static Outcome solve(CapacityParams params, Double hotShare, ClassRates arrival) {
+        if (hotShare == null) {
             return solve(params, arrival);
         }
-        return solve(params, layout.count(), arrival.times(layout.hottestShare()), arrival.times(layout.otherShare()));
-    }
-
-    /**
-     * 第一個 shard 收到 {@code first}、其他 {@code count - 1} 個 shard 各收到 {@code each}。
-     * Read Replica 用它：每個 shard 的複製寫入是 primary 對應 shard 處理完的寫入，不一定和 read 同比例（spec 4.2.3）。
-     * 節點的 ρ 和狀態取 ρ 較高的那一種 shard。
-     */
-    static Outcome solve(CapacityParams params, int count, ClassRates first, ClassRates each) {
-        int others = count - 1;
-        Outcome hot = solve(params, first);
-        Outcome other = solve(params, each);
+        Outcome hot = solve(params.withInstances(1), arrival.times(hotShare));
+        Outcome rest = solve(params.withInstances(params.instances() - 1), arrival.times(1 - hotShare));
         NodeResult h = hot.result();
-        NodeResult o = other.result();
-        ClassRates arrival = first.plus(each.times(others));
+        NodeResult o = rest.result();
         NodeResult busiest = o.utilization() > h.utilization() ? o : h;
-
-        ClassRates processed = hot.processed().plus(other.processed().times(others));
-        double lambda = arrival.total();
         double hotFlow = h.arrivalRps().total();
-        double otherFlow = o.arrivalRps().total() * others;
-        // 有流量的 shard 過載時，節點的穩態延遲沒有定義
-        boolean undefined = h.avgLatencyMs() == null || (otherFlow > 0 && o.avgLatencyMs() == null);
+        double otherFlow = o.arrivalRps().total();
+        double lambda = arrival.total();
+        // 有流量的那一邊過載時，節點的穩態延遲沒有定義
+        boolean undefined = (hotFlow > 0 && h.avgLatencyMs() == null) || (otherFlow > 0 && o.avgLatencyMs() == null);
         Double queueMs = undefined ? null : weighted(h.avgQueueMs(), hotFlow, o.avgQueueMs(), otherFlow, lambda);
         Double latencyMs = undefined ? null
                 : weighted(h.avgLatencyMs(), hotFlow, o.avgLatencyMs(), otherFlow, lambda);
+        var result = new NodeResult(arrival, h.throughputRps() + o.throughputRps(),
+                h.droppedRps() + o.droppedRps(), 0, null, null, params.capacityRps(), busiest.utilization(), queueMs,
+                latencyMs, busiest.status(), new HotSpot(InstanceResult.of(h), InstanceResult.of(o)), List.of());
+        return new Outcome(result, hot.processed().plus(rest.processed()));
+    }
 
-        List<ShardResult> shards = new ArrayList<>();
-        shards.add(shard(h));
-        for (int i = 0; i < others; i++) {
-            shards.add(shard(o));
+    /** 依流量加權平均；沒有流量時用最熱那台的值（等於處理時間）。 */
+    private static double weighted(Double hot, double hotFlow, Double other, double otherFlow, double total) {
+        if (total <= 0) {
+            return hot;
         }
-        var result = new NodeResult(arrival, h.throughputRps() + o.throughputRps() * others,
-                h.droppedRps() + o.droppedRps() * others, 0, null, null, params.capacityRps() * count,
-                busiest.utilization(), queueMs, latencyMs, busiest.status(), List.copyOf(shards), List.of());
-        return new Outcome(result, processed);
-    }
-
-    /** 依流量加權平均；沒有流量時用最熱 shard 的值（等於處理時間）。 */
-    private static double weighted(double hot, double hotFlow, double other, double otherFlow, double total) {
-        return total > 0 ? (hot * hotFlow + other * otherFlow) / total : hot;
-    }
-
-    private static ShardResult shard(NodeResult result) {
-        return new ShardResult(result.arrivalRps(), result.throughputRps(), result.droppedRps(), result.utilization(),
-                result.avgLatencyMs(), result.status());
+        double sum = hotFlow > 0 ? hot * hotFlow : 0;
+        return (sum + (otherFlow > 0 ? other * otherFlow : 0)) / total;
     }
 
     /**

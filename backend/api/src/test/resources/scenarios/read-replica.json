@@ -13,7 +13,7 @@
       "state": "HEALTHY",
       "ui": { "x": 520, "y": 110 } },
     { "id": "db-1", "type": "DATABASE", "name": "Primary",
-      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10, "shards": 1 },
+      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 },
       "state": "HEALTHY",
       "ui": { "x": 800, "y": 0 } },
     { "id": "lb-2", "type": "LOAD_BALANCER", "name": "Read LB",

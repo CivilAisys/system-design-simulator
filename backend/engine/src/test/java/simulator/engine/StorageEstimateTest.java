@@ -31,8 +31,8 @@ class StorageEstimateTest {
         return simulator.simulate(new Topology(nodes, edges));
     }
 
-    private static DatabaseNode db(CapacityParams capacity, int shards, StorageSizing sizing) {
-        return new DatabaseNode("db", "DB", NodeHealth.HEALTHY, capacity, new ShardLayout(shards, null), sizing);
+    private static DatabaseNode db(CapacityParams capacity, StorageSizing sizing) {
+        return new DatabaseNode("db", "DB", NodeHealth.HEALTHY, capacity, sizing);
     }
 
     private static ReadReplicaNode replica(String id) {
@@ -42,21 +42,22 @@ class StorageEstimateTest {
     @Test
     void dailyGrowthAndTotalFollowProcessedWrites() {
         // 100 write/s × 2 KB × 86400 = 17.28 GB/天，保留 30 天
-        SimulationResult result = run(db(AMPLE, 1, new StorageSizing(2_000, 30, null)));
+        SimulationResult result = run(db(AMPLE, new StorageSizing(2_000, 30, null)));
         StorageEstimate estimate = result.storage().get("db");
 
         assertThat(estimate.dailyBytes()).isCloseTo(100 * 2_000 * DAY, within(EPS));
         assertThat(estimate.totalBytes()).isCloseTo(100 * 2_000 * DAY * 30, within(EPS));
         assertThat(estimate.replicas()).isZero();
         assertThat(estimate.totalWithReplicasBytes()).isEqualTo(estimate.totalBytes());
-        assertThat(estimate.perShardBytes()).isEqualTo(estimate.totalBytes());
+        // AMPLE 是 10 台：資料平均分在每台
+        assertThat(estimate.perInstanceBytes()).isCloseTo(estimate.totalBytes() / 10, within(EPS));
         assertThat(estimate.daysUntilFull()).isNull();
         assertThat(estimate.fillsDisk()).isFalse();
     }
 
     @Test
     void replicasMultiplyTheStoredCopies() {
-        SimulationResult result = run(db(AMPLE, 1, new StorageSizing(2_000, 30, null)), replica("r1"), replica("r2"));
+        SimulationResult result = run(db(AMPLE, new StorageSizing(2_000, 30, null)), replica("r1"), replica("r2"));
         StorageEstimate estimate = result.storage().get("db");
 
         assertThat(estimate.replicas()).isEqualTo(2);
@@ -66,18 +67,37 @@ class StorageEstimateTest {
     }
 
     @Test
-    void shardsSplitDataEvenlyEvenWithAHotShard() {
-        var sharded = new DatabaseNode("db", "DB", NodeHealth.HEALTHY, AMPLE, new ShardLayout(4, 0.7),
-                new StorageSizing(2_000, 30, null));
-        StorageEstimate estimate = run(sharded).storage().get("db");
+    void eachInstanceStoresAnEqualShare() {
+        var four = new CapacityParams(4, 10_000, 1);
+        StorageEstimate estimate = run(db(four, new StorageSizing(2_000, 30, null))).storage().get("db");
 
-        assertThat(estimate.perShardBytes()).isCloseTo(estimate.totalBytes() / 4, within(EPS));
+        assertThat(estimate.perInstanceBytes()).isCloseTo(estimate.totalBytes() / 4, within(EPS));
     }
 
     @Test
-    void daysUntilDiskFullUseDailyGrowthPerShard() {
-        // 每 shard 每天 17.28 GB ÷ 2 = 8.64 GB；磁碟 100 GB → 約 11.57 天，保留 30 天內就會滿
-        StorageEstimate estimate = run(db(AMPLE, 2, new StorageSizing(2_000, 30, 100.0))).storage().get("db");
+    void laggingReplicaIsFlaggedButTotalsStayFull() {
+        // replica 容量 50 rps，複製寫入 100 rps 跟不上；另一個 replica 跟得上
+        var slow = new ReadReplicaNode("slow", "slow", NodeHealth.HEALTHY, new CapacityParams(1, 1, 20));
+        SimulationResult result = run(db(AMPLE, new StorageSizing(2_000, 30, null)), slow, replica("r2"));
+        StorageEstimate estimate = result.storage().get("db");
+
+        assertThat(result.nodes().get("slow").warnings()).contains(NodeWarning.REPLICATION_LAG);
+        assertThat(estimate.replicasLagging()).isTrue();
+        assertThat(estimate.totalWithReplicasBytes()).isCloseTo(estimate.totalBytes() * 3, within(EPS));
+    }
+
+    @Test
+    void replicasThatKeepUpAreNotFlagged() {
+        StorageEstimate estimate = run(db(AMPLE, new StorageSizing(2_000, 30, null)), replica("r1")).storage().get("db");
+
+        assertThat(estimate.replicasLagging()).isFalse();
+    }
+
+    @Test
+    void daysUntilDiskFullUseDailyGrowthPerInstance() {
+        // 2 台：每台每天 17.28 GB ÷ 2 = 8.64 GB；磁碟 100 GB → 約 11.57 天，保留 30 天內就會滿
+        var two = new CapacityParams(2, 10_000, 1);
+        StorageEstimate estimate = run(db(two, new StorageSizing(2_000, 30, 100.0))).storage().get("db");
 
         assertThat(estimate.daysUntilFull()).isCloseTo(100e9 / (100 * 2_000 * DAY / 2), within(1e-9));
         assertThat(estimate.fillsDisk()).isTrue();
@@ -85,8 +105,9 @@ class StorageEstimateTest {
 
     @Test
     void diskThatOutlastsRetentionDoesNotFill() {
-        // 每 shard 保留 30 天共 518.4 GB，磁碟 1 TB
-        StorageEstimate estimate = run(db(AMPLE, 1, new StorageSizing(2_000, 30, 1_000.0))).storage().get("db");
+        // 1 台保留 30 天共 518.4 GB，磁碟 1 TB
+        var one = new CapacityParams(1, 100_000, 1);
+        StorageEstimate estimate = run(db(one, new StorageSizing(2_000, 30, 1_000.0))).storage().get("db");
 
         assertThat(estimate.daysUntilFull()).isGreaterThan(30);
         assertThat(estimate.fillsDisk()).isFalse();
@@ -95,7 +116,7 @@ class StorageEstimateTest {
     @Test
     void droppedWritesAreNotStored() {
         // DB 容量 1 × 500 / 1000ms = 500 rps：λ = 1000（read 900、write 100）只處理一半，write 處理 50
-        StorageEstimate estimate = run(db(new CapacityParams(1, 500, 1000), 1, new StorageSizing(2_000, 30, null)))
+        StorageEstimate estimate = run(db(new CapacityParams(1, 500, 1000), new StorageSizing(2_000, 30, null)))
                 .storage().get("db");
 
         assertThat(estimate.dailyBytes()).isCloseTo(50 * 2_000 * DAY, within(EPS));
@@ -106,7 +127,7 @@ class StorageEstimateTest {
         SimulationResult result = simulator.simulate(new Topology(
                 List.of(new ClientNode("c", "Users", NodeHealth.HEALTHY, 1000, 1),
                         new ServiceNode("svc", "API", NodeHealth.HEALTHY, AMPLE, CallMode.SEQUENTIAL),
-                        db(AMPLE, 1, new StorageSizing(2_000, 30, 100.0))),
+                        db(AMPLE, new StorageSizing(2_000, 30, 100.0))),
                 List.of(new Edge("e1", "c", "svc", 1, 1, 0), new Edge("e2", "svc", "db", 1, 1, 0))));
         StorageEstimate estimate = result.storage().get("db");
 
@@ -118,7 +139,7 @@ class StorageEstimateTest {
     @Test
     void tinyWritesDoNotOverflowDaysUntilFull() {
         // 每天增加不到 1e-290 bytes：天數超過 double 的範圍
-        StorageEstimate estimate = run(db(AMPLE, 1, new StorageSizing(1e-300, 30, 1e9))).storage().get("db");
+        StorageEstimate estimate = run(db(AMPLE, new StorageSizing(1e-300, 30, 1e9))).storage().get("db");
 
         assertThat(estimate.daysUntilFull()).isNull();
         assertThat(estimate.fillsDisk()).isFalse();
@@ -126,10 +147,23 @@ class StorageEstimateTest {
 
     @Test
     void estimateCarriesTheSizingItUsed() {
-        StorageEstimate estimate = run(db(AMPLE, 1, new StorageSizing(2_000, 30, 100.0))).storage().get("db");
+        StorageEstimate estimate = run(db(AMPLE, new StorageSizing(2_000, 30, 100.0))).storage().get("db");
 
         assertThat(estimate.retentionDays()).isEqualTo(30);
-        assertThat(estimate.diskGbPerShard()).isEqualTo(100.0);
+        assertThat(estimate.diskGbPerInstance()).isEqualTo(100.0);
+    }
+
+    @Test
+    void objectStorageHasNoDiskToFill() {
+        // 容量由供應商負責：給了磁碟容量也不估算幾天後會滿
+        var sizing = new StorageSizing(2_000, 30, 1.0);
+        StorageEstimate estimate = run(new ObjectStorageNode("db", "S3", NodeHealth.HEALTHY, AMPLE, sizing))
+                .storage().get("db");
+
+        assertThat(estimate.diskGbPerInstance()).isNull();
+        assertThat(estimate.daysUntilFull()).isNull();
+        assertThat(estimate.fillsDisk()).isFalse();
+        assertThat(estimate.totalBytes()).isCloseTo(100 * 2_000 * DAY * 30, within(EPS));
     }
 
     @Test

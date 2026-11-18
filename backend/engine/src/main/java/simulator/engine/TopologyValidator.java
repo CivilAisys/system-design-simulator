@@ -27,13 +27,14 @@ final class TopologyValidator {
     static final double MAX_LATENCY_MS = 1e7;
     static final int MAX_CALLS_PER_REQUEST = 10_000;
     static final double MAX_WEIGHT = 1e6;
-    static final int MAX_SHARDS = 64;
     // 每個請求的回應、上傳大小或每次 write 新增的資料量（bytes），1 TB
     static final double MAX_BYTES = 1e12;
     static final double MAX_RETENTION_DAYS = 100_000;
-    // 每個 shard 的磁碟容量（GB），1 EB
+    // 每台機器的磁碟容量（GB），1 EB
     static final double MAX_DISK_GB = 1e9;
-    // hotShardShare 的下限 1/N 容許浮點誤差，前端 params.ts 用同一個值
+    // Cache 每個主的從節點數，只是標記
+    static final int MAX_REPLICAS = 5;
+    // hotShare 的下限 1/instances 容許浮點誤差，前端 params.ts 用同一個值
     static final double SHARE_TOLERANCE = 1e-12;
 
     private final Topology topology;
@@ -126,10 +127,10 @@ final class TopologyValidator {
         if ((TopologyGraph.splitsByWeight(node) || node instanceof MessageQueueNode) && downstream == 0) {
             nodeError(node, "NO_DOWNSTREAM", name + " 沒有下游，請求沒有地方送");
         }
-        // CDN 沿用 Cache 的錯誤碼，訊息用它自己的 type 名稱
-        if (node instanceof CachingNode && downstream != 1) {
-            nodeError(node, "CACHE_DOWNSTREAM_COUNT", (node instanceof CdnNode ? "CDN " : "Cache ") + name
-                    + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
+        // CDN 可以有多個下游（依 weight 分流），沒有下游時是上面的 NO_DOWNSTREAM
+        if (node instanceof CacheNode && downstream != 1) {
+            nodeError(node, "CACHE_DOWNSTREAM_COUNT", "Cache " + name + " 必須剛好連到一個下游，目前有 " + downstream
+                    + " 個");
         }
         if (node instanceof RateLimiterNode && downstream != 1) {
             nodeError(node, "RATE_LIMITER_DOWNSTREAM_COUNT",
@@ -196,11 +197,11 @@ final class TopologyValidator {
             case CachingNode cache -> {
                 checkCapacityParams(cache.capacityParams(), where, report);
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
-                checkShards(cache.shards(), where, report);
+                checkHotShare(cache, where, report);
+                requireBetween(cache.replicas(), 0, MAX_REPLICAS, where, "replicas", report);
             }
             case StorageNode storage -> {
                 checkCapacityParams(storage.capacityParams(), where, report);
-                checkShards(storage.shards(), where, report);
                 checkSizing(storage.sizing(), where, report);
             }
             case ReadReplicaNode replica -> checkCapacityParams(replica.capacityParams(), where, report);
@@ -227,22 +228,26 @@ final class TopologyValidator {
     private static void checkSizing(StorageSizing sizing, String where, Consumer<String> report) {
         requireBetween(sizing.bytesPerWrite(), 0, MAX_BYTES, where, "bytesPerWrite", report);
         requireBetween(sizing.retentionDays(), 0, MAX_RETENTION_DAYS, where, "retentionDays", report);
-        Double disk = sizing.diskGbPerShard();
+        Double disk = sizing.diskGbPerInstance();
         if (disk != null && !(disk > 0 && disk <= MAX_DISK_GB)) {
-            report.accept(invalid(where, "diskGbPerShard", "> 0 且 ≤ " + bound(MAX_DISK_GB), disk));
+            report.accept(invalid(where, "diskGbPerInstance", "> 0 且 ≤ " + bound(MAX_DISK_GB), disk));
         }
     }
 
-    /** instances × concurrency 的上限是對每個 shard 的限制，已經在 checkCapacityParams 檢查。 */
-    private static void checkShards(ShardLayout shards, String where, Consumer<String> report) {
-        if (shards.count() < 1 || shards.count() > MAX_SHARDS) {
-            report.accept(invalid(where, "shards", "介於 1 和 " + MAX_SHARDS + " 之間", shards.count()));
+    /**
+     * 熱點要有兩台以上才有「其他台」；最熱的那台至少分到平均值 1/instances，否則它就不是最熱的。
+     * instances 小於 1 時已經回報過，不再檢查。
+     */
+    private static void checkHotShare(CachingNode cache, String where, Consumer<String> report) {
+        Double hot = cache.hotShare();
+        int instances = cache.capacityParams().instances();
+        if (hot == null || instances < 1) {
             return;
         }
-        // 最熱的 shard 至少分到平均值 1/N，否則它就不是最熱的
-        Double hot = shards.hotShare();
-        if (hot != null && !(hot >= 1.0 / shards.count() - SHARE_TOLERANCE && hot <= 1)) {
-            report.accept(invalid(where, "hotShardShare", "介於 1/" + shards.count() + " 和 1 之間", hot));
+        if (instances < 2) {
+            report.accept(invalid(where, "instances", "≥ 2（設定了 hotShare）", instances));
+        } else if (!(hot >= 1.0 / instances - SHARE_TOLERANCE && hot <= 1)) {
+            report.accept(invalid(where, "hotShare", "介於 1/" + instances + " 和 1 之間", hot));
         }
     }
 

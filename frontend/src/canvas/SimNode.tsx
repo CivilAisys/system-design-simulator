@@ -1,13 +1,12 @@
 import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow/react'
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
-import { NODE_KINDS, shownShards } from './catalog'
+import { NODE_KINDS } from './catalog'
 import { CATEGORY_DOT } from './category'
 import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
-import { instanceRack } from './instanceRack'
+import { hotSpotTitle, instanceRack, rackSlotStatuses, replicaLabel } from './instanceRack'
 import { Rack } from './Rack'
-import { ShardGrid } from './ShardGrid'
 import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
 
@@ -18,19 +17,17 @@ export type SimNodeData = {
   errors?: string[]
   // 拓撲在上次 Run 之後改過，結果和錯誤可能已經不準
   stale?: boolean
-  // Read Replica 沒有自己的 shards，沿用 primary 的（spec 4.2.3），Canvas 從連過來的 Database 算
-  mirroredShards?: number
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
-  const { node, result, errors, stale, mirroredShards } = data
+  const { node, result, errors, stale } = data
   const { icon, category, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
-  const shards = shownShards(node, mirroredShards)
-  const rack = instanceRack(node, shards)
+  const rack = instanceRack(node)
+  const replicas = replicaLabel(node)
 
   return (
     <div
@@ -62,6 +59,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         <CategoryIcon icon={icon} category={category} />
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-semibold">{node.name}</div>
+          {replicas && <div className="text-[11px] text-muted-foreground">{replicas}</div>}
           {result && (
             <div className="mt-0.5 flex items-center justify-between gap-3 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -74,14 +72,19 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
             </div>
           )}
         </div>
-        {rack && <Rack rack={rack} status={status} stale={stale} />}
+        {rack && (
+          <Rack
+            slots={rackSlotStatuses(rack, status, result?.hotSpot)}
+            title={hotSpotTitle(rack, result?.hotSpot, stale)}
+            stale={stale}
+          />
+        )}
       </div>
       {result?.warnings.map((warning) => (
         <p key={warning} className="mt-1 text-xs font-semibold text-critical-ink" title={WARNING_TITLE[warning]}>
           ⚠ {WARNING_LABEL[warning]}
         </p>
       ))}
-      {shards > 1 && <ShardGrid count={shards} shards={result?.shards} stale={stale} />}
       {/* 畫在狀態外框之後，不被外框蓋住 */}
       {rack && (
         <span

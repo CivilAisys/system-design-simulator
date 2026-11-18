@@ -1,6 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { ComputedResult, Topology } from '@/api/client'
+import { NODE_KINDS } from '@/canvas/catalog'
 import { DASH, formatBytes, formatDays } from '@/canvas/format'
 
 type StorageTableProps = {
@@ -8,12 +9,14 @@ type StorageTableProps = {
   result: ComputedResult
 }
 
-// 容量估算（spec 4.8）：每個 Database、Object Storage 一列。磁碟會滿是另一種瓶頸，和 ρ 的瓶頸分開標示
+// 容量估算（spec 4.8）：每個 Database、Object Storage 一列。磁碟會滿是另一種瓶頸，和 ρ 的瓶頸分開標示。
+// Object Storage 的容量由供應商負責，只列增量和總量；沒有 Database 時不顯示磁碟那一欄
 export function StorageTable({ topology, result }: StorageTableProps) {
   const rows = topology.nodes.filter((node) => result.storage[node.id])
   if (rows.length === 0) {
     return <p className="p-4 text-sm text-muted-foreground">拓撲裡沒有 Database 或 Object Storage</p>
   }
+  const showDisk = rows.some((node) => NODE_KINDS[node.type].hasDisk)
 
   return (
     <Table>
@@ -29,12 +32,17 @@ export function StorageTable({ topology, result }: StorageTableProps) {
           <TableHead className="text-right" title="總量 × (1 + Read Replica 數)">
             含副本
           </TableHead>
-          <TableHead className="text-right" title="總量 ÷ shards，資料平均分布（熱點指的是流量）">
-            每 shard
+          <TableHead className="text-right" title="總量 ÷ instances，資料平均分布在每台機器上">
+            每台
           </TableHead>
-          <TableHead className="text-right" title="diskGbPerShard ÷ 每 shard 每日增量；沒有設定磁碟容量時不估算">
-            磁碟滿
-          </TableHead>
+          {showDisk && (
+            <TableHead
+              className="text-right"
+              title="diskGbPerInstance ÷ 每台每日增量；沒有設定磁碟容量時不估算，Object Storage 沒有磁碟容量"
+            >
+              磁碟滿
+            </TableHead>
+          )}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -42,6 +50,8 @@ export function StorageTable({ topology, result }: StorageTableProps) {
           const estimate = result.storage[node.id]
           // 過載時被丟棄的 write 不算進儲存量
           const overloaded = result.nodes[node.id]?.status === 'OVERLOADED'
+          // Object Storage 沒有副本、機器數和磁碟由供應商負責
+          const { hasDisk } = NODE_KINDS[node.type]
           return (
             <TableRow key={node.id}>
               <TableCell className="font-semibold text-foreground">
@@ -61,19 +71,31 @@ export function StorageTable({ topology, result }: StorageTableProps) {
                 <div className="text-xs text-muted-foreground">保留 {estimate.retentionDays.toLocaleString()} 天</div>
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatBytes(estimate.totalWithReplicasBytes)}
+                {hasDisk ? formatBytes(estimate.totalWithReplicasBytes) : DASH}
                 {estimate.replicas > 0 && (
                   <div className="text-xs text-muted-foreground">{estimate.replicas} 個 replica</div>
                 )}
+                {/* 數字照完整副本算，只加註記（spec 4.8） */}
+                {estimate.replicasLagging && (
+                  <div className="text-xs text-destructive">副本複製跟不上，實際副本量會比這少</div>
+                )}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatBytes(estimate.perShardBytes)}</TableCell>
-              <TableCell className={cn('text-right tabular-nums', estimate.fillsDisk && 'text-destructive')}>
-                <DiskCell
-                  daysUntilFull={estimate.daysUntilFull}
-                  diskGb={estimate.diskGbPerShard}
-                  fillsDisk={estimate.fillsDisk}
-                />
+              <TableCell className="text-right tabular-nums">
+                {hasDisk ? formatBytes(estimate.perInstanceBytes) : DASH}
               </TableCell>
+              {showDisk && (
+                <TableCell className={cn('text-right tabular-nums', estimate.fillsDisk && 'text-destructive')}>
+                  {hasDisk ? (
+                    <DiskCell
+                      daysUntilFull={estimate.daysUntilFull}
+                      diskGb={estimate.diskGbPerInstance}
+                      fillsDisk={estimate.fillsDisk}
+                    />
+                  ) : (
+                    DASH
+                  )}
+                </TableCell>
+              )}
             </TableRow>
           )
         })}
