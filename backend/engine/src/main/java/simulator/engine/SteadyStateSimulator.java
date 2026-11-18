@@ -191,13 +191,15 @@ public final class SteadyStateSimulator implements Simulator {
             }
             NodeResult result = nodeResults.get(node.id());
             StorageSizing sizing = storage.sizing();
-            int instances = storage.capacityParams().instances();
             double daily = processedWrites(result.arrivalRps(), result.throughputRps()) * sizing.bytesPerWrite()
                     * SECONDS_PER_DAY;
             double total = daily * sizing.retentionDays();
             int replicaCount = replicas.getOrDefault(node.id(), 0);
+            // 資料平均分布在處理流量的機器上
+            int instances = storage.capacityParams().instances();
+            double dailyPerInstance = daily / instances;
             Double daysUntilFull = sizing.diskGbPerInstance() == null ? null
-                    : finiteOrNull(sizing.diskGbPerInstance() * BYTES_PER_GB / (daily / instances));
+                    : finiteOrNull(sizing.diskGbPerInstance() * BYTES_PER_GB / dailyPerInstance);
             boolean fillsDisk = daysUntilFull != null && daysUntilFull < sizing.retentionDays();
             estimates.put(node.id(), new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
                     total / instances, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerInstance()));

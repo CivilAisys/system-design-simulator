@@ -86,8 +86,9 @@ class StorageEstimateTest {
 
     @Test
     void diskThatOutlastsRetentionDoesNotFill() {
-        // 保留 30 天共 518.4 GB，磁碟 1 TB
-        StorageEstimate estimate = run(db(AMPLE, new StorageSizing(2_000, 30, 1_000.0))).storage().get("db");
+        // 1 台保留 30 天共 518.4 GB，磁碟 1 TB
+        var one = new CapacityParams(1, 100_000, 1);
+        StorageEstimate estimate = run(db(one, new StorageSizing(2_000, 30, 1_000.0))).storage().get("db");
 
         assertThat(estimate.daysUntilFull()).isGreaterThan(30);
         assertThat(estimate.fillsDisk()).isFalse();

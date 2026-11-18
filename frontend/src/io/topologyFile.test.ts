@@ -200,6 +200,12 @@ describe('合法的檔案', () => {
       const { params } = topologyOf(file).nodes[4]
       expect(params.diskGbPerInstance).toBe(300)
       expect(params).not.toHaveProperty('diskGbPerShard')
+      expect(
+        errorsOf((f) => {
+          remove(f.nodes[4].params, 'diskGbPerInstance')
+          Object.assign(f.nodes[4].params, { diskGbPerShard: '1' })
+        }),
+      ).toEqual(['nodes[4]（id "db"）：params.diskGbPerShard 必須是數字（或數值太大）'])
     })
 
     it('不估算儲存量的 type 丟掉 diskGbPerInstance', () => {

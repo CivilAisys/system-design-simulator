@@ -173,7 +173,7 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
   },
   // 省略時不估算磁碟幾天後會滿，所以不在 NODE_KINDS 的 defaults 裡，在 PropertiesPanel 另外顯示
   diskGbPerInstance: {
-    label: '每台的磁碟容量',
+    label: '每台機器的磁碟容量',
     labelEn: 'diskGbPerInstance',
     unit: 'GB',
     optional: true,
