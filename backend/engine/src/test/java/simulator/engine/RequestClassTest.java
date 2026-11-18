@@ -19,7 +19,7 @@ class RequestClassTest {
     }
 
     /**
-     * Client（read 90%）→ Service ─READ→ replica、─WRITE→ primary、─ALL→ audit，邊的單程延遲各自不同。
+     * Client（read 90%）→ Service ─READ→ replica、─WRITE→ primary、─ALL→ audit，邊的往返延遲各自不同。
      * {@code primaryWorkers} 決定 primary 會不會過載。
      */
     private SimulationResult run(CallMode mode, int primaryWorkers) {
@@ -63,8 +63,8 @@ class RequestClassTest {
         double audit = result.nodes().get("audit").avgLatencyMs();
 
         ClassLatencies latencies = result.summary().avgEndToEndMs();
-        assertThat(latencies.read().ms()).isCloseTo(svc + (10 + replica) + (2 + audit), within(EPS));
-        assertThat(latencies.write().ms()).isCloseTo(svc + 2 * (40 + primary) + (2 + audit), within(EPS));
+        assertThat(latencies.read().ms()).isCloseTo(svc + (5 + replica) + (1 + audit), within(EPS));
+        assertThat(latencies.write().ms()).isCloseTo(svc + 2 * (20 + primary) + (1 + audit), within(EPS));
     }
 
     @Test

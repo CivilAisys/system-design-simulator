@@ -99,7 +99,7 @@ final class EndToEndLatencies {
                 continue;
             }
             approximate |= child.approximate();
-            double cost = visits * (edge.latencyMs() * 2 + child.ms());
+            double cost = visits * (edge.latencyMs() + child.ms());
             downstream = parallel ? Math.max(downstream, cost) : downstream + cost;
         }
         if (!overloaded.isEmpty()) {

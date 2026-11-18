@@ -64,7 +64,8 @@
           "latencyMs" : {
             "type" : "number",
             "format" : "double",
-            "default" : 1
+            "default" : 1,
+            "description" : "往返的網路延遲：送出請求到收到回應，在網路上花的時間"
           },
           "requestClass" : {
             "type" : "string",
