@@ -1,6 +1,6 @@
-import { Fragment, useId, type ReactNode } from 'react'
+import { Fragment, useId, type ReactNode, type Ref } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { Trash2 } from 'lucide-react'
+import { PanelRightOpen, Pin, PinOff, Trash2 } from 'lucide-react'
 import { totalRps, type EdgeResult, type NodeResult } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,6 +40,10 @@ type PropertiesPanelProps = {
   stale: boolean
   onUpdateNode: (id: string, patch: NodePatch) => void
   onUpdateEdge: (id: string, patch: EdgePatch) => void
+  // 釘住時固定在畫布右側；沒釘住時浮在畫布上（App 只在剛好選了一個時放出來）
+  pinned: boolean
+  onTogglePin: () => void
+  pinButtonRef?: Ref<HTMLButtonElement>
 }
 
 // 只在剛好選了一個 Node 或一條 Edge 時顯示它的參數
@@ -51,6 +55,9 @@ export function PropertiesPanel({
   stale,
   onUpdateNode,
   onUpdateEdge,
+  pinned,
+  onTogglePin,
+  pinButtonRef,
 }: PropertiesPanelProps) {
   const selectedNodes = nodes.filter((n) => n.selected)
   const selectedEdges = edges.filter((e) => e.selected)
@@ -79,9 +86,51 @@ export function PropertiesPanel({
   }
 
   return (
-    <aside aria-label="屬性" className="w-72 shrink-0 overflow-y-auto border-l p-4">
-      {content}
+    <aside
+      aria-label="屬性"
+      className={cn(
+        'flex w-72 shrink-0 flex-col',
+        pinned
+          ? 'border-l'
+          : // 浮在畫布右側、細條的左邊（App 的版面是 relative），上下留一點空隙，看得出是蓋在畫布上
+            'absolute top-2 right-11 bottom-2 z-30 overflow-hidden rounded-xl border bg-background shadow-2xl animate-in fade-in slide-in-from-right-2',
+      )}
+    >
+      <div className="flex items-center justify-between border-b py-1 pr-2 pl-4 text-xs font-medium text-muted-foreground">
+        屬性
+        <Button
+          ref={pinButtonRef}
+          variant="ghost"
+          size="icon-sm"
+          onClick={onTogglePin}
+          aria-label={pinned ? '取消釘選屬性面板' : '釘選屬性面板'}
+          title={pinned ? '取消釘選，選取時才浮出（]）' : '釘選屬性面板（]）'}
+        >
+          {pinned ? <Pin /> : <PinOff />}
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">{content}</div>
     </aside>
+  )
+}
+
+// 沒釘住時畫布右側留下的細條，按一下釘回去
+export function PropertiesRail({ onPin, buttonRef }: { onPin: () => void; buttonRef?: Ref<HTMLButtonElement> }) {
+  return (
+    <div className="flex w-9 shrink-0 flex-col items-center gap-2 border-l py-1">
+      <Button
+        ref={buttonRef}
+        variant="ghost"
+        size="icon-sm"
+        onClick={onPin}
+        aria-label="釘選屬性面板"
+        title="釘選屬性面板（]）"
+        className="text-muted-foreground"
+      >
+        <PanelRightOpen />
+      </Button>
+      <span className="text-xs text-muted-foreground [writing-mode:vertical-rl]">選取元件會浮出屬性</span>
+    </div>
   )
 }
 

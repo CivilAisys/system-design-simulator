@@ -1,4 +1,6 @@
 import { useEffect, useEffectEvent, useState } from 'react'
+import type { RpsFlowEdge } from './RpsEdge'
+import type { SimFlowNode } from './SimNode'
 
 // 存檔是 'true' / 'false'，其他內容（或讀不到）時用預設值
 export function parseStoredFlag(text: string | null, fallback: boolean): boolean {
@@ -62,4 +64,12 @@ export type ScrollFade = { top: boolean; bottom: boolean }
 // 捲動區上下還有沒露出來的內容時顯示漸層。留 1px 誤差，縮放後的小數像素不會讓漸層一直亮著
 export function scrollFade(scrollTop: number, clientHeight: number, scrollHeight: number): ScrollFade {
   return { top: scrollTop > 1, bottom: scrollTop + clientHeight < scrollHeight - 1 }
+}
+
+// 剛好選了一個 Node 或一條 Edge：屬性面板顯示它的參數，沒釘住時也只有這時才浮出
+export function hasSingleSelection(
+  nodes: Pick<SimFlowNode, 'selected'>[],
+  edges: Pick<RpsFlowEdge, 'selected'>[],
+): boolean {
+  return nodes.filter((n) => n.selected).length + edges.filter((e) => e.selected).length === 1
 }

@@ -15,7 +15,8 @@ import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
 import { findFreePosition } from '@/canvas/placement'
-import { PropertiesPanel } from '@/canvas/PropertiesPanel'
+import { hasSingleSelection, usePanelFlag, usePanelShortcut } from '@/canvas/panels'
+import { PropertiesPanel, PropertiesRail } from '@/canvas/PropertiesPanel'
 import { isAlerting } from '@/canvas/status'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
 import { restoreTopology, saveTopology, type Restored } from '@/io/autosave'
@@ -51,6 +52,13 @@ function Simulator() {
     onError: bottleneck.clear,
   })
   const [resultsHeight, setResultsHeight] = useResultsHeight()
+  // 屬性面板沒釘住時收成細條，剛好選了一個節點或一條邊才浮在畫布上
+  const [propertiesPinned, togglePropertiesPinned] = usePanelFlag('propertiesPinned', true)
+  usePanelShortcut({ key: ']', code: 'BracketRight' }, togglePropertiesPinned)
+  const propertiesFloating = !propertiesPinned && hasSingleSelection(editor.nodes, editor.edges)
+  // 通知和畫布右緣的距離：浮出的面板蓋住畫布右側時，通知移到它的左邊
+  const toastRight = TOAST_GAP + (propertiesFloating ? FLOATING_PANEL_INSET : 0)
+  const pinButton = useRefocusAfterToggle(propertiesPinned)
   useEditShortcuts({ undo, redo, copy: editor.copy, paste: editor.paste })
   useAutosave(topology, restored)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
@@ -204,18 +212,21 @@ function Simulator() {
           {theme === 'dark' ? <Sun /> : <Moon />}
         </Button>
       </header>
-      <SidebarProvider className="min-h-0 flex-1">
+      {/* relative：沒釘住的屬性面板以這裡為準，浮在畫布右側 */}
+      <SidebarProvider className="relative min-h-0 flex-1">
         <Palette onAdd={addAtCenter} />
         <main ref={canvasRef} className="relative min-w-0 flex-1">
           {/* 通知放在畫布右上角：sonner 預設 fixed 貼著視窗，會蓋住屬性面板和工具列，
               改成 absolute 跟著畫布（結果面板拉高時也留在畫布裡）。
-              sonner 的寬度固定 356px，畫布窄時縮成畫布寬度，不往左蓋到元件面板 */}
+              sonner 的寬度固定 356px，畫布窄時縮成剩下的寬度，不往左蓋到元件面板 */}
           <Toaster
             theme={theme}
             position="top-right"
-            offset={16}
+            offset={{ top: TOAST_GAP, right: toastRight }}
+            // 視窗窄於 600px 時 sonner 改用 mobileOffset
+            mobileOffset={{ top: TOAST_GAP, right: toastRight }}
             closeButton
-            style={{ position: 'absolute', width: 'min(356px, calc(100% - 32px))' }}
+            style={{ position: 'absolute', width: `min(356px, calc(100% - ${toastRight + TOAST_GAP}px))` }}
             toastOptions={{ style: { width: '100%' } }}
           />
           <Canvas
@@ -231,15 +242,24 @@ function Simulator() {
             onAddNode={editor.addNode}
           />
         </main>
-        <PropertiesPanel
-          nodes={editor.nodes}
-          edges={editor.edges}
-          nodeResults={result?.nodes}
-          edgeResults={result?.edges}
-          stale={stale}
-          onUpdateNode={editor.updateNode}
-          onUpdateEdge={editor.updateEdge}
-        />
+        {/* 細條在前、面板在後，切換釘選時面板還是同一個元素，焦點留在釘選按鈕上 */}
+        {!propertiesPinned && (
+          <PropertiesRail onPin={pinButton.wrap(togglePropertiesPinned)} buttonRef={pinButton.railRef} />
+        )}
+        {(propertiesPinned || propertiesFloating) && (
+          <PropertiesPanel
+            nodes={editor.nodes}
+            edges={editor.edges}
+            nodeResults={result?.nodes}
+            edgeResults={result?.edges}
+            stale={stale}
+            onUpdateNode={editor.updateNode}
+            onUpdateEdge={editor.updateEdge}
+            pinned={propertiesPinned}
+            onTogglePin={pinButton.wrap(togglePropertiesPinned)}
+            pinButtonRef={pinButton.panelRef}
+          />
+        )}
       </SidebarProvider>
       <ResultsResizer panelId="results" height={resultsHeight} onResize={setResultsHeight} />
       {/* max-height 用比例：視窗縮小時畫布也不會被擠到看不見 */}
@@ -260,6 +280,27 @@ function Simulator() {
       </section>
     </div>
   )
+}
+
+// 用按鈕切換釘選時，按鈕所在的細條或面板可能跟著消失，焦點會掉到 body。
+// 這時把焦點交給現在看得到的那個釘選按鈕，鍵盤使用者不必從頭 Tab 回來
+function useRefocusAfterToggle(pinned: boolean) {
+  const panelRef = useRef<HTMLButtonElement>(null)
+  const railRef = useRef<HTMLButtonElement>(null)
+  const pending = useRef(false)
+  useEffect(() => {
+    if (!pending.current) return
+    pending.current = false
+    if (document.activeElement == null || document.activeElement === document.body) {
+      const button = pinned ? panelRef.current : railRef.current
+      button?.focus()
+    }
+  }, [pinned])
+  const wrap = (toggle: () => void) => () => {
+    pending.current = true
+    toggle()
+  }
+  return { panelRef, railRef, wrap }
 }
 
 type EditActions = { undo: () => void; redo: () => void; copy: () => void; paste: () => boolean }
@@ -315,6 +356,11 @@ function useAutosave(topology: Topology, restored: Restored) {
     }
   }, [restored])
 }
+
+// 通知和畫布邊緣的距離
+const TOAST_GAP = 16
+// 浮出的屬性面板占掉畫布右側的寬度：離細條 8px（right-11 減去細條的 w-9）加上面板的 w-72
+const FLOATING_PANEL_INSET = 8 + 288
 
 const RESTORE_TOAST = 'restore'
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseStoredFlag, scrollFade } from './panels'
+import { hasSingleSelection, parseStoredFlag, scrollFade } from './panels'
 
 describe('parseStoredFlag', () => {
   it('讀回存的狀態', () => {
@@ -28,5 +28,17 @@ describe('scrollFade', () => {
 
   it('捲到底時下方漸層消失，容許 1px 的小數誤差', () => {
     expect(scrollFade(199.5, 300, 500)).toEqual({ top: true, bottom: false })
+  })
+})
+
+describe('hasSingleSelection', () => {
+  it('剛好選了一個節點或一條邊', () => {
+    expect(hasSingleSelection([{ selected: true }, { selected: false }], [])).toBe(true)
+    expect(hasSingleSelection([{}], [{ selected: true }])).toBe(true)
+  })
+
+  it('沒選取或選了多個時不算', () => {
+    expect(hasSingleSelection([{}], [{}])).toBe(false)
+    expect(hasSingleSelection([{ selected: true }], [{ selected: true }])).toBe(false)
   })
 })
