@@ -129,6 +129,8 @@ export function Canvas({
       deleteKeyCode={['Backspace', 'Delete']}
       colorMode={colorMode}
       fitView
+      // 預設 0.5 太大，節點離很遠時 fit view 框不住全部
+      minZoom={0.1}
       proOptions={{ hideAttribution: true }}
     >
       {/* 點陣格線，顏色在 index.css 跟著主題 */}
