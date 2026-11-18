@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
-import { workersHint } from './instanceRack'
+import { hotShareHint, workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
 import { ParamLabel } from './ParamLabel'
 import {
@@ -141,6 +141,12 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
             <>
               <p className="-mt-3 text-xs text-muted-foreground">
                 {workersHint(instances, nodeParam(node.params, 'concurrency'))}
+                {node.params.hotShare !== undefined && (
+                  <>
+                    <br />
+                    {hotShareHint(node.params.hotShare)}
+                  </>
+                )}
               </p>
               {hotShareField}
             </>
