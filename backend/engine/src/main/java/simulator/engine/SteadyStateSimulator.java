@@ -2,9 +2,11 @@ package simulator.engine;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 階段一的穩態計算：先驗證拓撲（有錯誤就不計算），每個節點視為 M/M/c，依拓撲排序由上游往下游計算流量，
@@ -179,9 +181,14 @@ public final class SteadyStateSimulator implements Simulator {
     private static Map<String, StorageEstimate> estimateStorage(Topology topology, TopologyGraph graph,
             Map<String, NodeResult> nodeResults) {
         Map<String, Integer> replicas = new HashMap<>();
+        Set<String> lagging = new HashSet<>();
         for (Node node : topology.nodes()) {
             if (node instanceof ReadReplicaNode) {
-                replicas.merge(graph.primaryOf(node.id()).id(), 1, Integer::sum);
+                String primary = graph.primaryOf(node.id()).id();
+                replicas.merge(primary, 1, Integer::sum);
+                if (nodeResults.get(node.id()).warnings().contains(NodeWarning.REPLICATION_LAG)) {
+                    lagging.add(primary);
+                }
             }
         }
         Map<String, StorageEstimate> estimates = new LinkedHashMap<>();
@@ -202,7 +209,7 @@ public final class SteadyStateSimulator implements Simulator {
                     : finiteOrNull(sizing.diskGbPerInstance() * BYTES_PER_GB / dailyPerInstance);
             boolean fillsDisk = daysUntilFull != null && daysUntilFull < sizing.retentionDays();
             estimates.put(node.id(), new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
-                    total / instances, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerInstance()));
+                    lagging.contains(node.id()), total / instances, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerInstance()));
         }
         return estimates;
     }

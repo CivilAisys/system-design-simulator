@@ -503,6 +503,10 @@
             "format" : "double",
             "description" : "totalBytes × (1 + replicas)"
           },
+          "replicasLagging" : {
+            "type" : "boolean",
+            "description" : "有 Read Replica 複製跟不上（REPLICATION_LAG），實際副本量會比 totalWithReplicasBytes 少"
+          },
           "perInstanceBytes" : {
             "type" : "number",
             "format" : "double",
@@ -528,7 +532,7 @@
             "description" : "計算時用的 diskGbPerInstance，沒有設定時和 OBJECT_STORAGE 為 null"
           }
         },
-        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerInstance", "fillsDisk", "perInstanceBytes", "replicas", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
+        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerInstance", "fillsDisk", "perInstanceBytes", "replicas", "replicasLagging", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
       },
       "Summary" : {
         "type" : "object",

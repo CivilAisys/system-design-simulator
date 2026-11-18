@@ -75,6 +75,10 @@ export function StorageTable({ topology, result }: StorageTableProps) {
                 {estimate.replicas > 0 && (
                   <div className="text-xs text-muted-foreground">{estimate.replicas} 個 replica</div>
                 )}
+                {/* 數字照完整副本算，只加註記（spec 4.8） */}
+                {estimate.replicasLagging && (
+                  <div className="text-xs text-destructive">副本複製跟不上，實際副本量會比這少</div>
+                )}
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {hasDisk ? formatBytes(estimate.perInstanceBytes) : DASH}
