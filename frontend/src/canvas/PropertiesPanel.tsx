@@ -162,29 +162,29 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
       ))}
       {/* 磁碟容量選填：沒設定時不估算磁碟幾天後會滿（spec 4.8） */}
       {numberParams.includes('retentionDays') &&
-        (node.params.diskGbPerShard === undefined ? (
+        (node.params.diskGbPerInstance === undefined ? (
           <Button
             variant="link"
             size="sm"
             className="h-auto justify-start p-0 text-xs"
-            onClick={() => onUpdate(node.id, { params: { diskGbPerShard: NEW_DISK_GB } })}
+            onClick={() => onUpdate(node.id, { params: { diskGbPerInstance: NEW_DISK_GB } })}
           >
             設定磁碟容量，估算幾天後會滿
           </Button>
         ) : (
           <div className="grid gap-1">
             <NumberField
-              spec={NODE_PARAM_SPECS.diskGbPerShard}
-              value={node.params.diskGbPerShard}
-              check={(value) => checkNodeParam(node.params, 'diskGbPerShard', value)}
-              onChange={(value) => onUpdate(node.id, { params: { diskGbPerShard: value } })}
+              spec={NODE_PARAM_SPECS.diskGbPerInstance}
+              value={node.params.diskGbPerInstance}
+              check={(value) => checkNodeParam(node.params, 'diskGbPerInstance', value)}
+              onChange={(value) => onUpdate(node.id, { params: { diskGbPerInstance: value } })}
             />
             <div className="flex justify-end text-xs">
               <Button
                 variant="link"
                 size="sm"
                 className="h-auto shrink-0 p-0 text-xs"
-                onClick={() => onUpdate(node.id, { clearParams: ['diskGbPerShard'] })}
+                onClick={() => onUpdate(node.id, { clearParams: ['diskGbPerInstance'] })}
               >
                 不估算
               </Button>

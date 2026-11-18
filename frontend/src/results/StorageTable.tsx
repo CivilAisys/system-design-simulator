@@ -29,10 +29,10 @@ export function StorageTable({ topology, result }: StorageTableProps) {
           <TableHead className="text-right" title="總量 × (1 + Read Replica 數)">
             含副本
           </TableHead>
-          <TableHead className="text-right" title="總量 ÷ shards，資料平均分布（熱點指的是流量）">
-            每 shard
+          <TableHead className="text-right" title="總量 ÷ instances，資料平均分布在每台機器上">
+            每台
           </TableHead>
-          <TableHead className="text-right" title="diskGbPerShard ÷ 每 shard 每日增量；沒有設定磁碟容量時不估算">
+          <TableHead className="text-right" title="diskGbPerInstance ÷ 每台每日增量；沒有設定磁碟容量時不估算">
             磁碟滿
           </TableHead>
         </TableRow>
@@ -66,11 +66,11 @@ export function StorageTable({ topology, result }: StorageTableProps) {
                   <div className="text-xs text-muted-foreground">{estimate.replicas} 個 replica</div>
                 )}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatBytes(estimate.perShardBytes)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatBytes(estimate.perInstanceBytes)}</TableCell>
               <TableCell className={cn('text-right tabular-nums', estimate.fillsDisk && 'text-destructive')}>
                 <DiskCell
                   daysUntilFull={estimate.daysUntilFull}
-                  diskGb={estimate.diskGbPerShard}
+                  diskGb={estimate.diskGbPerInstance}
                   fillsDisk={estimate.fillsDisk}
                 />
               </TableCell>

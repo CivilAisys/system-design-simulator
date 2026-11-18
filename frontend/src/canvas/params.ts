@@ -17,7 +17,7 @@ export type NodeNumberParam =
   | 'replicas'
   | 'bytesPerWrite'
   | 'retentionDays'
-  | 'diskGbPerShard'
+  | 'diskGbPerInstance'
 export type NodeChoiceParam = 'callMode'
 export type EdgeNumberParam = keyof Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs'>
 export type EdgeChoiceParam = 'requestClass'
@@ -172,9 +172,9 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
     slider: { min: 1, max: 36_500, scale: 'log' },
   },
   // 省略時不估算磁碟幾天後會滿，所以不在 NODE_KINDS 的 defaults 裡，在 PropertiesPanel 另外顯示
-  diskGbPerShard: {
-    label: '每個分片的磁碟容量',
-    labelEn: 'diskGbPerShard',
+  diskGbPerInstance: {
+    label: '每台的磁碟容量',
+    labelEn: 'diskGbPerInstance',
     unit: 'GB',
     optional: true,
     min: 0,

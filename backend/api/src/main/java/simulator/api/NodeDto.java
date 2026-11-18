@@ -64,10 +64,10 @@ public record NodeDto(
                 require(params.serviceTimeMs(), "serviceTimeMs"));
     }
 
-    /** 省略的欄位用該 type 的預設值；{@code diskGbPerShard} 省略時不估算磁碟幾天後會滿。 */
+    /** 省略的欄位用該 type 的預設值；{@code diskGbPerInstance} 省略時不估算磁碟幾天後會滿。 */
     private StorageSizing sizing(StorageSizing defaults) {
         return new StorageSizing(orDefault(params.bytesPerWrite(), defaults.bytesPerWrite()),
-                orDefault(params.retentionDays(), defaults.retentionDays()), params.diskGbPerShard());
+                orDefault(params.retentionDays(), defaults.retentionDays()), params.diskGbPerInstance());
     }
 
     private static double orDefault(Double value, double fallback) {

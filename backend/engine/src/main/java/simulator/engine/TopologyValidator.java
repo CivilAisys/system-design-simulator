@@ -30,7 +30,7 @@ final class TopologyValidator {
     // 每個請求的回應、上傳大小或每次 write 新增的資料量（bytes），1 TB
     static final double MAX_BYTES = 1e12;
     static final double MAX_RETENTION_DAYS = 100_000;
-    // 每個 shard 的磁碟容量（GB），1 EB
+    // 每台機器的磁碟容量（GB），1 EB
     static final double MAX_DISK_GB = 1e9;
     // Cache 每個主的從節點數，只是標記
     static final int MAX_REPLICAS = 5;
@@ -228,9 +228,9 @@ final class TopologyValidator {
     private static void checkSizing(StorageSizing sizing, String where, Consumer<String> report) {
         requireBetween(sizing.bytesPerWrite(), 0, MAX_BYTES, where, "bytesPerWrite", report);
         requireBetween(sizing.retentionDays(), 0, MAX_RETENTION_DAYS, where, "retentionDays", report);
-        Double disk = sizing.diskGbPerShard();
+        Double disk = sizing.diskGbPerInstance();
         if (disk != null && !(disk > 0 && disk <= MAX_DISK_GB)) {
-            report.accept(invalid(where, "diskGbPerShard", "> 0 且 ≤ " + bound(MAX_DISK_GB), disk));
+            report.accept(invalid(where, "diskGbPerInstance", "> 0 且 ≤ " + bound(MAX_DISK_GB), disk));
         }
     }
 

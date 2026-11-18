@@ -28,8 +28,8 @@ public record NodeParamsDto(
         Double bytesPerWrite,
         @Schema(description = "DATABASE, OBJECT_STORAGE：資料保留天數，只用來估算儲存量，省略時為 365")
         Double retentionDays,
-        @Schema(description = "DATABASE, OBJECT_STORAGE：每個 shard 的磁碟容量（GB），省略時不估算磁碟幾天後會滿")
-        Double diskGbPerShard) {
+        @Schema(description = "DATABASE, OBJECT_STORAGE：每台機器的磁碟容量（GB），省略時不估算磁碟幾天後會滿")
+        Double diskGbPerInstance) {
 
     // 有 M/M/c 處理能力參數的 type
     static final String CAPACITY_TYPES =
