@@ -36,13 +36,27 @@ function itemsOf(category: (typeof CATEGORIES)[number]) {
 // 展開時列出名稱，收合時只剩依類別分組的圖示列，畫布多出空間。按上方的按鈕或 [ 切換
 export function Palette({ onAdd }: PaletteProps) {
   const [open, toggle] = usePanelFlag('paletteOpen', true)
-  usePanelShortcut('[', toggle)
+  usePanelShortcut({ key: '[', code: 'BracketLeft' }, toggle)
+
+  // 展開和收合的切換按鈕是不同的元素，用按鈕切換後把焦點交給新的按鈕，鍵盤使用者不必從頭 Tab 回來
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  const refocusToggle = useRef(false)
+  useEffect(() => {
+    if (refocusToggle.current) {
+      refocusToggle.current = false
+      toggleRef.current?.focus()
+    }
+  }, [open])
 
   const toggleButton = (
     <Button
+      ref={toggleRef}
       variant="ghost"
       size="icon-sm"
-      onClick={toggle}
+      onClick={() => {
+        refocusToggle.current = true
+        toggle()
+      }}
       aria-label={open ? '收合元件面板' : '展開元件面板'}
       title={open ? '收合元件面板（[）' : '展開元件面板（[）'}
       className="text-muted-foreground"

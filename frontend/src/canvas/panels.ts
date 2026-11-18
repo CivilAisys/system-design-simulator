@@ -31,10 +31,14 @@ export function usePanelFlag(key: string, fallback: boolean) {
   return [value, toggle] as const
 }
 
-// 按單一按鍵（例如 [ ）切換面板。焦點在輸入框或下拉選單裡時，按鍵是給它們的
-export function usePanelShortcut(key: string, onToggle: () => void) {
+// 按單一按鍵（例如 [ ）切換面板。焦點在輸入框或下拉選單裡時，按鍵是給它們的。
+// 注音等輸入法開著時 key 可能變成「「」，所以實體按鍵（code）對上也算。按住不放不連續切換
+export function usePanelShortcut(shortcut: { key: string; code: string }, onToggle: () => void) {
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (event.key !== key || event.ctrlKey || event.metaKey || event.altKey) {
+    if (event.key !== shortcut.key && event.code !== shortcut.code) {
+      return
+    }
+    if (event.repeat || event.isComposing || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
       return
     }
     const target = event.target
