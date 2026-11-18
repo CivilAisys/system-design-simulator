@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
-import { hotShareHint, workersHint } from './instanceRack'
+import { hotShareHint, replicasHint, workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
 import { ParamLabel } from './ParamLabel'
 import {
@@ -84,6 +84,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
   const utilization = result?.utilization ?? null
   const status = result?.status ?? null
 
+  const replicas = replicasHint(node)
   // 多台的 Cache 才有熱點：沒設定時所有機器共用一條佇列。緊接在 instances 後面顯示（spec 4.2.2）
   const instances = nodeParam(node.params, 'instances')
   const hotShareField =
@@ -141,6 +142,12 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
             <>
               <p className="-mt-3 text-xs text-muted-foreground">
                 {workersHint(instances, nodeParam(node.params, 'concurrency'))}
+                {replicas && (
+                  <>
+                    <br />
+                    {replicas}
+                  </>
+                )}
                 {node.params.hotShare !== undefined && (
                   <>
                     <br />

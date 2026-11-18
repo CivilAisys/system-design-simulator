@@ -134,8 +134,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     icon: Zap,
     category: 'DATA',
     idPrefix: 'cache',
-    defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8 },
-    numberParams: [...CAPACITY_PARAMS, 'hitRatio'],
+    defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, replicas: 0 },
+    numberParams: [...CAPACITY_PARAMS, 'hitRatio', 'replicas'],
     hasHotShare: true,
     choiceParams: [],
     hasInput: true,
@@ -274,8 +274,8 @@ export type PaletteItem = {
 
 // preset 放在它的 type 後面
 const PRESETS: PaletteItem[] = [
-  // Redis Cluster = 3 台的 Cache（spec 4.2.2）
-  { id: 'REDIS_CLUSTER', type: 'CACHE', label: 'Redis Cluster', icon: Boxes, params: { instances: 3 } },
+  // Redis Cluster = 3 主 3 從的 Cache（spec 4.2.2）
+  { id: 'REDIS_CLUSTER', type: 'CACHE', label: 'Redis Cluster', icon: Boxes, params: { instances: 3, replicas: 1 } },
 ]
 
 export const PALETTE: PaletteItem[] = NODE_TYPES.flatMap((type) => {
