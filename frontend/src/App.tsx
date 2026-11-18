@@ -16,6 +16,7 @@ import { initialTopology } from '@/canvas/initialTopology'
 import { Palette } from '@/canvas/Palette'
 import { findFreePosition } from '@/canvas/placement'
 import { PropertiesPanel } from '@/canvas/PropertiesPanel'
+import { PanelLayoutPrototype } from '@/prototype/PanelLayoutPrototype'
 import { isAlerting } from '@/canvas/status'
 import { useTopologyEditor } from '@/canvas/useTopologyEditor'
 import { restoreTopology, saveTopology, type Restored } from '@/io/autosave'
@@ -132,6 +133,10 @@ function Simulator() {
     void fitView({ nodes: ids.map((id) => ({ id })), duration: 300, maxZoom: 1.5 })
   }
 
+  const selectedNodeCount = editor.nodes.filter((n) => n.selected).length
+  const selectedEdgeCount = editor.edges.filter((e) => e.selected).length
+  const hasSingleSelection = selectedNodeCount + selectedEdgeCount === 1
+
   const invalidCount = result && !result.valid ? result.errors.length : 0
   const message = error ?? (invalidCount > 0 ? `拓撲有 ${invalidCount} 個驗證錯誤，見「錯誤」分頁` : null)
 
@@ -204,8 +209,13 @@ function Simulator() {
           {theme === 'dark' ? <Sun /> : <Moon />}
         </Button>
       </header>
+      {/* PROTOTYPE：側邊面板收合，見 src/prototype/PanelLayoutPrototype.tsx */}
       <SidebarProvider className="min-h-0 flex-1">
-        <Palette onAdd={addAtCenter} />
+        <PanelLayoutPrototype
+          onAdd={addAtCenter}
+          hasSelection={hasSingleSelection}
+          palette={<Palette onAdd={addAtCenter} />}
+          canvas={
         <main ref={canvasRef} className="relative min-w-0 flex-1">
           {/* 通知放在畫布右上角：sonner 預設 fixed 貼著視窗，會蓋住屬性面板和工具列，
               改成 absolute 跟著畫布（結果面板拉高時也留在畫布裡）。
@@ -231,12 +241,16 @@ function Simulator() {
             onAddNode={editor.addNode}
           />
         </main>
+          }
+          properties={
         <PropertiesPanel
           nodes={editor.nodes}
           edges={editor.edges}
           nodeResults={result?.nodes}
           onUpdateNode={editor.updateNode}
           onUpdateEdge={editor.updateEdge}
+        />
+          }
         />
       </SidebarProvider>
       <ResultsResizer panelId="results" height={resultsHeight} onResize={setResultsHeight} />
