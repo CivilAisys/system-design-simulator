@@ -140,7 +140,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           {param === 'instances' && (
             <>
               <p className="-mt-3 text-xs text-muted-foreground">
-                {workersHint(instances, nodeParam(node.params, 'concurrency'))}
+                {workersHint(instances, nodeParam(node.params, 'concurrency'), node.params.hotShare)}
               </p>
               {hotShareField}
             </>

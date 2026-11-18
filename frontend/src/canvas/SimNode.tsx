@@ -5,7 +5,7 @@ import { NODE_KINDS } from './catalog'
 import { CATEGORY_DOT } from './category'
 import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
-import { instanceRack } from './instanceRack'
+import { hotSpotTitle, instanceRack, rackSlotStatuses } from './instanceRack'
 import { Rack } from './Rack'
 import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
@@ -70,7 +70,13 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
             </div>
           )}
         </div>
-        {rack && <Rack rack={rack} status={status} stale={stale} />}
+        {rack && (
+          <Rack
+            slots={rackSlotStatuses(rack, status, result?.hotSpot)}
+            title={hotSpotTitle(result?.hotSpot, node.params.instances ?? 1)}
+            stale={stale}
+          />
+        )}
       </div>
       {result?.warnings.map((warning) => (
         <p key={warning} className="mt-1 text-xs font-semibold text-critical-ink" title={WARNING_TITLE[warning]}>
