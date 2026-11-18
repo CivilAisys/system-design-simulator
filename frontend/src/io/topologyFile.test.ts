@@ -48,7 +48,7 @@ function validFile() {
           serviceTimeMs: 10,
           bytesPerWrite: 2_000,
           retentionDays: 30,
-          diskGbPerShard: 500,
+          diskGbPerInstance: 500,
         },
         ui: { x: 900, y: 100 },
       },
@@ -181,22 +181,38 @@ describe('合法的檔案', () => {
       expect(nodes[5].params.instances).toBe(6)
     })
 
-    it('儲存量參數省略時用預設值，diskGbPerShard 不補，代表不估算磁碟', () => {
+    it('儲存量參數省略時用預設值，diskGbPerInstance 不補，代表不估算磁碟', () => {
       const file = validFile()
-      for (const param of ['bytesPerWrite', 'retentionDays', 'diskGbPerShard']) {
+      for (const param of ['bytesPerWrite', 'retentionDays', 'diskGbPerInstance']) {
         remove(file.nodes[4].params, param)
       }
 
       const { params } = topologyOf(file).nodes[4]
       expect(params).toMatchObject({ bytesPerWrite: 1_000, retentionDays: 365 })
-      expect(params).not.toHaveProperty('diskGbPerShard')
+      expect(params).not.toHaveProperty('diskGbPerInstance')
     })
 
-    it('不估算儲存量的 type 丟掉 diskGbPerShard', () => {
+    it('0.6.0 之前的 diskGbPerShard 改名成 diskGbPerInstance，數值不變', () => {
       const file = validFile()
-      Object.assign(file.nodes[3].params, { diskGbPerShard: 100 })
+      remove(file.nodes[4].params, 'diskGbPerInstance')
+      Object.assign(file.nodes[4].params, { diskGbPerShard: 300 })
 
-      expect(topologyOf(file).nodes[3].params).not.toHaveProperty('diskGbPerShard')
+      const { params } = topologyOf(file).nodes[4]
+      expect(params.diskGbPerInstance).toBe(300)
+      expect(params).not.toHaveProperty('diskGbPerShard')
+      expect(
+        errorsOf((f) => {
+          remove(f.nodes[4].params, 'diskGbPerInstance')
+          Object.assign(f.nodes[4].params, { diskGbPerShard: '1' })
+        }),
+      ).toEqual(['nodes[4]（id "db"）：params.diskGbPerShard 必須是數字（或數值太大）'])
+    })
+
+    it('不估算儲存量的 type 丟掉 diskGbPerInstance', () => {
+      const file = validFile()
+      Object.assign(file.nodes[3].params, { diskGbPerInstance: 100 })
+
+      expect(topologyOf(file).nodes[3].params).not.toHaveProperty('diskGbPerInstance')
     })
 
     it('沒有熱點的 type 丟掉 hotShare', () => {
@@ -210,8 +226,8 @@ describe('合法的檔案', () => {
       expect(errorsOf((f) => void Object.assign(f.nodes[3].params, { hotShare: null }))).toEqual([
         'nodes[3]（id "cache"）：params.hotShare 必須是數字（或數值太大）',
       ])
-      expect(errorsOf((f) => void Object.assign(f.nodes[4].params, { diskGbPerShard: '1' }))).toEqual([
-        'nodes[4]（id "db"）：params.diskGbPerShard 必須是數字（或數值太大）',
+      expect(errorsOf((f) => void Object.assign(f.nodes[4].params, { diskGbPerInstance: '1' }))).toEqual([
+        'nodes[4]（id "db"）：params.diskGbPerInstance 必須是數字（或數值太大）',
       ])
     })
   })

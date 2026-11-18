@@ -174,7 +174,7 @@ public final class SteadyStateSimulator implements Simulator {
 
     /**
      * 儲存量估算（spec 4.8）：每日增量 = 處理完的 write × bytesPerWrite × 86,400，總量 = 每日增量 × retentionDays，
-     * 含副本 = 總量 × (1 + Read Replica 數)。每 shard 的用量在 #112 改成每台之前等於總量。
+     * 含副本 = 總量 × (1 + Read Replica 數)，每台 = 總量 ÷ instances（資料平均分布在處理流量的機器上）。
      */
     private static Map<String, StorageEstimate> estimateStorage(Topology topology, TopologyGraph graph,
             Map<String, NodeResult> nodeResults) {
@@ -195,11 +195,14 @@ public final class SteadyStateSimulator implements Simulator {
                     * SECONDS_PER_DAY;
             double total = daily * sizing.retentionDays();
             int replicaCount = replicas.getOrDefault(node.id(), 0);
-            Double daysUntilFull = sizing.diskGbPerShard() == null ? null
-                    : finiteOrNull(sizing.diskGbPerShard() * BYTES_PER_GB / daily);
+            // 資料平均分布在處理流量的機器上
+            int instances = storage.capacityParams().instances();
+            double dailyPerInstance = daily / instances;
+            Double daysUntilFull = sizing.diskGbPerInstance() == null ? null
+                    : finiteOrNull(sizing.diskGbPerInstance() * BYTES_PER_GB / dailyPerInstance);
             boolean fillsDisk = daysUntilFull != null && daysUntilFull < sizing.retentionDays();
             estimates.put(node.id(), new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
-                    total, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerShard()));
+                    total / instances, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerInstance()));
         }
         return estimates;
     }

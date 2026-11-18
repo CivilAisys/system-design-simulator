@@ -396,7 +396,7 @@ class SimulateEndpointTest {
 
     @Test
     void omittedStorageSizingUsesDefaults() throws Exception {
-        // straight-topology.json 的 Database 沒有 bytesPerWrite、retentionDays、diskGbPerShard：1000 bytes、365 天、不估磁碟
+        // straight-topology.json 的 Database 沒有 bytesPerWrite、retentionDays、diskGbPerInstance：1000 bytes、365 天、不估磁碟
         JsonNode body = mapper.readTree(postTopology(straightTopology())
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString());
@@ -404,7 +404,7 @@ class SimulateEndpointTest {
         JsonNode storage = body.at("/storage/db-1");
         assertThat(fieldNames(body.get("storage"))).containsExactly("db-1");
         assertThat(fieldNames(storage)).containsExactlyInAnyOrder("dailyBytes", "totalBytes", "replicas",
-                "totalWithReplicasBytes", "perShardBytes", "daysUntilFull", "fillsDisk", "retentionDays", "diskGbPerShard");
+                "totalWithReplicasBytes", "perInstanceBytes", "daysUntilFull", "fillsDisk", "retentionDays", "diskGbPerInstance");
         assertThat(storage.get("dailyBytes").asDouble()).isCloseTo(100 * 1_000 * 86_400.0, within(1e-3));
         assertThat(storage.get("totalBytes").asDouble()).isCloseTo(100 * 1_000 * 86_400.0 * 365, within(1.0));
         assertThat(storage.get("daysUntilFull").isNull()).isTrue();
@@ -415,7 +415,7 @@ class SimulateEndpointTest {
         ObjectNode topology = straightTopology();
         set(topology, "/nodes/2/params/bytesPerWrite", mapper.getNodeFactory().numberNode(500));
         set(topology, "/nodes/2/params/retentionDays", mapper.getNodeFactory().numberNode(10));
-        set(topology, "/nodes/2/params/diskGbPerShard", mapper.getNodeFactory().numberNode(1));
+        set(topology, "/nodes/2/params/diskGbPerInstance", mapper.getNodeFactory().numberNode(1));
 
         JsonNode storage = mapper.readTree(postTopology(topology)
                 .andExpect(status().isOk())

@@ -161,12 +161,15 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     kept.hotShare = params.hotShare
   }
   // 省略時不估算磁碟幾天後會滿，同樣沒有預設值可以補
-  if (kind.numberParams.includes('retentionDays') && params.diskGbPerShard !== undefined) {
-    if (!isFiniteNumber(params.diskGbPerShard)) {
-      fail('params.diskGbPerShard 必須是數字（或數值太大）')
+  // 0.6.0 之前的存檔叫 diskGbPerShard，數值不變
+  const diskKey = params.diskGbPerInstance === undefined ? 'diskGbPerShard' : 'diskGbPerInstance'
+  const diskGb = params[diskKey]
+  if (kind.numberParams.includes('retentionDays') && diskGb !== undefined) {
+    if (!isFiniteNumber(diskGb)) {
+      fail(`params.${diskKey} 必須是數字（或數值太大）`)
       return null
     }
-    kept.diskGbPerShard = params.diskGbPerShard
+    kept.diskGbPerInstance = diskGb
   }
   for (const param of kind.choiceParams) {
     const spec = NODE_CHOICE_SPECS[param]

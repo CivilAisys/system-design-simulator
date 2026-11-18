@@ -184,10 +184,10 @@
             "format" : "double",
             "description" : "DATABASE, OBJECT_STORAGE：資料保留天數，只用來估算儲存量，省略時為 365"
           },
-          "diskGbPerShard" : {
+          "diskGbPerInstance" : {
             "type" : "number",
             "format" : "double",
-            "description" : "DATABASE, OBJECT_STORAGE：每個 shard 的磁碟容量（GB），省略時不估算磁碟幾天後會滿"
+            "description" : "DATABASE, OBJECT_STORAGE：每台機器的磁碟容量（GB），省略時不估算磁碟幾天後會滿"
           }
         }
       },
@@ -503,15 +503,15 @@
             "format" : "double",
             "description" : "totalBytes × (1 + replicas)"
           },
-          "perShardBytes" : {
+          "perInstanceBytes" : {
             "type" : "number",
             "format" : "double",
-            "description" : "totalBytes ÷ shards（資料平均分布）"
+            "description" : "totalBytes ÷ instances（資料平均分布）"
           },
           "daysUntilFull" : {
             "type" : [ "number", "null" ],
             "format" : "double",
-            "description" : "每個 shard 的磁碟幾天後會滿；沒有設定 diskGbPerShard、沒有寫入或寫入量小到天數超出範圍時為 null"
+            "description" : "每台機器的磁碟幾天後會滿；沒有設定 diskGbPerInstance、沒有寫入或寫入量小到天數超出範圍時為 null"
           },
           "fillsDisk" : {
             "type" : "boolean",
@@ -522,13 +522,13 @@
             "format" : "double",
             "description" : "計算時用的 retentionDays"
           },
-          "diskGbPerShard" : {
+          "diskGbPerInstance" : {
             "type" : [ "number", "null" ],
             "format" : "double",
-            "description" : "計算時用的 diskGbPerShard，沒有設定時為 null"
+            "description" : "計算時用的 diskGbPerInstance，沒有設定時為 null"
           }
         },
-        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerShard", "fillsDisk", "perShardBytes", "replicas", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
+        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerInstance", "fillsDisk", "perInstanceBytes", "replicas", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
       },
       "Summary" : {
         "type" : "object",

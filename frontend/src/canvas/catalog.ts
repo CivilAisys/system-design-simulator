@@ -41,7 +41,7 @@ type NodeKind = {
   idPrefix: string
   // spec 3.3 的預設值，涵蓋 numberParams 和 choiceParams 的每個參數
   defaults: NodeParams
-  // 屬性面板依序列出的參數，也是讀入存檔時讀取的參數。有 retentionDays 的 type 估算儲存量，另外有 diskGbPerShard（spec 4.8）
+  // 屬性面板依序列出的參數，也是讀入存檔時讀取的參數。有 retentionDays 的 type 估算儲存量，另外有 diskGbPerInstance（spec 4.8）
   numberParams: NodeNumberParam[]
   // 另外有沒有預設值的 hotShare：最熱那台的流量占比（spec 4.2.2）
   hasHotShare?: boolean
@@ -61,7 +61,7 @@ type NodeKind = {
 }
 
 const CAPACITY_PARAMS: NodeNumberParam[] = ['instances', 'concurrency', 'serviceTimeMs']
-// 儲存量估算（spec 4.8）；另外有沒有預設值的 diskGbPerShard
+// 儲存量估算（spec 4.8）；另外有沒有預設值的 diskGbPerInstance
 const STORAGE_PARAMS: NodeNumberParam[] = ['bytesPerWrite', 'retentionDays']
 function storageDefaults(bytesPerWrite: number): NodeParams {
   return { bytesPerWrite, retentionDays: 365 }

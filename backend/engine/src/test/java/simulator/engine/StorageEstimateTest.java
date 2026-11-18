@@ -49,7 +49,8 @@ class StorageEstimateTest {
         assertThat(estimate.totalBytes()).isCloseTo(100 * 2_000 * DAY * 30, within(EPS));
         assertThat(estimate.replicas()).isZero();
         assertThat(estimate.totalWithReplicasBytes()).isEqualTo(estimate.totalBytes());
-        assertThat(estimate.perShardBytes()).isEqualTo(estimate.totalBytes());
+        // AMPLE 是 10 台：資料平均分在每台
+        assertThat(estimate.perInstanceBytes()).isCloseTo(estimate.totalBytes() / 10, within(EPS));
         assertThat(estimate.daysUntilFull()).isNull();
         assertThat(estimate.fillsDisk()).isFalse();
     }
@@ -66,18 +67,28 @@ class StorageEstimateTest {
     }
 
     @Test
-    void daysUntilDiskFullUseDailyGrowth() {
-        // 每天 17.28 GB；磁碟 100 GB → 約 5.79 天，保留 30 天內就會滿
-        StorageEstimate estimate = run(db(AMPLE, new StorageSizing(2_000, 30, 100.0))).storage().get("db");
+    void eachInstanceStoresAnEqualShare() {
+        var four = new CapacityParams(4, 10_000, 1);
+        StorageEstimate estimate = run(db(four, new StorageSizing(2_000, 30, null))).storage().get("db");
 
-        assertThat(estimate.daysUntilFull()).isCloseTo(100e9 / (100 * 2_000 * DAY), within(1e-9));
+        assertThat(estimate.perInstanceBytes()).isCloseTo(estimate.totalBytes() / 4, within(EPS));
+    }
+
+    @Test
+    void daysUntilDiskFullUseDailyGrowthPerInstance() {
+        // 2 台：每台每天 17.28 GB ÷ 2 = 8.64 GB；磁碟 100 GB → 約 11.57 天，保留 30 天內就會滿
+        var two = new CapacityParams(2, 10_000, 1);
+        StorageEstimate estimate = run(db(two, new StorageSizing(2_000, 30, 100.0))).storage().get("db");
+
+        assertThat(estimate.daysUntilFull()).isCloseTo(100e9 / (100 * 2_000 * DAY / 2), within(1e-9));
         assertThat(estimate.fillsDisk()).isTrue();
     }
 
     @Test
     void diskThatOutlastsRetentionDoesNotFill() {
-        // 每 shard 保留 30 天共 518.4 GB，磁碟 1 TB
-        StorageEstimate estimate = run(db(AMPLE, new StorageSizing(2_000, 30, 1_000.0))).storage().get("db");
+        // 1 台保留 30 天共 518.4 GB，磁碟 1 TB
+        var one = new CapacityParams(1, 100_000, 1);
+        StorageEstimate estimate = run(db(one, new StorageSizing(2_000, 30, 1_000.0))).storage().get("db");
 
         assertThat(estimate.daysUntilFull()).isGreaterThan(30);
         assertThat(estimate.fillsDisk()).isFalse();
@@ -120,7 +131,7 @@ class StorageEstimateTest {
         StorageEstimate estimate = run(db(AMPLE, new StorageSizing(2_000, 30, 100.0))).storage().get("db");
 
         assertThat(estimate.retentionDays()).isEqualTo(30);
-        assertThat(estimate.diskGbPerShard()).isEqualTo(100.0);
+        assertThat(estimate.diskGbPerInstance()).isEqualTo(100.0);
     }
 
     @Test
