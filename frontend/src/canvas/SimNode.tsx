@@ -73,7 +73,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         {rack && (
           <Rack
             slots={rackSlotStatuses(rack, status, result?.hotSpot)}
-            title={hotSpotTitle(result?.hotSpot, node.params.instances ?? 1)}
+            title={hotSpotTitle(rack, result?.hotSpot, stale)}
             stale={stale}
           />
         )}

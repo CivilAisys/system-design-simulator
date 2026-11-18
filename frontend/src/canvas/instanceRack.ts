@@ -7,6 +7,7 @@ export const MAX_RACK_SLOTS = 5
 
 // 多台機器的節點在畫布上的機櫃：一台一條槽（最多 MAX_RACK_SLOTS 條），標籤是實際台數
 export type InstanceRack = {
+  instances: number
   slots: number
   label: string
 }
@@ -17,7 +18,7 @@ export function instanceRack(node: Node): InstanceRack | null {
   if (!NODE_KINDS[node.type].numberParams.includes('instances') || instances < 2) {
     return null
   }
-  return { slots: Math.min(instances, MAX_RACK_SLOTS), label: `×${withCommas(instances)}` }
+  return { instances, slots: Math.min(instances, MAX_RACK_SLOTS), label: `×${withCommas(instances)}` }
 }
 
 // 每條槽的狀態色：有熱點的 Cache 第一條是最熱的那台，其他條是其他台（spec 4.2.2）；沒有熱點時都是節點的狀態。
@@ -32,27 +33,37 @@ export function rackSlotStatuses(
   )
 }
 
-// 滑鼠移到機櫃上的提示：最熱的那台和其他台各自的指標。沒有熱點時不提示，指標和節點相同
-export function hotSpotTitle(hotSpot: HotSpot | null | undefined, instances: number): string | undefined {
+// 滑鼠移到機櫃上的提示：最熱的那台和其他台各自的指標。沒有熱點時不提示，指標和節點相同。
+// 過期時台數可能已經改了，和指標對不上，同 errorsTitle 先註明
+export function hotSpotTitle(
+  rack: InstanceRack,
+  hotSpot: HotSpot | null | undefined,
+  stale: boolean | undefined,
+): string | undefined {
   if (!hotSpot) {
     return undefined
   }
-  const others = `其他 ${withCommas(instances - 1)} 台`
-  return [instanceLine('最熱那台', hotSpot.hottest), instanceLine(others, hotSpot.others)].join('\n')
+  const others = `其他 ${withCommas(rack.instances - 1)} 台`
+  const lines = [instanceLine('最熱那台', hotSpot.hottest), instanceLine(others, hotSpot.others)]
+  return (stale ? ['（結果已過期，按 Run 重新計算）', ...lines] : lines).join('\n')
 }
 
 function instanceLine(name: string, result: InstanceResult): string {
-  const latency = result.avgLatencyMs == null ? '過載，無定義' : formatMs(result.avgLatencyMs)
+  const latency = result.avgLatencyMs == null ? '過載，穩態延遲無定義' : formatMs(result.avgLatencyMs)
   const arrival = formatRps(totalRps(result.arrivalRps))
   const rho = formatUtilization(result.utilization)
   return `${name}：到達率 ${arrival}・ρ ${rho}・延遲 ${latency}・丟棄 ${formatRps(result.droppedRps)}`
 }
 
-// 屬性面板機器數下方的提示；有熱點時加上最熱那台分到的比例
-export function workersHint(instances: number, concurrency: number, hotShare?: number): string {
+// 屬性面板機器數下方的提示
+export function workersHint(instances: number, concurrency: number): string {
   const workers = withCommas(instances * concurrency)
-  const total = `共 ${withCommas(instances)} 台 × ${withCommas(concurrency)} 並行 ＝ ${workers} 個 worker`
-  return hotShare === undefined ? total : `${total}，最熱那台分到 ${formatPercent(hotShare)}`
+  return `共 ${withCommas(instances)} 台 × ${withCommas(concurrency)} 並行 ＝ ${workers} 個 worker`
+}
+
+// 有熱點時 workersHint 下面再一行
+export function hotShareHint(hotShare: number): string {
+  return `最熱那台分到 ${formatPercent(hotShare)}`
 }
 
 // 台數和 worker 數加千分位（instances × concurrency 最多 1,000,000）
