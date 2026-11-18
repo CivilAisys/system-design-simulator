@@ -3,8 +3,7 @@ import type { EdgeChoiceParam, EdgeNumberParam, NodeChoiceParam, NodeNumberParam
 
 // 屬性面板參數名稱後面 ⓘ 的內容：這個參數的值大概多少才合理。只是建議，不影響驗證和 Run（spec 6）
 export type ParamGuide = {
-  // 有實值的參數才有（例如 serviceTimeMs）；看情境（rps）或比例、結構（weight）的參數沒有。
-  // 超出時欄位下方顯示黃字提示
+  // 有實值的參數才有（例如 serviceTimeMs）；看情境（rps）或比例、結構（weight）的參數沒有
   range?: { min: number; max: number }
   note: string
   example?: string
@@ -301,8 +300,8 @@ export function edgeParamGuide(source: NodeType, target: NodeType, param: EdgePa
   return EDGE_TARGET_GUIDES[target]?.[param] ?? guides[param]
 }
 
-// tooltip 第一行和超出範圍提示用的範圍文字，例如「10–200 ms」「1 KB–1 MB」「0.5–0.99」
-export function formatGuideRange({ min, max }: { min: number; max: number }, unit: string | undefined): string {
+// tooltip 第一行的範圍文字，例如「10–200 ms」「1 KB–1 MB」「0.5–0.99」
+export function formatGuideRange({ min, max }: NonNullable<ParamGuide['range']>, unit: string | undefined): string {
   if (unit === 'bytes') {
     return `${formatByteSize(min)}–${formatByteSize(max)}`
   }
