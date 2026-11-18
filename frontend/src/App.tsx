@@ -235,6 +235,8 @@ function Simulator() {
           nodes={editor.nodes}
           edges={editor.edges}
           nodeResults={result?.nodes}
+          edgeResults={result?.edges}
+          stale={stale}
           onUpdateNode={editor.updateNode}
           onUpdateEdge={editor.updateEdge}
         />

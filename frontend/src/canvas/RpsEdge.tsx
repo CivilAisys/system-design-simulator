@@ -2,6 +2,7 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  useStoreApi,
   type EdgeProps,
   type Edge as FlowEdge,
 } from '@xyflow/react'
@@ -10,7 +11,7 @@ import { cn } from '@/lib/utils'
 import type { EdgeKind } from './catalog'
 import { edgeStyle } from './edgeStyle'
 import { particles } from './flow'
-import { formatBytesPerSec, formatRps } from './format'
+import { classRatesTitle, formatBytesPerSec, formatRps } from './format'
 
 export type RpsEdgeData = {
   edge: Edge
@@ -31,6 +32,7 @@ export type RpsEdgeData = {
 export type RpsFlowEdge = FlowEdge<RpsEdgeData, 'rps'> & { data: RpsEdgeData }
 
 export function RpsEdge({
+  id,
   sourceX,
   sourceY,
   targetX,
@@ -45,6 +47,7 @@ export function RpsEdge({
   const { kind = 'SYNC', classTag, result, flow, errors, stale } = data
   // 過期的結果不播動畫：流量可能已經不是這樣
   const moving = flow != null && !stale ? particles(flow) : null
+  const store = useStoreApi()
 
   return (
     <>
@@ -70,12 +73,18 @@ export function RpsEdge({
         <EdgeLabelRenderer>
           <div
             className={cn(
-              'nodrag nopan pointer-events-none absolute border border-input bg-card px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-secondary-foreground',
+              // 不加 nopan：有結果時標籤接收滑鼠事件，從標籤上拖曳照樣能平移畫布
+              'nodrag absolute border border-input bg-card px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-secondary-foreground',
               // 只有一行時是膠囊，多了積壓、頻寬的第二行就改成圓角矩形
               result?.backlogRps || result?.bandwidth ? 'rounded-xl' : 'rounded-full',
+              // 有結果時要能 hover 看 read／write 拆分；沒有時讓點擊穿過標籤落到邊上
+              result ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none',
               stale && 'opacity-50',
             )}
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+            title={result && classRatesTitle(result.rps, stale)}
+            // 標籤擋住了底下的邊，點標籤時照樣選取這條邊
+            onClick={result && (() => store.getState().addSelectedEdges([id]))}
           >
             {classTag && <span className={cn('font-bold text-foreground', result && 'mr-1')}>{classTag}</span>}
             {result && formatRps(totalRps(result.rps))}
