@@ -104,9 +104,24 @@ function PaletteRail({ onAdd }: { onAdd: (item: PaletteItem) => void }) {
     event.dataTransfer.setData(PALETTE_ITEM_MIME, item.id)
     event.dataTransfer.effectAllowed = 'copy'
   }
+  // 捲軸隱藏（48px 寬放不下，會壓在圖示上），改用上下的淡出提示還有沒捲到的元件
+  const [fade, setFade] = useState({ top: false, bottom: false })
+  function updateFade(el: HTMLElement | null) {
+    if (!el) return
+    const top = el.scrollTop > 1
+    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+    if (top !== fade.top || bottom !== fade.bottom) setFade({ top, bottom })
+  }
   return (
     <TooltipProvider>
-    <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto py-2">
+    <div className="relative flex min-h-0 w-full flex-1 flex-col">
+    {fade.top && <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-sidebar to-transparent" />}
+    {fade.bottom && <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-6 bg-gradient-to-t from-sidebar to-transparent" />}
+    <div
+      ref={updateFade}
+      onScroll={(event) => updateFade(event.currentTarget)}
+      className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {CATEGORIES.map((category, i) => (
         <Fragment key={category.id}>
           {i > 0 && <div className="my-1 h-px w-6 shrink-0 bg-border" />}
@@ -130,6 +145,7 @@ function PaletteRail({ onAdd }: { onAdd: (item: PaletteItem) => void }) {
           ))}
         </Fragment>
       ))}
+    </div>
     </div>
     </TooltipProvider>
   )
