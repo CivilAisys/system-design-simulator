@@ -300,7 +300,17 @@ export function edgeParamGuide(source: NodeType, target: NodeType, param: EdgePa
   return EDGE_TARGET_GUIDES[target]?.[param] ?? guides[param]
 }
 
-// tooltip 第一行的範圍文字，例如「10–200 ms」「1 KB–1 MB」「0.5–0.99」
+// 值落在常見範圍外時欄位下方的黃字；剛好等於 min 或 max 不算超出。沒有範圍的參數永遠是 null。
+// 只是建議，不擋輸入也不影響 Run，和 params.ts 的合法範圍分開
+export function outOfRangeHint(guide: ParamGuide | undefined, unit: string | undefined, value: number): string | null {
+  const range = guide?.range
+  if (!range || (value >= range.min && value <= range.max)) {
+    return null
+  }
+  return `⚠ 超出常見範圍（${formatGuideRange(range, unit)}）`
+}
+
+// tooltip 第一行和超出範圍黃字的範圍文字，例如「10–200 ms」「1 KB–1 MB」「0.5–0.99」
 export function formatGuideRange({ min, max }: NonNullable<ParamGuide['range']>, unit: string | undefined): string {
   if (unit === 'bytes') {
     return `${formatByteSize(min)}–${formatByteSize(max)}`
