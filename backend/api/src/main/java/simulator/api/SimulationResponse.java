@@ -195,12 +195,12 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, description = "連到這個 Database 的 Read Replica 數") int replicas,
             @Schema(requiredMode = REQUIRED, description = "totalBytes × (1 + replicas)") double totalWithReplicasBytes,
             @Schema(requiredMode = REQUIRED, description = "totalBytes ÷ instances（資料平均分布）") double perInstanceBytes,
-            @Schema(requiredMode = REQUIRED, nullable = true, description = "每台機器的磁碟幾天後會滿；沒有設定 diskGbPerInstance、沒有寫入或寫入量小到天數超出範圍時為 null")
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "每台機器的磁碟幾天後會滿；OBJECT_STORAGE、沒有設定 diskGbPerInstance、沒有寫入或寫入量小到天數超出範圍時為 null")
             Double daysUntilFull,
             @Schema(requiredMode = REQUIRED, description = "磁碟在保留期內就會滿（daysUntilFull < retentionDays）")
             boolean fillsDisk,
             @Schema(requiredMode = REQUIRED, description = "計算時用的 retentionDays") double retentionDays,
-            @Schema(requiredMode = REQUIRED, nullable = true, description = "計算時用的 diskGbPerInstance，沒有設定時為 null")
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "計算時用的 diskGbPerInstance，沒有設定時和 OBJECT_STORAGE 為 null")
             Double diskGbPerInstance) {
 
         static StorageEstimateDto from(StorageEstimate estimate) {

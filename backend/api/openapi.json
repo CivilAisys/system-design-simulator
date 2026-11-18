@@ -511,7 +511,7 @@
           "daysUntilFull" : {
             "type" : [ "number", "null" ],
             "format" : "double",
-            "description" : "每台機器的磁碟幾天後會滿；沒有設定 diskGbPerInstance、沒有寫入或寫入量小到天數超出範圍時為 null"
+            "description" : "每台機器的磁碟幾天後會滿；OBJECT_STORAGE、沒有設定 diskGbPerInstance、沒有寫入或寫入量小到天數超出範圍時為 null"
           },
           "fillsDisk" : {
             "type" : "boolean",
@@ -525,7 +525,7 @@
           "diskGbPerInstance" : {
             "type" : [ "number", "null" ],
             "format" : "double",
-            "description" : "計算時用的 diskGbPerInstance，沒有設定時為 null"
+            "description" : "計算時用的 diskGbPerInstance，沒有設定時和 OBJECT_STORAGE 為 null"
           }
         },
         "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerInstance", "fillsDisk", "perInstanceBytes", "replicas", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
