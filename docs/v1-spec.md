@@ -13,7 +13,7 @@
 - 結果視覺化：節點變色、邊上 RPS、指標表、Sankey
 - 畫布效果：邊上的流量粒子動畫、節點依 ρ 發光、深色主題（可切換淺色），見第 6 節
 - 拓撲驗證與錯誤提示
-- JSON 匯入／匯出、內建範例（基本 Web App；0.2.0 加入讀寫分流、Fan-out、過載，0.3.0 起每個新元件各加一個，各示範一個重點）
+- 自動存檔（JSON 匯入／匯出和內建範例在 0.6.0 移除，#135：範例之後一個一個重做，匯入／匯出等需要時再加回來。本 spec 裡「匯入」的檢查規則照樣用在還原自動存檔）
 
 ### 1.2 不做什麼（Non-goals）
 - ❌ 時間推進的動態模擬、p99 等百分位數（→ 階段二 DES）
@@ -61,9 +61,8 @@ system-design-simulator/
       ├─ canvas/      React Flow 畫布、自訂節點、元件面板、屬性面板、編輯器狀態（復原、複製貼上）
       ├─ results/     結果面板：指標表、Sankey、錯誤清單
       ├─ simulation/  Run、Auto-run、過期判斷
-      ├─ io/          匯入／匯出、自動存檔
+      ├─ io/          拓撲檔的檢查與自動存檔
       ├─ api/         產生的型別與 API client
-      ├─ examples/    內建範例 JSON（也是後端整合測試的輸入）
       └─ components/  shadcn/ui 元件（hooks/、lib/ 是它附帶的工具）
 ```
 
@@ -114,7 +113,7 @@ system-design-simulator/
 
 > Cache 的 write 直接往下送，等於把 cache-aside 的「寫 DB、刪 cache」簡化成穿透。
 >
-> CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`，4.3、4.3.1 的「Cache」公式也適用於 CDN），只有預設值、圖示和名稱不同，讓架構圖和匯出的 JSON 看得出是 CDN。位置不限制，不一定要接在 Client 後面。
+> CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`，4.3、4.3.1 的「Cache」公式也適用於 CDN），只有預設值、圖示和名稱不同，讓架構圖和存下來的 JSON 看得出是 CDN。位置不限制，不一定要接在 Client 後面。
 >
 > Object Storage 的計算和驗證都和 Database 相同（engine 裡兩者都是 `StorageNode`），只有預設值、圖示和名稱不同。容量由供應商負責，所以不支援 sharding，也不能接 Read Replica。
 >
@@ -136,10 +135,10 @@ system-design-simulator/
 | `latencyMs` | 網路延遲（單程） | 1 |
 | `requestClass` | 哪個 class 的請求會走這條邊（Service 用）：`ALL`、`READ`、`WRITE` | `ALL` |
 
-- 欄位只在對應的起點有意義：`weight` 只用在 Client／LB 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（匯出的檔案一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
+- 欄位只在對應的起點有意義：`weight` 只用在 Client／LB 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（存檔一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
 - `requestClass`：一個 class 的請求只呼叫 `requestClass` 符合的下游（`ALL` 兩種都符合），例如 Service ─(READ)→ Read Replica、Service ─(WRITE)→ primary，或 CQRS 的讀寫分流。流量、延遲（4.3）、成功率（4.3.1）都只算符合的下游；沒有任何符合的下游時，Service 就是這個 class 的終點。Client／LB 的邊不支援（要依 class 重新正規化權重，還要處理某個 class 沒有邊可走的情況）。畫布上 `READ`／`WRITE` 的邊在標籤前面顯示「R」／「W」，邊上的 RPS 和粒子只有那個 class 的流量。
 - 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
-- 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去。匯入時只擋自己連自己，經過其他節點的環照樣讀入，Run 之後在錯誤分頁顯示。
+- 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去。讀入存檔時只擋自己連自己，經過其他節點的環照樣讀入，Run 之後在錯誤分頁顯示。
 
 ### 3.5 節點健康狀況（預留）
 - `state`（Health）：階段一只有 `HEALTHY`。階段二加入 `DOWN`、`DEGRADED`。
@@ -148,22 +147,22 @@ system-design-simulator/
 
 0.3.0 起新增的 Node type 和欄位都照這一節做。
 
-**新欄位一律選填**：省略時套用預設值，所以舊檔照樣能匯入，拓撲格式的 `"version"` 維持 1（ADR 0001）。給了但型別不對，仍然是格式錯誤（4.5、HTTP 400）。三個地方要一致，寫法照 Edge 的 `weight`：
+**新欄位一律選填**：省略時套用預設值，所以舊的存檔照樣讀得進來，拓撲格式的 `"version"` 維持 1（ADR 0001）。給了但型別不對，仍然是格式錯誤（4.5、HTTP 400）。三個地方要一致，寫法照 Edge 的 `weight`：
 
 | 地方 | 寫法 | 示範的測試 |
 |---|---|---|
 | 後端反序列化 | DTO 欄位用包裝型別（`Double`、`Integer`），`@Schema(defaultValue = …)`；轉成 engine 物件時 `null` 換成預設值 | `SimulateEndpointTest.missingEdgeFieldsDefaultToOne`；型別錯誤見 `wrongTypeIsBadRequest` |
 | OpenAPI | 不標 `requiredMode = REQUIRED`，有 `default`。例外：`NodeParams` 的欄位不標 `default`，預設值寫在 `description`，因為 `NodeParams` 是所有 type 共用的，產生的前端型別會把有 `default` 的欄位當成必填 | `OpenApiSyncTest.fieldsWithDefaultsAreOptional` 檢查有預設值的欄位都不在 `required` |
-| 前端匯入 | 節點參數在 `params.ts` 的 spec 標 `optional: true`，省略時用該類型 `defaults` 裡的值；沒有固定預設值的選填參數（例如 `hotShardShare`，省略時代表平均分配）不放進 `defaults`，在 `toNode` 另外讀，省略時不補；邊的欄位在 `topologyFile.ts` 的 `toEdge` 補；邊的下拉選單欄位（例如 `requestClass`）的選項在 `params.ts` 的 `EDGE_CHOICE_SPECS`，哪些起點會顯示寫在 `NODE_KINDS` 的 `edgeChoiceParams` | `topologyFile.test.ts` 的「選填的節點參數」、「邊省略的數值參數用預設值 1，requestClass 用 ALL」 |
+| 前端讀入 | 節點參數在 `params.ts` 的 spec 標 `optional: true`，省略時用該類型 `defaults` 裡的值；沒有固定預設值的選填參數（例如 `hotShardShare`，省略時代表平均分配）不放進 `defaults`，在 `toNode` 另外讀，省略時不補；邊的欄位在 `topologyFile.ts` 的 `toEdge` 補；邊的下拉選單欄位（例如 `requestClass`）的選項在 `params.ts` 的 `EDGE_CHOICE_SPECS`，哪些起點會顯示寫在 `NODE_KINDS` 的 `edgeChoiceParams` | `topologyFile.test.ts` 的「選填的節點參數」、「邊省略的數值參數用預設值 1，requestClass 用 ALL」 |
 
 **新增一種 Node type**：
 
 - 後端 api：`NodeType` 加一個值；`NodeParamsDto` 加該類型的參數（`description` 寫上用到它的 type）；`NodeDto.toNode` 建出 engine 的節點。改完跑 `./gradlew :api:generateOpenApi` 更新 `openapi.json`，前端的型別跟著重新產生。
 - 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`。
-- 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。只換名稱、圖示和部分預設值、type 不變的元件（例如 Redis Cluster）不是新的 type，加在同一個檔案的 `PRESETS`，元件面板讀的是由兩者組成的 `PALETTE`。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、類別（流量／運算／資料／非同步，元件面板依它分組、圖示方塊依它上色；`NODE_TYPES` 要把同類別的排在一起）、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類、節點上顯示的指標，元件面板、畫布、屬性面板和匯入都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
+- 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。只換名稱、圖示和部分預設值、type 不變的元件（例如 Redis Cluster）不是新的 type，加在同一個檔案的 `PRESETS`，元件面板讀的是由兩者組成的 `PALETTE`。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、類別（流量／運算／資料／非同步，元件面板依它分組、圖示方塊依它上色；`NODE_TYPES` 要把同類別的排在一起）、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類、節點上顯示的指標，元件面板、畫布、屬性面板和讀入存檔都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
 - 計算和既有 type 完全相同、只差預設值和名稱的新 type（例如 CDN 之於 Cache、Object Storage 之於 Database）：engine 讓兩者實作同一個 sealed 子介面（`CachingNode`、`StorageNode`），`switch` 對子介面寫一個分支，計算和驗證共用；前端 `NODE_KINDS` 仍各寫一筆。
 - 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。只能連到特定 type 時寫在 `outputTargets`（例如 Database 只能連到 Read Replica）。
-- 文件：本 spec 的 3.3（元件表）、4.5（驗證規則）、5（API 範例有需要時），`GLOSSARY.md` 的新名詞，並在 `frontend/src/examples/` 加一個用到它的內建範例。
+- 文件：本 spec 的 3.3（元件表）、4.5（驗證規則）、5（API 範例有需要時），`GLOSSARY.md` 的新名詞。後端 `/simulate` 整合測試需要完整拓撲時，放在 `backend/api/src/test/resources/scenarios/`。
 
 ---
 
@@ -376,7 +375,7 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 - `UNKNOWN_NODE`、`DUPLICATE_EDGE`（第二條以後的邊）附 `edgeId`。連到不存在節點的邊不參與其他規則，但仍算在另一端的上下游數量裡（畫布上看得到這條邊，不重複報錯）。
 - `INVALID_PARAM`：節點參數附 `nodeId`、邊的參數附 `edgeId`。Client／LB 出邊的 `weight` 必須 > 0：weight 為 0 的下游收不到流量，等於沒有接，要停用就刪掉連線。Rate Limiter 的 `limitRps`、External API 的 `quotaRps` 也必須 > 0：0 等於全部拒絕，要停用就刪掉節點。
 
-參數的合法範圍。上限擋掉會讓 Run 太慢（worker 數決定 Erlang C 的計算量）或結果溢位成 `Infinity` 的極端數值；屬性面板的輸入框用同一組範圍，匯入超出範圍的檔案時不擋，Run 之後在錯誤分頁顯示。
+參數的合法範圍。上限擋掉會讓 Run 太慢（worker 數決定 Erlang C 的計算量）或結果溢位成 `Infinity` 的極端數值；屬性面板的輸入框用同一組範圍，讀入超出範圍的存檔時不擋，Run 之後在錯誤分頁顯示。
 
 | 參數 | 合法範圍 |
 |---|---|
@@ -396,7 +395,7 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 
 Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms，十幾個節點就超過 1 秒。這組上限保證的是一般大小的拓撲：上百個接近滿載的節點仍可能超過 1 秒，幾十層、每層都把 `callsPerRequest` 開到上限的依序呼叫鏈，端到端延遲仍可能溢位。
 
-匯入檔案裡的整數參數（`instances`、`concurrency`、`callsPerRequest`）超出 32 位元整數時，API 沒辦法解析，所以匯入時就當成格式錯誤擋下；32 位元範圍內但超過上限的值照樣讀入。
+存檔裡的整數參數（`instances`、`concurrency`、`callsPerRequest`）超出 32 位元整數時，API 沒辦法解析，所以讀入時就當成格式錯誤擋下；32 位元範圍內但超過上限的值照樣讀入。
 
 錯誤依 `NO_CLIENT`、各節點、各邊排列，節點和邊依輸入順序。`message` 是給使用者看的中文說明，用節點名稱指稱節點。
 
@@ -405,7 +404,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 - 不是合法的 JSON。
 - `version` 不是 1。
 - 缺少必填欄位，或節點、邊的 `id` 重複。
-- 欄位型別不符：數字欄位給字串或布林、整數欄位（`instances`、`concurrency`、`callsPerRequest`、`version`）給小數（`2.0` 也算；前端匯入分不出 `2.0` 和 `2`，會當成 `2` 送出）、字串欄位給數字、`type` 等 enum 給數字或不在清單內的值。API 不做自動轉換。
+- 欄位型別不符：數字欄位給字串或布林、整數欄位（`instances`、`concurrency`、`callsPerRequest`、`version`）給小數（`2.0` 也算；前端讀入分不出 `2.0` 和 `2`，會當成 `2` 送出）、字串欄位給數字、`type` 等 enum 給數字或不在清單內的值。API 不做自動轉換。
 
 其他例外是後端的程式錯誤，回 HTTP 500。
 
@@ -462,7 +461,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 
 ### `POST /api/v1/simulate`
 
-**Request**（也是匯入／匯出的檔案格式）
+**Request**（也是自動存檔的格式）
 
 ```json
 {
@@ -484,7 +483,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 }
 ```
 
-`ui` 只給前端用，後端忽略但不刪除，所以匯出的檔案能還原畫布位置。
+`ui` 只給前端用，後端忽略但不刪除，所以自動存檔能還原畫布位置。
 
 **Response 200**
 
@@ -573,7 +572,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│ System Design Simulator [▶ Run] [Auto-run ☑] [↶][↷] [匯入] [匯出] [範例▾] │
+│ System Design Simulator [▶ Run] [Auto-run ☑] [↶][↷] [起始拓撲]           │
 ├──────────┬─────────────────────────────────────┬───────────────┤
 │ 元件      │                                     │ 屬性           │
 │ ● 流量    │      ┌──────┐     ┌────┐             │ ▣ API Server  │
@@ -630,10 +629,10 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - **主題**：預設深色，工具列可切換淺色。
 - **結果面板高度**：拖動結果面板上緣的分隔線調整高度，或聚焦分隔線後用方向鍵調整（↑ 變高、↓ 變矮，Home／End 到最矮／最高）。最矮 120px，最高為視窗高度的 70%，畫布不會被擠到看不見。高度存在 localStorage，重新整理後保留；Sankey 跟著重新排版。
 - **Auto-run**（預設開啟）：拓撲有實質變化時自動 Run，debounce 300ms（連續修改時只在停下 300ms 後送出一次）。
-  - 會觸發：新增／刪除節點、新增／刪除邊、修改節點或邊的參數、匯入或載入範例。
+  - 會觸發：新增／刪除節點、新增／刪除邊、修改節點或邊的參數、回到起始拓撲。
   - 不會觸發：拖動節點位置、選取節點、切換主題等只影響畫面的操作（`ui` 欄位不影響計算）。
   - 改節點名稱不影響計算，通常不會觸發；但結果有驗證錯誤時會觸發，因為錯誤訊息用節點名稱指稱節點（第 5 節）。
-  - 只套用最新一次 Run 的結果：送出新的 Run、匯入或載入範例時，取消還在進行的請求；被取消的請求不算 Run 失敗。
+  - 只套用最新一次 Run 的結果：送出新的 Run、回到起始拓撲時，取消還在進行的請求；被取消的請求不算 Run 失敗。
   - 編輯到一半的拓撲（例如剛拉出還沒連線的 Client）會即時顯示驗證錯誤，這是預期行為。
 - **Run 按鈕**保留，用於 Auto-run 關閉時手動計算。
 - 驗證錯誤：有問題的節點加紅框，錯誤 Tab 列出清單，點擊可跳到該節點。
@@ -644,18 +643,18 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
   - 不算一步：選取、切換主題。復原時連同當時的選取一起還原。
   - 連續修改併成一步：拖一次節點；同一個欄位的連續修改（打字、拖 slider）只要間隔不到 1 秒都併在一起。
   - 復原後做新的修改，重做紀錄清空。最多記 100 步。
-  - 匯入或載入範例整份換掉畫布，不跳確認對話框，而是算一步：通知上有「復原」可以一步回到原本的拓撲（之後又改過畫布時，請用工具列的復原）。匯入失敗時畫布不變，也沒有復原可按。
-  - 復原／重做是一般的修改，Auto-run 照常觸發。節點和邊的 id 不會重複使用，復原回來的元素不會套上別的元素的結果。復原或重做跨過匯入、載入範例時，兩份拓撲的 id 可能重疊，所以先清掉結果（同匯入），再依 Auto-run 重新 Run。
+  - 回到起始拓撲整份換掉畫布，不跳確認對話框，而是算一步：通知上有「復原」可以一步回到原本的拓撲（之後又改過畫布時，請用工具列的復原）。
+  - 復原／重做是一般的修改，Auto-run 照常觸發。節點和邊的 id 不會重複使用，復原回來的元素不會套上別的元素的結果。復原或重做跨過回到起始拓撲時，兩份拓撲的 id 可能重疊，所以先清掉結果（同回到起始拓撲），再依 Auto-run 重新 Run。
 - **複製貼上節點**：選取一個或多個節點後 Ctrl/Cmd+C、Ctrl/Cmd+V（焦點在輸入框時不攔截，維持文字的複製貼上）。
   - 複製當下的參數和位置；之後再改原本的節點不影響要貼上的內容。剪貼簿只在這個分頁裡，不寫入系統剪貼簿。
   - 新節點參數相同，id 取同類型下一個沒用過的編號，名稱接上沒被用掉的編號（「API」→「API 2」）。每貼一次往右下多偏移一點，連續貼上不會疊在一起。
   - 同時複製的節點之間的邊一起複製（參數相同）；連到沒被複製的節點的邊不複製。
   - 貼上後選取新節點；貼上算一步，Auto-run 照常觸發。
-- **自動存檔**：畫布（節點、邊、參數、名稱、位置）每次變化都存進瀏覽器的 localStorage，內容和匯出檔相同；重新整理或關掉再開時還原，Auto-run 開啟時接著自動 Run。
-  - 還原走和匯入相同的檢查。存檔壞掉或版本不支援時改用起始拓撲，並通知讀不回來的原因；在使用者修改畫布之前不蓋掉這份存檔（例如被新版本存過的存檔，回到新版本還讀得到）。
+- **自動存檔**：畫布（節點、邊、參數、名稱、位置）每次變化都存進瀏覽器的 localStorage，內容是第 5 節的 Request 格式；重新整理或關掉再開時還原，Auto-run 開啟時接著自動 Run。
+  - 還原時檢查格式（規則同 5、4.5 的匯入檢查）。存檔壞掉或版本不支援時改用起始拓撲，並通知讀不回來的原因；在使用者修改畫布之前不蓋掉這份存檔（例如被新版本存過的存檔，回到新版本還讀得到）。
   - 瀏覽器不允許存取 localStorage（例如封鎖網站資料）或空間不夠時，其他功能照常，只是不記住畫布。
   - 復原／重做紀錄和 Run 結果不存。同時開兩個分頁時，最後修改的那一個蓋掉另一個的存檔。
-  - 「範例」選單的「起始拓撲」回到一開始的畫布，和載入範例一樣算一步，可以復原。
+  - 工具列的「起始拓撲」回到一開始的畫布，算一步，可以復原。
 
 ---
 
@@ -666,11 +665,11 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - [ ] 把 Client RPS 調高到超過 DB 容量時，DB 變紅，並顯示為瓶頸和丟棄量
 - [ ] 調高 Cache hitRatio，DB 負載下降
 - [ ] 違反驗證規則時有明確錯誤，並標出問題節點
-- [ ] 匯出 JSON 再匯入後，畫布與參數完全還原
-- [ ] 內建範例「基本 Web App」：Client → LB → Service → Cache → DB
+- [ ] ~~匯出 JSON 再匯入後，畫布與參數完全還原~~（0.6.0 移除匯入／匯出，改為重新整理後自動存檔還原畫布）
+- [ ] ~~內建範例「基本 Web App」：Client → LB → Service → Cache → DB~~（0.6.0 移除內建範例）
 - [ ] Run 之後邊上有流量粒子動畫，節點依狀態發光，可切換深色／淺色主題
 - [ ] `engine` 模組通過第 4.6 節的所有測試案例
-- [ ] `api` 模組有一個 `/simulate` 整合測試（用內建範例拓撲，檢查回應的 JSON 欄位）
+- [ ] `api` 模組有一個 `/simulate` 整合測試（用 `scenarios/basic-web-app.json`，檢查回應的 JSON 欄位）
 
 ---
 

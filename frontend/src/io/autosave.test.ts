@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Topology } from '@/api/client'
 import { initialTopology } from '@/canvas/initialTopology'
-import { EXAMPLES } from '@/examples'
 import { restoreTopology, saveTopology, type TopologyStorage } from './autosave'
 
 function memoryStorage(initial: Record<string, string> = {}): TopologyStorage {
@@ -24,13 +23,14 @@ const blockedStorage: TopologyStorage = {
   },
 }
 
-const example: Topology = EXAMPLES[0].topology
+// 和起始拓撲不同，才分得出是還原的存檔還是 fallback
+const saved: Topology = { ...initialTopology, nodes: initialTopology.nodes.slice(0, 1), edges: [] }
 
 describe('restoreTopology', () => {
   it('restores what saveTopology stored', () => {
     const storage = memoryStorage()
-    saveTopology(example, storage)
-    expect(restoreTopology(initialTopology, storage)).toEqual({ topology: example, error: null })
+    saveTopology(saved, storage)
+    expect(restoreTopology(initialTopology, storage)).toEqual({ topology: saved, error: null })
   })
 
   it('falls back silently when nothing is saved', () => {
@@ -47,7 +47,7 @@ describe('restoreTopology', () => {
   })
 
   it('falls back with the error when the version is unsupported', () => {
-    const storage = memoryStorage({ topology: JSON.stringify({ ...example, version: 2 }) })
+    const storage = memoryStorage({ topology: JSON.stringify({ ...saved, version: 2 }) })
     const restored = restoreTopology(initialTopology, storage)
     expect(restored.topology).toBe(initialTopology)
     expect(restored.error).toContain('不支援的版本 2')
@@ -56,6 +56,6 @@ describe('restoreTopology', () => {
 
 describe('saveTopology', () => {
   it('ignores storage errors', () => {
-    expect(() => saveTopology(example, blockedStorage)).not.toThrow()
+    expect(() => saveTopology(saved, blockedStorage)).not.toThrow()
   })
 })

@@ -84,7 +84,7 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     inFlight.current = null
   }
 
-  // 換了一份拓撲（匯入、載入範例）：舊結果的 id 可能和新拓撲重疊，不能留著疊到畫布上；
+  // 換了一份拓撲（回到起始拓撲）：舊結果的 id 可能和新拓撲重疊，不能留著疊到畫布上；
   // 計算中的 Run 也不屬於新拓撲，取消掉
   function reset() {
     cancelPendingAutoRun()
