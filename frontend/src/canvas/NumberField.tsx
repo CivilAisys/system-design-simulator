@@ -37,9 +37,10 @@ export function NumberField({
     setDraft(syncDraft(draft, value))
   }
 
-  const error = check(parseDraft(draft))
+  const parsed = parseDraft(draft)
+  const error = check(parsed)
   // 不合法時只顯示錯誤，不同時出現黃字
-  const hint = error === null ? outOfRangeHint(guide, spec.unit, parseDraft(draft)) : null
+  const hint = error === null ? outOfRangeHint(guide, spec.unit, parsed) : null
 
   function onInput(text: string) {
     setDraft(text)
