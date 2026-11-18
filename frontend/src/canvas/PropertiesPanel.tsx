@@ -8,11 +8,13 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { NODE_KINDS } from './catalog'
+import { NEW_DISK_GB, NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
 import { formatClassRates, formatRps, formatUtilization } from './format'
 import { hotShareHint, replicasHint, workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
+import { edgeParamGuide, nodeParamGuide, type ParamGuide } from './paramGuide'
+import { ParamInfo } from './ParamInfo'
 import { ParamLabel } from './ParamLabel'
 import {
   checkNodeParam,
@@ -83,9 +85,6 @@ export function PropertiesPanel({
   )
 }
 
-// 按「設定磁碟容量」時先填的值
-const NEW_DISK_GB = 1000
-
 // 按「設定熱點」時先填平均的 1.5 倍：看得出最熱那台比較忙，2 台時另一台也還有流量
 function newHotShare(instances: number): number {
   return Math.min(1, 1.5 / instances)
@@ -123,6 +122,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
       <div className="grid gap-1">
         <NumberField
           spec={NODE_PARAM_SPECS.hotShare}
+          guide={nodeParamGuide(node.type, 'hotShare')}
           value={node.params.hotShare}
           check={(value) => checkNodeParam(node.params, 'hotShare', value)}
           onChange={(value) => onUpdate(node.id, { params: { hotShare: value } })}
@@ -154,6 +154,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
         <Fragment key={param}>
           <NumberField
             spec={NODE_PARAM_SPECS[param]}
+            guide={nodeParamGuide(node.type, param)}
             value={nodeParam(node.params, param)}
             check={(value) => checkNodeParam(node.params, param, value)}
             onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
@@ -195,6 +196,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           <div className="grid gap-1">
             <NumberField
               spec={NODE_PARAM_SPECS.diskGbPerInstance}
+              guide={nodeParamGuide(node.type, 'diskGbPerInstance')}
               value={node.params.diskGbPerInstance}
               check={(value) => checkNodeParam(node.params, 'diskGbPerInstance', value)}
               onChange={(value) => onUpdate(node.id, { params: { diskGbPerInstance: value } })}
@@ -215,6 +217,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
         <ChoiceField
           key={param}
           spec={NODE_CHOICE_SPECS[param]}
+          guide={nodeParamGuide(node.type, param)}
           value={node.params[param]}
           onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
         />
@@ -244,15 +247,20 @@ type ChoiceFieldProps<V extends string> = {
   spec: ChoiceSpec<V>
   value: V | undefined
   onChange: (value: V) => void
+  // 同 NumberField
+  guide?: ParamGuide
 }
 
-function ChoiceField<V extends string>({ spec, value, onChange }: ChoiceFieldProps<V>) {
+function ChoiceField<V extends string>({ spec, value, onChange, guide }: ChoiceFieldProps<V>) {
   const { label, labelEn, options } = spec
   return (
     <div className="grid gap-1.5">
-      <Label>
-        <ParamLabel label={label} labelEn={labelEn} />
-      </Label>
+      <div className="flex items-center gap-1">
+        <Label>
+          <ParamLabel label={label} labelEn={labelEn} />
+        </Label>
+        {guide && <ParamInfo label={label} guide={guide} />}
+      </div>
       <Select
         value={value}
         // 選項只有 options 裡的值
@@ -296,6 +304,7 @@ function EdgeProperties({ edge: flowEdge, nodes, result, stale, onUpdate }: Edge
         <NumberField
           key={param}
           spec={EDGE_PARAM_SPECS[param]}
+          guide={edgeParamGuide(source.type, target.type, param)}
           value={edge[param]}
           onChange={(value) => onUpdate(edge.id, { [param]: value })}
         />
@@ -304,6 +313,7 @@ function EdgeProperties({ edge: flowEdge, nodes, result, stale, onUpdate }: Edge
         <ChoiceField
           key={param}
           spec={EDGE_CHOICE_SPECS[param]}
+          guide={edgeParamGuide(source.type, target.type, param)}
           value={edge[param]}
           onChange={(value) => onUpdate(edge.id, { [param]: value })}
         />

@@ -133,12 +133,13 @@ system-design-simulator/
 | `source` / `target` | 節點 id | — |
 | `weight` | 分流權重（Client、LB、CDN 用） | 1 |
 | `callsPerRequest` | 每個請求呼叫幾次（Service 用） | 1 |
-| `latencyMs` | 網路延遲（往返：送出請求到收到回應，在網路上花的時間） | 1 |
+| `latencyMs` | 網路延遲（往返：送出請求到收到回應，在網路上花的時間） | 1（畫布上新建的邊見下） |
 | `requestClass` | 哪個 class 的請求會走這條邊（Service 用）：`ALL`、`READ`、`WRITE` | `ALL` |
 
 - 欄位只在對應的起點有意義：`weight` 只用在 Client／LB／CDN 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（存檔一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
 - `requestClass`：一個 class 的請求只呼叫 `requestClass` 符合的下游（`ALL` 兩種都符合），例如 Service ─(READ)→ Read Replica、Service ─(WRITE)→ primary，或 CQRS 的讀寫分流。流量、延遲（4.3）、成功率（4.3.1）都只算符合的下游；沒有任何符合的下游時，Service 就是這個 class 的終點。Client／LB／CDN 的邊不支援（要依 class 重新正規化權重，還要處理某個 class 沒有邊可走的情況）。畫布上 `READ`／`WRITE` 的邊在標籤前面顯示「R」／「W」，邊上的 RPS 和粒子只有那個 class 的流量。
   - **限制：一個請求不能同時是 read 和 write**。`requestClass` 只能篩選，不能轉換，所以「寫入前先讀一次」（read-modify-write，例如先查庫存再扣）沒辦法表示成一個請求。要近似時分成兩條路徑：另外放一個 `readRatio = 1`、`rps` 等於寫入量的 Client 打到同一個 Database，代表每次寫入前的那一次讀；write 路徑的端到端延遲不包含這次讀。
+- 畫布上新建的邊，`latencyMs` 依兩端決定，讓預設值落在屬性面板 ⓘ 的常見範圍內（第 6 節）：Client、CDN 的出邊和連到 External API 的邊走公開網路，用 30 ms；其他是機房內部，用 1 ms。只影響新建的邊；存檔省略 `latencyMs` 時仍補 1。
 - 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
 - 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去。讀入存檔時只擋自己連自己，經過其他節點的環照樣讀入，Run 之後在錯誤分頁顯示。
 
@@ -620,6 +621,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - Rate Limiter、External API 節點沒有 ρ，改顯示拒絕量和狀態（「限流中」／「未觸發」、「超過配額」／「配額內」）。
 - 延遲（指標表、端到端延遲）取一位小數；小於 0.1 ms 時改用兩位有效數字（例如 Cache 預設的 `0.010 ms`），0 顯示 `0 ms`。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
+- **參數說明 ⓘ**：屬性面板每個參數（含邊參數、下拉選單、`hotShare`、`diskGbPerInstance`）的名稱後面有 ⓘ，滑過或用鍵盤聚焦時顯示：「常見：a–b 單位」（有實值的參數才有，例如 `serviceTimeMs`）、一句說明、「例：…」。說明依「元件 type × 參數」各寫一筆（Redis Cluster 用 Cache 的），邊參數依起點的 type，連到 External API 的邊另有一筆。看情境的參數（`rps`、`instances` 等）寫怎麼估算，比例或結構的參數（`weight`、`hotShare` 等）只寫用途，都沒有範圍。常見範圍只是建議，**不影響驗證和 Run**。數字以 `frontend/src/canvas/paramGuide.ts` 為準，不抄進 spec。
 - **多台機器**：能設定 `instances` 的元件（LB、Service、Cache、CDN、Database、Read Replica、Object Storage、Message Queue）在 `instances` > 1 時，節點內容右側畫一個小機櫃：一台一條橫槽、縱向疊放，最多 5 條（超過 5 台仍是 5 條），槽用節點的狀態色；有熱點的 Cache（4.2.2）第一條是最熱的那台、用它自己的狀態色，其他條用其他台的狀態色，滑鼠移到機櫃上列出兩邊的到達率、ρ、延遲、丟棄量（結果過期時先註明）。還沒有結果時是淡灰，結果過期時跟著節點畫淡。右上角用類別色的標籤顯示實際台數（`×2`、`×10`、`×200`，大數字加千分位）。屬性面板的 `instances` 下方顯示 worker 總數，例如「共 2 台 × 180 並行 ＝ 360 個 worker」，有熱點時下一行是「最熱那台分到 50.0%」。
 - **叢集內從節點**：Cache 的 `replicas` > 0 時，節點名稱下面一行小字顯示「3 主 3 從」（主 = `instances`，從 = `instances × replicas`）；屬性面板的 worker 提示下一行是「另有 N 個從節點，共 M 個節點；從節點不分擔流量」。
 - **Preset**：元件面板的「Redis Cluster」是 `instances = 3`、`replicas = 1` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。

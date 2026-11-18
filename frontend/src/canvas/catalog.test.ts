@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canFeed, CATEGORIES, newEdgeRequestClass, newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
+import { canFeed, CATEGORIES, newEdgeLatencyMs, newEdgeRequestClass, newNode, NODE_KINDS, NODE_TYPES, PALETTE } from './catalog'
 import { checkNodeParam, NODE_CHOICE_SPECS } from './params'
 
 describe('Node type 定義', () => {
@@ -81,5 +81,18 @@ describe('新邊的 requestClass', () => {
     expect(newEdgeRequestClass('SERVICE', 'DATABASE')).toBe('ALL')
     expect(newEdgeRequestClass('LOAD_BALANCER', 'READ_REPLICA')).toBe('ALL')
     expect(newEdgeRequestClass('DATABASE', 'READ_REPLICA')).toBe('ALL')
+  })
+})
+
+describe('新邊的 latencyMs', () => {
+  it('Client、CDN 的出邊和連到 External API 的邊是 30 ms', () => {
+    expect(newEdgeLatencyMs('CLIENT', 'LOAD_BALANCER')).toBe(30)
+    expect(newEdgeLatencyMs('CDN', 'SERVICE')).toBe(30)
+    expect(newEdgeLatencyMs('SERVICE', 'EXTERNAL_API')).toBe(30)
+  })
+
+  it('其他邊維持 1 ms', () => {
+    expect(newEdgeLatencyMs('LOAD_BALANCER', 'SERVICE')).toBe(1)
+    expect(newEdgeLatencyMs('SERVICE', 'DATABASE')).toBe(1)
   })
 })
