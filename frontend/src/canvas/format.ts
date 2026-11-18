@@ -16,6 +16,12 @@ export function formatClassRates({ read, write }: ClassRates): string {
   return `read ${formatRpsNumber(read)}・write ${formatRpsNumber(write)}`
 }
 
+// 滑鼠移到邊的 rps 標籤上的提示。過期時拓撲在那次 Run 之後改過，同 errorsTitle 先註明
+export function classRatesTitle(rates: ClassRates, stale: boolean | undefined): string {
+  const line = formatClassRates(rates)
+  return stale ? `（結果已過期，按 Run 重新計算）\n${line}` : line
+}
+
 export function formatRpsNumber(rps: number): string {
   // 不到 0.5 的正數四捨五入會變成 0，看起來像沒有流量
   if (rps > 0 && rps < 0.5) return '< 1'

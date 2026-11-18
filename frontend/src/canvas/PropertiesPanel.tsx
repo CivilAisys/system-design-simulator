@@ -1,7 +1,7 @@
 import { Fragment, useId, type ReactNode } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { Trash2 } from 'lucide-react'
-import type { NodeResult } from '@/api/client'
+import { totalRps, type EdgeResult, type NodeResult } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 import { NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
-import { formatUtilization } from './format'
+import { formatClassRates, formatRps, formatUtilization } from './format'
 import { hotShareHint, replicasHint, workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
 import { ParamLabel } from './ParamLabel'
@@ -33,12 +33,23 @@ type PropertiesPanelProps = {
   nodes: SimFlowNode[]
   edges: RpsFlowEdge[]
   nodeResults: Record<string, NodeResult> | undefined
+  edgeResults: Record<string, EdgeResult> | undefined
+  // 拓撲在上次 Run 之後改過，結果可能不準
+  stale: boolean
   onUpdateNode: (id: string, patch: NodePatch) => void
   onUpdateEdge: (id: string, patch: EdgePatch) => void
 }
 
 // 只在剛好選了一個 Node 或一條 Edge 時顯示它的參數
-export function PropertiesPanel({ nodes, edges, nodeResults, onUpdateNode, onUpdateEdge }: PropertiesPanelProps) {
+export function PropertiesPanel({
+  nodes,
+  edges,
+  nodeResults,
+  edgeResults,
+  stale,
+  onUpdateNode,
+  onUpdateEdge,
+}: PropertiesPanelProps) {
   const selectedNodes = nodes.filter((n) => n.selected)
   const selectedEdges = edges.filter((e) => e.selected)
 
@@ -51,7 +62,16 @@ export function PropertiesPanel({ nodes, edges, nodeResults, onUpdateNode, onUpd
     )
   } else if (selectedEdges.length === 1 && selectedNodes.length === 0) {
     const edge = selectedEdges[0]
-    content = <EdgeProperties key={edge.id} edge={edge} nodes={nodes} onUpdate={onUpdateEdge} />
+    content = (
+      <EdgeProperties
+        key={edge.id}
+        edge={edge}
+        nodes={nodes}
+        result={edgeResults?.[edge.id]}
+        stale={stale}
+        onUpdate={onUpdateEdge}
+      />
+    )
   } else {
     content = <p className="text-sm text-muted-foreground">選取一個元件或連線來調整參數。</p>
   }
@@ -256,10 +276,12 @@ function ChoiceField<V extends string>({ spec, value, onChange }: ChoiceFieldPro
 type EdgePropertiesProps = {
   edge: RpsFlowEdge
   nodes: SimFlowNode[]
+  result: EdgeResult | undefined
+  stale: boolean
   onUpdate: (id: string, patch: EdgePatch) => void
 }
 
-function EdgeProperties({ edge: flowEdge, nodes, onUpdate }: EdgePropertiesProps) {
+function EdgeProperties({ edge: flowEdge, nodes, result, stale, onUpdate }: EdgePropertiesProps) {
   const edge = flowEdge.data.edge
   const source = nodes.find((n) => n.id === edge.source)?.data.node
   const target = nodes.find((n) => n.id === edge.target)?.data.node
@@ -286,6 +308,16 @@ function EdgeProperties({ edge: flowEdge, nodes, onUpdate }: EdgePropertiesProps
           onChange={(value) => onUpdate(edge.id, { [param]: value })}
         />
       ))}
+      {/* Run 之前還沒有值；過期時和畫布上的標籤一樣淡化 */}
+      {result && (
+        <div className={cn('grid gap-1 rounded-xl bg-muted p-3.5', stale && 'opacity-50')}>
+          <div className="flex items-baseline justify-between text-sm">
+            <span>流量</span>
+            <span className="font-heading text-[15px] font-bold">{formatRps(totalRps(result.rps))}</span>
+          </div>
+          <div className="text-right text-xs text-muted-foreground">{formatClassRates(result.rps)}</div>
+        </div>
+      )}
     </div>
   )
 }

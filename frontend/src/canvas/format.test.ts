@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  classRatesTitle,
   DASH,
   formatBitsPerSec,
   formatBytes,
@@ -45,6 +46,16 @@ describe('formatClassRates', () => {
 
   it('不到 0.5 的正數和 formatRps 一樣不顯示成 0', () => {
     expect(formatClassRates({ read: 0.2, write: 0 })).toBe('read < 1・write 0')
+  })
+})
+
+describe('classRatesTitle', () => {
+  it('其中一項是 0 也照樣顯示', () => {
+    expect(classRatesTitle({ read: 0, write: 50 }, false)).toBe('read 0・write 50')
+  })
+
+  it('過期時先註明', () => {
+    expect(classRatesTitle({ read: 180, write: 100 }, true)).toBe('（結果已過期，按 Run 重新計算）\nread 180・write 100')
   })
 })
 
