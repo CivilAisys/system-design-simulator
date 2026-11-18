@@ -7,7 +7,7 @@
 ### 架構
 
 **Topology（拓撲）**:
-使用者組出的整個架構，由 Node 和 Edge 構成，也是匯入／匯出的單位。
+使用者組出的整個架構，由 Node 和 Edge 構成，也是自動存檔的單位。
 _Avoid_: graph、diagram、架構圖
 
 **Node（節點）**:
@@ -72,7 +72,7 @@ Cache 或 Database 依 key 切出來的一份資料和承擔它的機器，每�
 _Avoid_: partition、分區
 
 **Redis Cluster**:
-元件面板上的 preset，就是 shards = 3 的 Cache，匯出的 JSON 裡 type 仍是 CACHE。
+元件面板上的 preset，就是 shards = 3 的 Cache，JSON 裡 type 仍是 CACHE。
 
 **Hot shard（熱點 shard）**:
 因為熱門 key 而分到最多流量的 shard，它的 ρ 決定整個節點的 ρ 和狀態。

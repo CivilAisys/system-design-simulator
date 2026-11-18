@@ -32,7 +32,7 @@ export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'laten
 type CanvasState = {
   nodes: SimFlowNode[]
   edges: RpsFlowEdge[]
-  // 第幾次換掉整份拓撲（匯入、載入範例），0 是一開始的拓撲。復原或重做跨過整份換掉的那一步時，號碼會變
+  // 第幾次換掉整份拓撲（回到起始拓撲），0 是一開始的拓撲。復原或重做跨過整份換掉的那一步時，號碼會變
   loadId: number
 }
 
@@ -119,7 +119,7 @@ export function useTopologyEditor(initial: Topology) {
     [usedIds, edit],
   )
 
-  // 整份換成另一個拓撲（匯入、載入範例），算一步，可以復原。它的 id 也算用過，之後新建的節點和邊不會撞到。
+  // 整份換成另一個拓撲（回到起始拓撲），算一步，可以復原。它的 id 也算用過，之後新建的節點和邊不會撞到。
   // 回傳這次的 loadId，給 undoLoad 用
   const load = useCallback(
     (topology: Topology) => {
@@ -233,7 +233,7 @@ export function useTopologyEditor(initial: Topology) {
     [edit],
   )
 
-  // 復原或重做一步。回傳是否換了一份拓撲（跨過匯入、載入範例），是的話畫布上的結果屬於另一份拓撲，要清掉
+  // 復原或重做一步。回傳是否換了一份拓撲（跨過回到起始拓撲），是的話畫布上的結果屬於另一份拓撲，要清掉
   const travel = useCallback((move: (h: History<CanvasState>) => History<CanvasState>) => {
     const current = latest.current
     const next = move(current)
@@ -245,7 +245,7 @@ export function useTopologyEditor(initial: Topology) {
   const undoEdit = useCallback(() => travel(undo), [travel])
   const redoEdit = useCallback(() => travel(redo), [travel])
 
-  // 匯入、載入範例的通知上的「復原」：只在最後一步還是這次換掉時復原。
+  // 回到起始拓撲的通知上的「復原」：只在最後一步還是這次換掉時復原。
   // 之後又改過就不動（回傳 false），免得連後來的修改一起復原
   const undoLoad = useCallback(
     (loadId: number) => {

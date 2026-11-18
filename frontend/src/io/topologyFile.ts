@@ -3,16 +3,16 @@ import { canFeed, NODE_KINDS, NODE_TYPES, type NodeParams } from '@/canvas/catal
 import { EDGE_CHOICE_SPECS, NODE_CHOICE_SPECS, NODE_PARAM_SPECS } from '@/canvas/params'
 
 const SUPPORTED_VERSION = 1
-// 匯入的檔案沒有 ui 座標時，這些節點排成一列，放在有座標的節點下方
+// 存檔沒有 ui 座標時，這些節點排成一列，放在有座標的節點下方
 const FALLBACK_SPACING = 280
 
 export type ParseResult = { ok: true; topology: Topology } | { ok: false; errors: string[] }
 
-// 匯入檔是第 5 節的 Request 格式。這裡擋三種錯誤：
+// 自動存檔是第 5 節的 Request 格式。這裡擋三種錯誤：
 // - 後端會回 400 的格式錯誤（缺欄位、型別不對、數值溢位成 Infinity、id 重複）
 // - 畫布畫不出來或選不到的邊（連到不存在的節點、連回自己、重複的邊、連進 Client、從沒有下游的 type 連出、Database 連到 Read Replica 以外的節點），
 //   編輯器本身也不允許建立這些邊
-// 參數範圍和其他拓撲規則交給後端驗證，匯入後在錯誤分頁顯示，和使用者自己編輯出來的狀態一樣
+// 參數範圍和其他拓撲規則交給後端驗證，還原後在錯誤分頁顯示，和使用者自己編輯出來的狀態一樣
 export function parseTopology(text: string): ParseResult {
   let data: unknown
   try {
@@ -191,7 +191,7 @@ function toEdge(
     return null
   }
   // 和編輯器的連線規則一致（useTopologyEditor 的 isValidConnection、SimNode 的 handle）。
-  // 只有經過其他節點的環例外：可以匯入，Run 之後顯示 CYCLE_DETECTED，刪掉邊就能修好
+  // 只有經過其他節點的環例外：可以讀入，Run 之後顯示 CYCLE_DETECTED，刪掉邊就能修好
   if (source === target) {
     fail('不能連回自己')
     return null
@@ -316,24 +316,7 @@ function isNodeType(value: unknown): value is NodeType {
   return NODE_TYPES.includes(value as NodeType)
 }
 
-// 下載完成前不能釋放 URL，Safari 太早釋放會取消下載
-const REVOKE_DELAY_MS = 10_000
-
-// 匯出檔的內容，parseTopology 讀回來會得到相同的拓撲
+// 自動存檔的內容，parseTopology 讀回來會得到相同的拓撲
 export function serializeTopology(topology: Topology): string {
   return `${JSON.stringify(topology, null, 2)}\n`
-}
-
-// 匯出目前畫布（含 ui 座標）為 JSON 檔下載
-export function downloadTopology(topology: Topology, filename = 'topology.json') {
-  const blob = new Blob([serializeTopology(topology)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  // 舊版 Firefox 只接受頁面上的連結
-  document.body.append(link)
-  link.click()
-  link.remove()
-  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS)
 }

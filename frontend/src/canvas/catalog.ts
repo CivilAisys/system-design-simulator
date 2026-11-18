@@ -41,7 +41,7 @@ type NodeKind = {
   idPrefix: string
   // spec 3.3 的預設值，涵蓋 numberParams 和 choiceParams 的每個參數
   defaults: NodeParams
-  // 屬性面板依序列出的參數，也是匯入時讀取的參數。有 shards 的 type 可以分片，另外有 hotShardShare（spec 4.2.2）；
+  // 屬性面板依序列出的參數，也是讀入存檔時讀取的參數。有 shards 的 type 可以分片，另外有 hotShardShare（spec 4.2.2）；
   // 有 retentionDays 的 type 估算儲存量，另外有 diskGbPerShard（spec 4.8）
   numberParams: NodeNumberParam[]
   choiceParams: NodeChoiceParam[]

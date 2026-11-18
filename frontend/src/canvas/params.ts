@@ -28,7 +28,7 @@ export type NumberSpec = {
   labelEn: string
   unit?: string
   integer?: boolean
-  // 0.3.0 起新增的參數都是選填：匯入的檔案省略時用該類型的預設值，舊檔照樣讀得進來（spec 3.6）
+  // 0.3.0 起新增的參數都是選填：存檔省略時用該類型的預設值，舊檔照樣讀得進來（spec 3.6）
   optional?: boolean
   min: number
   // true 時 min 本身不合法（例如 weight > 0）

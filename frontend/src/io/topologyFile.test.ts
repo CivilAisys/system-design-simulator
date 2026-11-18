@@ -76,12 +76,12 @@ function remove(target: object, field: string) {
   delete (target as Record<string, unknown>)[field]
 }
 
-// 改一份合法檔案後匯入，回傳錯誤訊息（合法時測試失敗）
+// 改一份合法檔案後讀入，回傳錯誤訊息（合法時測試失敗）
 function errorsOf(edit: (file: FileData) => unknown): string[] {
   const file = validFile()
   const result = toTopology(edit(file) ?? file)
   if (result.ok) {
-    throw new Error('預期匯入失敗，但通過了')
+    throw new Error('預期讀入失敗，但通過了')
   }
   return result.errors
 }
@@ -89,7 +89,7 @@ function errorsOf(edit: (file: FileData) => unknown): string[] {
 function topologyOf(data: unknown): Topology {
   const result = toTopology(data)
   if (!result.ok) {
-    throw new Error(`預期匯入成功：${result.errors.join('；')}`)
+    throw new Error(`預期讀入成功：${result.errors.join('；')}`)
   }
   return result.topology
 }
@@ -564,7 +564,7 @@ function withMessageQueue() {
   return { ...file, nodes: [...file.nodes, mq, worker], edges }
 }
 
-describe('匯出再匯入', () => {
+describe('存檔再讀回', () => {
   it.each([
     ['合法檔案', topologyOf(validFile())],
     ['開啟時的畫布', initialTopology],

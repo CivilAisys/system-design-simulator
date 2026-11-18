@@ -12,8 +12,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -46,10 +44,10 @@ class SimulateEndpointTest {
     private ObjectMapper mapper;
 
     @Test
-    void simulatesBasicWebAppExample() throws Exception {
-        // 前端「範例」選單的「基本 Web App」：Client → LB → Service → Cache → Database
-        byte[] example = readExample("basic-web-app.json");
-        JsonNode body = simulate(example);
+    void simulatesBasicWebApp() throws Exception {
+        // 基本 Web App：Client → LB → Service → Cache → Database
+        byte[] scenario = readScenario("basic-web-app.json");
+        JsonNode body = simulate(scenario);
 
         assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "nodes", "edges", "summary",
                 "storage");
@@ -113,21 +111,10 @@ class SimulateEndpointTest {
         assertThat(summary.get("bottleneckNodeId").asText()).isEqualTo("svc-1");
     }
 
-    // 範例選單的每一個範例都要通過驗證、有計算結果；數字由各自的情境決定，不逐一檢查
-    @ParameterizedTest
-    @MethodSource("exampleFiles")
-    void everyExampleIsValid(String example) throws Exception {
-        JsonNode body = simulate(readExample(example));
-
-        assertThat(body.get("errors")).as("%s 的驗證錯誤", example).isEmpty();
-        assertThat(body.get("valid").asBoolean()).isTrue();
-        assertThat(body.get("summary").isObject()).isTrue();
-    }
-
-    // 「過載」範例要示範的情境：一載入就有過載的瓶頸和丟棄
+    // 「過載」情境：一載入就有過載的瓶頸和丟棄
     @Test
-    void overloadExampleHasOverloadedBottleneck() throws Exception {
-        JsonNode body = simulate(readExample("overload.json"));
+    void overloadHasOverloadedBottleneck() throws Exception {
+        JsonNode body = simulate(readScenario("overload.json"));
 
         String bottleneck = body.at("/summary/bottleneckNodeId").asText();
         assertThat(body.at("/nodes/" + bottleneck + "/status").asText()).isEqualTo("OVERLOADED");
@@ -137,27 +124,27 @@ class SimulateEndpointTest {
         assertThat(body.at("/summary/avgEndToEndMs/write/ms").isNull()).isTrue();
     }
 
-    // 「Fan-out」範例要示範的情境：切到 PARALLEL 時端到端延遲變短，並標示近似
+    // 「Fan-out」情境：切到 PARALLEL 時端到端延遲變短，並標示近似
     @Test
-    void fanOutExampleIsApproximateWhenParallel() throws Exception {
-        ObjectNode example = (ObjectNode) mapper.readTree(readExample("fan-out.json"));
-        double sequential = simulate(mapper.writeValueAsBytes(example)).at("/summary/avgEndToEndMs/read/ms").asDouble();
-        for (JsonNode node : example.get("nodes")) {
+    void fanOutIsApproximateWhenParallel() throws Exception {
+        ObjectNode scenario = (ObjectNode) mapper.readTree(readScenario("fan-out.json"));
+        double sequential = simulate(mapper.writeValueAsBytes(scenario)).at("/summary/avgEndToEndMs/read/ms").asDouble();
+        for (JsonNode node : scenario.get("nodes")) {
             if (node.get("name").asText().equals("Gateway")) {
                 ((ObjectNode) node.get("params")).put("callMode", "PARALLEL");
             }
         }
 
-        JsonNode parallel = simulate(mapper.writeValueAsBytes(example)).at("/summary/avgEndToEndMs/read");
+        JsonNode parallel = simulate(mapper.writeValueAsBytes(scenario)).at("/summary/avgEndToEndMs/read");
         assertThat(parallel.get("approximate").asBoolean()).isTrue();
         assertThat(parallel.get("ms").asDouble()).isLessThan(sequential);
     }
 
-    // 「CDN」範例要示範的情境：CDN 擋掉大部分 read，origin 負載低；hitRatio 降到 0 時 origin 過載
+    // 「CDN」情境：CDN 擋掉大部分 read，origin 負載低；hitRatio 降到 0 時 origin 過載
     @Test
-    void cdnExampleShieldsOrigin() throws Exception {
-        ObjectNode example = (ObjectNode) mapper.readTree(readExample("cdn.json"));
-        JsonNode shielded = simulate(mapper.writeValueAsBytes(example));
+    void cdnShieldsOrigin() throws Exception {
+        ObjectNode scenario = (ObjectNode) mapper.readTree(readScenario("cdn.json"));
+        JsonNode shielded = simulate(mapper.writeValueAsBytes(scenario));
         // read 19000 只有 5% miss 往下送，write 1000 全部穿透；Web API 容量 2 × 200 / 50ms = 8000
         assertRates(shielded.at("/nodes/svc-1/arrivalRps"), 950, 1000);
         assertThat(shielded.at("/nodes/svc-1/status").asText()).isEqualTo("OK");
@@ -167,18 +154,18 @@ class SimulateEndpointTest {
         assertThat(shielded.at("/summary/cdnOffloadBytesPerSec").asDouble())
                 .isCloseTo(19_000 * 0.95 * 100_000, within(1e-3));
 
-        set(example, "/nodes/1/params/hitRatio", mapper.getNodeFactory().numberNode(0));
-        JsonNode unshielded = simulate(mapper.writeValueAsBytes(example));
+        set(scenario, "/nodes/1/params/hitRatio", mapper.getNodeFactory().numberNode(0));
+        JsonNode unshielded = simulate(mapper.writeValueAsBytes(scenario));
         assertRates(unshielded.at("/nodes/svc-1/arrivalRps"), 19000, 1000);
         assertThat(unshielded.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
         assertThat(unshielded.at("/summary/cdnOffloadBytesPerSec").asDouble()).isZero();
     }
 
-    // 「Rate Limiter」範例要示範的情境：限流讓原本會過載的 API 回到穩態，拒絕的部分算進丟棄率
+    // 「Rate Limiter」情境：限流讓原本會過載的 API 回到穩態，拒絕的部分算進丟棄率
     @Test
-    void rateLimiterExampleProtectsBackend() throws Exception {
-        ObjectNode example = (ObjectNode) mapper.readTree(readExample("rate-limiter.json"));
-        JsonNode limited = simulate(mapper.writeValueAsBytes(example));
+    void rateLimiterProtectsBackend() throws Exception {
+        ObjectNode scenario = (ObjectNode) mapper.readTree(readScenario("rate-limiter.json"));
+        JsonNode limited = simulate(mapper.writeValueAsBytes(scenario));
         assertThat(limited.at("/nodes/limiter-1/status").asText()).isEqualTo("LIMITING");
         assertThat(limited.at("/nodes/limiter-1/rejectedRps").asDouble()).isCloseTo(6000, within(1e-6));
         assertThat(limited.at("/nodes/svc-1/status").asText()).isEqualTo("WARN");
@@ -186,16 +173,16 @@ class SimulateEndpointTest {
         assertThat(limited.at("/summary/dropRate").asDouble()).isCloseTo(0.5, within(1e-9));
         assertThat(limited.at("/summary/bottleneckNodeId").asText()).isEqualTo("svc-1");
 
-        set(example, "/nodes/1/params/limitRps", mapper.getNodeFactory().numberNode(1e12));
-        JsonNode unlimited = simulate(mapper.writeValueAsBytes(example));
+        set(scenario, "/nodes/1/params/limitRps", mapper.getNodeFactory().numberNode(1e12));
+        JsonNode unlimited = simulate(mapper.writeValueAsBytes(scenario));
         assertThat(unlimited.at("/nodes/limiter-1/status").asText()).isEqualTo("NOT_LIMITING");
         assertThat(unlimited.at("/nodes/svc-1/status").asText()).isEqualTo("OVERLOADED");
     }
 
-    // 「External API」範例要示範的情境：第三方的固定延遲拖慢結帳，超過配額的部分被拒絕
+    // 「External API」情境：第三方的固定延遲拖慢結帳，超過配額的部分被拒絕
     @Test
-    void externalApiExampleIsSlowAndOverQuota() throws Exception {
-        JsonNode body = simulate(readExample("external-api.json"));
+    void externalApiIsSlowAndOverQuota() throws Exception {
+        JsonNode body = simulate(readScenario("external-api.json"));
 
         assertThat(body.at("/nodes/ext-1/status").asText()).isEqualTo("OVER_QUOTA");
         assertThat(body.at("/nodes/ext-1/rejectedRps").asDouble()).isCloseTo(500, within(1e-6));
@@ -205,11 +192,11 @@ class SimulateEndpointTest {
         assertThat(body.at("/summary/bottleneckNodeId").asText()).isNotEqualTo("ext-1");
     }
 
-    // 「分片熱點」範例要示範的情境：4 個 shard 但有熱點，容量撐不到 4 倍；平均分配時撐得住
+    // 「分片熱點」情境：4 個 shard 但有熱點，容量撐不到 4 倍；平均分配時撐得住
     @Test
-    void shardingExampleHotShardOverloads() throws Exception {
-        ObjectNode example = (ObjectNode) mapper.readTree(readExample("sharding.json"));
-        JsonNode hot = simulate(mapper.writeValueAsBytes(example));
+    void shardingHotShardOverloads() throws Exception {
+        ObjectNode scenario = (ObjectNode) mapper.readTree(readScenario("sharding.json"));
+        JsonNode hot = simulate(mapper.writeValueAsBytes(scenario));
         // 28,000 × 0.4 = 11,200 > 每個 shard 的 10,000
         assertThat(hot.at("/nodes/db-1/status").asText()).isEqualTo("OVERLOADED");
         assertThat(hot.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(40_000, within(1e-6));
@@ -217,8 +204,8 @@ class SimulateEndpointTest {
         assertThat(hot.at("/nodes/db-1/shards/1/status").asText()).isEqualTo("OK");
         assertThat(hot.at("/summary/bottleneckNodeId").asText()).isEqualTo("db-1");
 
-        remove(example, "/nodes/3/params/hotShardShare");
-        JsonNode even = simulate(mapper.writeValueAsBytes(example));
+        remove(scenario, "/nodes/3/params/hotShardShare");
+        JsonNode even = simulate(mapper.writeValueAsBytes(scenario));
         assertThat(even.at("/nodes/db-1/utilization").asDouble()).isCloseTo(0.7, within(1e-9));
         assertThat(even.at("/summary/dropRate").asDouble()).isZero();
         // 儲存量：write 2,800/s × 2 KB × 86,400 = 483.84 GB/天，每 shard 120.96 GB/天，2 TB 的磁碟約 16.5 天就滿
@@ -228,11 +215,11 @@ class SimulateEndpointTest {
         assertThat(even.at("/storage/db-1/fillsDisk").asBoolean()).isTrue();
     }
 
-    // 「Redis Cluster 熱點 key」範例要示範的情境：一個 shard 過載，其他 shard 還很閒
+    // 「Redis Cluster 熱點 key」情境：一個 shard 過載，其他 shard 還很閒
     @Test
-    void redisClusterExampleHasOneHotShard() throws Exception {
-        ObjectNode example = (ObjectNode) mapper.readTree(readExample("redis-cluster.json"));
-        JsonNode hot = simulate(mapper.writeValueAsBytes(example));
+    void redisClusterHasOneHotShard() throws Exception {
+        ObjectNode scenario = (ObjectNode) mapper.readTree(readScenario("redis-cluster.json"));
+        JsonNode hot = simulate(mapper.writeValueAsBytes(scenario));
         // 250,000 × 0.5 = 125,000 > 每個 shard 的 100,000；其他兩個各 62,500
         assertThat(hot.at("/nodes/cache-1/shards").size()).isEqualTo(3);
         assertThat(hot.at("/nodes/cache-1/shards/0/status").asText()).isEqualTo("OVERLOADED");
@@ -240,15 +227,15 @@ class SimulateEndpointTest {
         assertThat(hot.at("/nodes/cache-1/shards/2/status").asText()).isEqualTo("OK");
         assertThat(hot.at("/summary/bottleneckNodeId").asText()).isEqualTo("cache-1");
 
-        remove(example, "/nodes/2/params/hotShardShare");
-        JsonNode even = simulate(mapper.writeValueAsBytes(example));
+        remove(scenario, "/nodes/2/params/hotShardShare");
+        JsonNode even = simulate(mapper.writeValueAsBytes(scenario));
         assertThat(even.at("/summary/dropRate").asDouble()).isZero();
     }
 
-    // 「Read Replica」範例要示範的情境：replica 分擔 read，但每個 replica 都要套用全部的 write
+    // 「Read Replica」情境：replica 分擔 read，但每個 replica 都要套用全部的 write
     @Test
-    void readReplicaExampleSplitsReadsButEveryReplicaAppliesAllWrites() throws Exception {
-        JsonNode body = simulate(readExample("read-replica.json"));
+    void readReplicaSplitsReadsButEveryReplicaAppliesAllWrites() throws Exception {
+        JsonNode body = simulate(readScenario("read-replica.json"));
 
         assertRates(body.at("/nodes/db-1/arrivalRps"), 0, 1200);
         for (String replica : List.of("replica-1", "replica-2")) {
@@ -259,10 +246,10 @@ class SimulateEndpointTest {
         assertThat(body.at("/summary/dropRate").asDouble()).isZero();
     }
 
-    // 「Message Queue 削峰」範例要示範的情境：worker 處理不完時積壓在 queue 裡，使用者的請求照樣成功、延遲很短
+    // 「Message Queue 削峰」情境：worker 處理不完時積壓在 queue 裡，使用者的請求照樣成功、延遲很短
     @Test
-    void messageQueueExampleBuildsBacklogWithoutFailures() throws Exception {
-        JsonNode body = simulate(readExample("message-queue.json"));
+    void messageQueueBuildsBacklogWithoutFailures() throws Exception {
+        JsonNode body = simulate(readScenario("message-queue.json"));
 
         // worker 容量 2 × 50 / 50ms = 2,000，收到 3,000：每秒積壓 1,000，不算丟棄
         assertThat(body.at("/edges/e3/backlogRps").asDouble()).isCloseTo(1000, within(1e-6));
@@ -274,29 +261,12 @@ class SimulateEndpointTest {
         assertThat(body.at("/summary/avgEndToEndMs/write/ms").asDouble()).isLessThan(60);
     }
 
-    static Stream<String> exampleFiles() throws Exception {
-        List<String> files;
-        try (Stream<Path> listing = Files.list(examplesDir())) {
-            files = listing.map(path -> path.getFileName().toString()).filter(name -> name.endsWith(".json"))
-                    .sorted().toList();
+    // 測試用的情境拓撲，在 src/test/resources/scenarios
+    private byte[] readScenario(String fileName) throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/scenarios/" + fileName)) {
+            assertThat(in).as("找不到情境 %s", fileName).isNotNull();
+            return in.readAllBytes();
         }
-        // 資料夾裡沒有範例檔時參數化測試不會執行任何案例，不能當成通過
-        assertThat(files).as("%s 裡沒有範例檔", examplesDir()).isNotEmpty();
-        return files.stream();
-    }
-
-    private static byte[] readExample(String fileName) throws Exception {
-        return Files.readAllBytes(examplesDir().resolve(fileName));
-    }
-
-    // Gradle 會用系統屬性傳路徑；直接在 IDE 跑 JUnit 時沒有這個屬性，退回相對於 api 模組的路徑
-    private static Path examplesDir() {
-        String configured = System.getProperty("examples.dir");
-        Path path = Path.of(configured != null ? configured : "../../frontend/src/examples");
-        assertThat(path)
-                .as("找不到內建範例資料夾 %s：用 Gradle 執行，或把工作目錄設成 backend/api", path.toAbsolutePath())
-                .isDirectory();
-        return path;
     }
 
     private static void assertServer(JsonNode node, double read, double write, double capacity, double utilization) {
