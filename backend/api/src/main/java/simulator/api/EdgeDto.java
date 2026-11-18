@@ -16,7 +16,7 @@ public record EdgeDto(
         @Schema(requiredMode = REQUIRED) String target,
         @Schema(defaultValue = "1") Double weight,
         @Schema(defaultValue = "1") Integer callsPerRequest,
-        @Schema(defaultValue = "1") Double latencyMs,
+        @Schema(defaultValue = "1", description = "往返的網路延遲：送出請求到收到回應，在網路上花的時間") Double latencyMs,
         @Schema(defaultValue = "ALL", description = "只用在 Service 的邊：哪個 class 的請求會呼叫這個下游")
         RequestClass requestClass) {
 

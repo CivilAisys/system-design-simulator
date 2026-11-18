@@ -133,7 +133,7 @@ system-design-simulator/
 | `source` / `target` | 節點 id | — |
 | `weight` | 分流權重（Client、LB、CDN 用） | 1 |
 | `callsPerRequest` | 每個請求呼叫幾次（Service 用） | 1 |
-| `latencyMs` | 網路延遲（單程） | 1 |
+| `latencyMs` | 網路延遲（往返：送出請求到收到回應，在網路上花的時間） | 1 |
 | `requestClass` | 哪個 class 的請求會走這條邊（Service 用）：`ALL`、`READ`、`WRITE` | `ALL` |
 
 - 欄位只在對應的起點有意義：`weight` 只用在 Client／LB／CDN 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（存檔一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
@@ -286,14 +286,14 @@ Cache 保留一個熱點的教學點：Redis Cluster 一個主就是一個 shard
 | 元件 | `L(n)` |
 |---|---|
 | Database、External API | `W(n)`（External API 的 `W = latencyMs`） |
-| Load Balancer／Client | `W(n) + Σ (weight_i / Σweight) × (edge_i.latencyMs×2 + L(child_i))` |
-| Service（`SEQUENTIAL`） | `W(n) + Σ callsPerRequest_i × (edge_i.latencyMs×2 + L(child_i))`（依序呼叫，所以相加；只加 `requestClass` 符合這個 class 的下游，下同） |
-| Service（`PARALLEL`） | `W(n) + max_i [ callsPerRequest_i × (edge_i.latencyMs×2 + L(child_i)) ]`（各下游同時呼叫，取最慢的；同一個下游呼叫多次時仍依序） |
-| Cache（read） | `W(n) + (1 − hitRatio) × (edge.latencyMs×2 + L(child))` |
-| Cache（write） | `W(n) + edge.latencyMs×2 + L(child)` |
-| CDN（read） | `W(n) + (1 − hitRatio) × Σ (weight_i / Σweight) × (edge_i.latencyMs×2 + L(child_i))` |
-| CDN（write） | `W(n) + Σ (weight_i / Σweight) × (edge_i.latencyMs×2 + L(child_i))` |
-| Rate Limiter | `W(n) + edge.latencyMs×2 + L(child)`，`W(n) = 0` |
+| Load Balancer／Client | `W(n) + Σ (weight_i / Σweight) × (edge_i.latencyMs + L(child_i))` |
+| Service（`SEQUENTIAL`） | `W(n) + Σ callsPerRequest_i × (edge_i.latencyMs + L(child_i))`（依序呼叫，所以相加；只加 `requestClass` 符合這個 class 的下游，下同） |
+| Service（`PARALLEL`） | `W(n) + max_i [ callsPerRequest_i × (edge_i.latencyMs + L(child_i)) ]`（各下游同時呼叫，取最慢的；同一個下游呼叫多次時仍依序） |
+| Cache（read） | `W(n) + (1 − hitRatio) × (edge.latencyMs + L(child))` |
+| Cache（write） | `W(n) + edge.latencyMs + L(child)` |
+| CDN（read） | `W(n) + (1 − hitRatio) × Σ (weight_i / Σweight) × (edge_i.latencyMs + L(child_i))` |
+| CDN（write） | `W(n) + Σ (weight_i / Σweight) × (edge_i.latencyMs + L(child_i))` |
+| Rate Limiter | `W(n) + edge.latencyMs + L(child)`，`W(n) = 0` |
 
 Client 本身沒有 W（記為 0）。
 
@@ -427,8 +427,8 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 | 過載 | c=1, μ=100, λ=150 | 處理量 100、丟棄 50、W=null |
 | Cache 分流 | λ_read=900, λ_write=100, hit=0.8 | 下游 read=180、write=100 |
 | 大 c 不溢位 | c=400, ρ=0.9 | 結果有限且合理 |
-| 依序呼叫 | Service W=50ms，兩個下游 L=10ms、30ms，邊 latency=1ms | L = 50 + 12 + 32 = 94ms |
-| 平行呼叫 | 同上，`callMode=PARALLEL` | L = 50 + max(12, 32) = 82ms |
+| 依序呼叫 | Service W=50ms，兩個下游 L=10ms、30ms，邊 latency=1ms | L = 50 + 11 + 31 = 92ms |
+| 平行呼叫 | 同上，`callMode=PARALLEL` | L = 50 + max(11, 31) = 81ms |
 | Fan-out 成功率 | Client 1000 rps → Service（pass=1）→ DB-A（pass=0.9，callsPerRequest=2）、DB-B（pass=1） | S = 0.9² × 1 = 0.81，successRps=810，dropRate=0.19 |
 | 頻寬 | Client 1000 rps、readRatio=0.9、回應 10 KB、上傳 1 KB → CDN（hit=0.95） | 出口 9,000,000 B/s、入口 100,000 B/s、CDN 擋掉 8,550,000 B/s |
 | 儲存量 | write 100 rps 全部處理、bytesPerWrite=2000、retentionDays=30、instances=2、diskGbPerInstance=100、2 個 Read Replica | 每日 17.28 GB、總量 518.4 GB、含副本 1,555.2 GB、每台 259.2 GB、約 11.6 天磁碟滿（保留期內會滿） |
@@ -718,3 +718,4 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 | 2026-11-12 | 引擎只公開 **`Simulator.simulate(Topology)`** 一個入口 | 計算不會散落到 API 層；測試透過公開介面驗證行為；階段二 DES 是另一個實作 |
 | 2026-11-12 | **Auto-run 預設開啟**，節點、邊、參數有變化就自動重算（debounce 300ms），移到 M4 | 改了就看到結果最直覺；穩態計算是毫秒等級，每次重算整份拓撲沒有負擔 |
 | 2026-11-13 | 前端加入 **Vitest 單元測試**，只測不需要瀏覽器的純邏輯（匯入檢查、匯出再匯入、內建範例、參數範圍與 slider 換算、顯示格式、連線規則），在 CI 執行（0.2.0，#34） | 匯入檢查規則多，手動驗收容易漏；元件和端到端測試仍不做 |
+| 2026-11-18 | 邊的 `latencyMs` 改成**往返**，端到端延遲不再乘 2（0.7.0，#155）；舊存檔不轉換 | 查得到的延遲數字（ping、雲端跨區延遲表）幾乎都是往返，使用者查到多少就填多少；原本的單程要自己除以 2，很容易填錯 |
