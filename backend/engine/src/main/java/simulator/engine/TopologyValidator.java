@@ -27,13 +27,12 @@ final class TopologyValidator {
     static final double MAX_LATENCY_MS = 1e7;
     static final int MAX_CALLS_PER_REQUEST = 10_000;
     static final double MAX_WEIGHT = 1e6;
-    static final int MAX_SHARDS = 64;
     // 每個請求的回應、上傳大小或每次 write 新增的資料量（bytes），1 TB
     static final double MAX_BYTES = 1e12;
     static final double MAX_RETENTION_DAYS = 100_000;
     // 每個 shard 的磁碟容量（GB），1 EB
     static final double MAX_DISK_GB = 1e9;
-    // hotShardShare 的下限 1/N 容許浮點誤差，前端 params.ts 用同一個值
+    // hotShare 的下限 1/instances 容許浮點誤差，前端 params.ts 用同一個值
     static final double SHARE_TOLERANCE = 1e-12;
 
     private final Topology topology;
@@ -196,11 +195,10 @@ final class TopologyValidator {
             case CachingNode cache -> {
                 checkCapacityParams(cache.capacityParams(), where, report);
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
-                checkShards(cache.shards(), where, report);
+                checkHotShare(cache, where, report);
             }
             case StorageNode storage -> {
                 checkCapacityParams(storage.capacityParams(), where, report);
-                checkShards(storage.shards(), where, report);
                 checkSizing(storage.sizing(), where, report);
             }
             case ReadReplicaNode replica -> checkCapacityParams(replica.capacityParams(), where, report);
@@ -233,16 +231,12 @@ final class TopologyValidator {
         }
     }
 
-    /** instances × concurrency 的上限是對每個 shard 的限制，已經在 checkCapacityParams 檢查。 */
-    private static void checkShards(ShardLayout shards, String where, Consumer<String> report) {
-        if (shards.count() < 1 || shards.count() > MAX_SHARDS) {
-            report.accept(invalid(where, "shards", "介於 1 和 " + MAX_SHARDS + " 之間", shards.count()));
-            return;
-        }
-        // 最熱的 shard 至少分到平均值 1/N，否則它就不是最熱的
-        Double hot = shards.hotShare();
-        if (hot != null && !(hot >= 1.0 / shards.count() - SHARE_TOLERANCE && hot <= 1)) {
-            report.accept(invalid(where, "hotShardShare", "介於 1/" + shards.count() + " 和 1 之間", hot));
+    /** 最熱的那台至少分到平均值 1/instances，否則它就不是最熱的。instances 不合法時已經回報過，不再檢查。 */
+    private static void checkHotShare(CachingNode cache, String where, Consumer<String> report) {
+        Double hot = cache.hotShare();
+        int instances = cache.capacityParams().instances();
+        if (hot != null && instances >= 1 && !(hot >= 1.0 / instances - SHARE_TOLERANCE && hot <= 1)) {
+            report.accept(invalid(where, "hotShare", "介於 1/" + instances + " 和 1 之間", hot));
         }
     }
 

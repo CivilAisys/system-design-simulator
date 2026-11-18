@@ -73,8 +73,7 @@ final class SuccessRates {
 
     /**
      * 這個 class 的通過率 = 實際處理量 / 到達量；Client 和沒有流量的節點為 1。
-     * 每個 shard 依 read／write 比例丟棄，但 Read Replica 各 shard 的比例不同（複製寫入跟著 primary 的 shard），
-     * 所以分片的節點逐 shard 加總這個 class 的處理量。
+     * 丟棄依 read／write 比例分配；有熱點的 Cache 兩邊的 read／write 比例相同，所以也一樣。
      */
     private double pass(Node node, boolean read) {
         if (node instanceof ClientNode) {
@@ -85,13 +84,6 @@ final class SuccessRates {
         if (arrival <= 0) {
             return 1;
         }
-        if (result.shards() == null) {
-            return result.throughputRps() / result.arrivalRps().total();
-        }
-        double processed = result.shards().stream()
-                .filter(shard -> shard.arrivalRps().total() > 0)
-                .mapToDouble(shard -> shard.arrivalRps().of(read) * shard.throughputRps() / shard.arrivalRps().total())
-                .sum();
-        return processed / arrival;
+        return result.throughputRps() / result.arrivalRps().total();
     }
 }

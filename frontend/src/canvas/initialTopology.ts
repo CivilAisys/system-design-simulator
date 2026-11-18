@@ -23,7 +23,7 @@ export const initialTopology: Topology = {
       id: 'db-1',
       type: 'DATABASE',
       name: 'DB',
-      params: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1, bytesPerWrite: 1_000, retentionDays: 365 },
+      params: { instances: 1, concurrency: 100, serviceTimeMs: 10, bytesPerWrite: 1_000, retentionDays: 365 },
       state: 'HEALTHY',
       ui: { x: 600, y: 0 },
     },

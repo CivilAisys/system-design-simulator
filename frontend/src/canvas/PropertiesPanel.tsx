@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { NODE_KINDS, shownShards } from './catalog'
+import { NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
 import { formatUtilization } from './format'
 import { workersHint } from './instanceRack'
@@ -66,6 +66,11 @@ export function PropertiesPanel({ nodes, edges, nodeResults, onUpdateNode, onUpd
 // 按「設定磁碟容量」時先填的值
 const NEW_DISK_GB = 1000
 
+// 按「設定熱點」時先填平均的兩倍，看得出最熱那台比較忙
+function newHotShare(instances: number): number {
+  return Math.min(1, 2 / instances)
+}
+
 type NodePropertiesProps = {
   node: SimFlowNode
   result: NodeResult | undefined
@@ -75,37 +80,47 @@ type NodePropertiesProps = {
 function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProps) {
   const nameId = useId()
   const node = flowNode.data.node
-  const { label, icon, category, numberParams, choiceParams } = NODE_KINDS[node.type]
+  const { label, icon, category, numberParams, choiceParams, hasHotShare } = NODE_KINDS[node.type]
   const utilization = result?.utilization ?? null
   const status = result?.status ?? null
 
-  // 分片時才有熱點：省略時平均分配，顯示平均值；改了之後就是明確的占比。緊接在 shards 後面顯示
-  const hotShareField = (node.params.shards ?? 1) > 1 && (
-    <div className="grid gap-1">
-      <NumberField
-        spec={NODE_PARAM_SPECS.hotShardShare}
-        value={node.params.hotShardShare ?? 1 / (node.params.shards ?? 1)}
-        check={(value) => checkNodeParam(node.params, 'hotShardShare', value)}
-        onChange={(value) => onUpdate(node.id, { params: { hotShardShare: value } })}
-      />
-      <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          最熱的 shard 分到的流量比例，平均是 1/{node.params.shards}（{formatShare(1 / (node.params.shards ?? 1))}）
-        </span>
-        {/* 設定過占比之後，shard 數改了也不會跟著變；改回平均就會跟著 1/N 走 */}
-        {node.params.hotShardShare !== undefined && (
+  // 多台的 Cache 才有熱點：沒設定時所有機器共用一條佇列。緊接在 instances 後面顯示（spec 4.2.2）
+  const instances = nodeParam(node.params, 'instances')
+  const hotShareField =
+    hasHotShare &&
+    instances >= 2 &&
+    (node.params.hotShare === undefined ? (
+      <Button
+        variant="link"
+        size="sm"
+        className="h-auto justify-start p-0 text-xs"
+        onClick={() => onUpdate(node.id, { params: { hotShare: newHotShare(instances) } })}
+      >
+        設定熱點：最熱那台分到較多流量
+      </Button>
+    ) : (
+      <div className="grid gap-1">
+        <NumberField
+          spec={NODE_PARAM_SPECS.hotShare}
+          value={node.params.hotShare}
+          check={(value) => checkNodeParam(node.params, 'hotShare', value)}
+          onChange={(value) => onUpdate(node.id, { params: { hotShare: value } })}
+        />
+        <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            最熱那台分到的流量比例，平均是 1/{instances}（{formatShare(1 / instances)}）
+          </span>
           <Button
             variant="link"
             size="sm"
             className="h-auto shrink-0 p-0 text-xs"
-            onClick={() => onUpdate(node.id, { clearParams: ['hotShardShare'] })}
+            onClick={() => onUpdate(node.id, { clearParams: ['hotShare'] })}
           >
-            改回平均
+            沒有熱點
           </Button>
-        )}
+        </div>
       </div>
-    </div>
-  )
+    ))
 
   return (
     <div className="grid gap-4">
@@ -122,15 +137,13 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
             check={(value) => checkNodeParam(node.params, param, value)}
             onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
           />
-          {param === 'shards' && hotShareField}
           {param === 'instances' && (
-            <p className="-mt-3 text-xs text-muted-foreground">
-              {workersHint(
-                nodeParam(node.params, 'instances'),
-                nodeParam(node.params, 'concurrency'),
-                shownShards(node, flowNode.data.mirroredShards),
-              )}
-            </p>
+            <>
+              <p className="-mt-3 text-xs text-muted-foreground">
+                {workersHint(instances, nodeParam(node.params, 'concurrency'))}
+              </p>
+              {hotShareField}
+            </>
           )}
         </Fragment>
       ))}

@@ -134,28 +134,25 @@ class ParamRangeTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {0, -1, 65})
-    void invalidShardCountIsRejected(int shards) {
-        assertInvalidParam(runShardedDatabase(new ShardLayout(shards, null)), "db", null, "shards");
-    }
-
-    @ParameterizedTest
     @ValueSource(doubles = {0.2, 1.1, Double.NaN})
-    void hotShardShareOutside1OverNAnd1IsRejected(double hotShare) {
-        // 4 個 shard：最熱的至少要分到 1/4
-        assertInvalidParam(runShardedDatabase(new ShardLayout(4, hotShare)), "db", null, "hotShardShare 必須 介於 1/4 和 1");
+    void hotShareOutside1OverInstancesAnd1IsRejected(double hotShare) {
+        // 4 台：最熱的那台至少要分到 1/4
+        assertInvalidParam(runHotCache(hotShare), "cache", null, "hotShare 必須 介於 1/4 和 1");
     }
 
     @ParameterizedTest
     @ValueSource(doubles = {0.25, 1})
-    void hotShardShareBoundsAreAccepted(double hotShare) {
-        assertThat(runShardedDatabase(new ShardLayout(4, hotShare)).errors()).isEmpty();
+    void hotShareBoundsAreAccepted(double hotShare) {
+        assertThat(runHotCache(hotShare).errors()).isEmpty();
     }
 
-    private SimulationResult runShardedDatabase(ShardLayout shards) {
+    private SimulationResult runHotCache(double hotShare) {
         return simulator.simulate(new Topology(
-                List.of(client(100, 0.9), new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY, shards)),
-                List.of(new Edge("e1", "c", "db", 1, 1, 1))));
+                List.of(client(100, 0.9),
+                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, new CapacityParams(4, 100, 10), 0.8,
+                                hotShare),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
+                List.of(new Edge("e1", "c", "cache", 1, 1, 1), new Edge("e2", "cache", "db", 1, 1, 1))));
     }
 
     static Stream<StorageSizing> invalidSizings() {
@@ -257,7 +254,7 @@ class ParamRangeTest {
                 new ServiceNode("s", "API", NodeHealth.HEALTHY, maxed, CallMode.PARALLEL),
                 new CacheNode("cache", "Redis", NodeHealth.HEALTHY, maxed, 0),
                 new DatabaseNode("db", "DB", NodeHealth.HEALTHY, new CapacityParams(1, 1, 1e7),
-                        new ShardLayout(1, null), new StorageSizing(1e12, 100_000, 1e-9)));
+                        new StorageSizing(1e12, 100_000, 1e-9)));
         List<Edge> edges = List.of(
                 new Edge("e1", "c1", "lb", 1e6, 1, 1e7), new Edge("e2", "c2", "lb", 1e6, 1, 1e7),
                 new Edge("e3", "lb", "s", 1e6, 1, 1e7), new Edge("e4", "s", "cache", 1, 10_000, 1e7),

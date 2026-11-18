@@ -41,9 +41,10 @@ type NodeKind = {
   idPrefix: string
   // spec 3.3 的預設值，涵蓋 numberParams 和 choiceParams 的每個參數
   defaults: NodeParams
-  // 屬性面板依序列出的參數，也是讀入存檔時讀取的參數。有 shards 的 type 可以分片，另外有 hotShardShare（spec 4.2.2）；
-  // 有 retentionDays 的 type 估算儲存量，另外有 diskGbPerShard（spec 4.8）
+  // 屬性面板依序列出的參數，也是讀入存檔時讀取的參數。有 retentionDays 的 type 估算儲存量，另外有 diskGbPerShard（spec 4.8）
   numberParams: NodeNumberParam[]
+  // 另外有沒有預設值的 hotShare：最熱那台的流量占比（spec 4.2.2）
+  hasHotShare?: boolean
   choiceParams: NodeChoiceParam[]
   // 能不能有上游／下游（spec 4.5），畫布上沒有對應的 handle
   hasInput: boolean
@@ -133,8 +134,9 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     icon: Zap,
     category: 'DATA',
     idPrefix: 'cache',
-    defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, shards: 1 },
-    numberParams: [...CAPACITY_PARAMS, 'hitRatio', 'shards'],
+    defaults: { instances: 1, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8 },
+    numberParams: [...CAPACITY_PARAMS, 'hitRatio'],
+    hasHotShare: true,
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
@@ -164,8 +166,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     icon: Database,
     category: 'DATA',
     idPrefix: 'db',
-    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, shards: 1, ...storageDefaults(1_000) },
-    numberParams: [...CAPACITY_PARAMS, 'shards', ...STORAGE_PARAMS],
+    defaults: { instances: 1, concurrency: 100, serviceTimeMs: 10, ...storageDefaults(1_000) },
+    numberParams: [...CAPACITY_PARAMS, ...STORAGE_PARAMS],
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
@@ -272,8 +274,8 @@ export type PaletteItem = {
 
 // preset 放在它的 type 後面
 const PRESETS: PaletteItem[] = [
-  // Redis Cluster = 分片的 Cache（spec 4.2.2）
-  { id: 'REDIS_CLUSTER', type: 'CACHE', label: 'Redis Cluster', icon: Boxes, params: { shards: 3 } },
+  // Redis Cluster = 3 台的 Cache（spec 4.2.2）
+  { id: 'REDIS_CLUSTER', type: 'CACHE', label: 'Redis Cluster', icon: Boxes, params: { instances: 3 } },
 ]
 
 export const PALETTE: PaletteItem[] = NODE_TYPES.flatMap((type) => {
@@ -339,7 +341,3 @@ export function isReplicationSource(type: NodeType): boolean {
   return NODE_KINDS[type].outputTargets?.includes('READ_REPLICA') ?? false
 }
 
-// 畫布上的分片數：Read Replica 沒有自己的 shards，沿用 primary 的（spec 4.2.3，Canvas 從連過來的 Database 算）
-export function shownShards(node: Node, mirroredShards: number | undefined): number {
-  return node.params.shards ?? mirroredShards ?? 1
-}

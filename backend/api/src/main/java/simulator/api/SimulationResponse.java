@@ -12,9 +12,10 @@ import simulator.engine.ClassLatencies;
 import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
 import simulator.engine.EndToEndLatency;
+import simulator.engine.HotSpot;
+import simulator.engine.InstanceResult;
 import simulator.engine.NodeResult;
 import simulator.engine.NodeWarning;
-import simulator.engine.ShardResult;
 import simulator.engine.SimulationResult;
 import simulator.engine.Status;
 import simulator.engine.StorageEstimate;
@@ -121,8 +122,8 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, nullable = true) Double avgLatencyMs,
             @Schema(requiredMode = REQUIRED, nullable = true) Status status,
             @Schema(requiredMode = REQUIRED, nullable = true,
-                    description = "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）")
-            List<ShardResultDto> shards,
+                    description = "只有設定了 hotShare 的 Cache 有：最熱的那台和其他台的結果（spec 4.2.2）")
+            HotSpotDto hotSpot,
             @Schema(requiredMode = REQUIRED, description = "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）；BACKLOG：consumer 處理不完 Message Queue 的訊息（spec 4.2.4）")
             List<NodeWarning> warnings) {
 
@@ -130,13 +131,25 @@ public record SimulationResponse(
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
                     node.droppedRps(), node.rejectedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()),
                     node.capacityRps(), node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status(),
-                    node.shards() == null ? null : node.shards().stream().map(ShardResultDto::from).toList(),
+                    HotSpotDto.from(node.hotSpot()),
                     node.warnings());
         }
     }
 
-    @Schema(name = "ShardResult", description = "一個 shard 的結果，欄位意義同 NodeResult")
-    public record ShardResultDto(
+    @Schema(name = "HotSpot")
+    public record HotSpotDto(
+            @Schema(requiredMode = REQUIRED, description = "最熱的那台") InstanceResultDto hottest,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "其他台合起來（共用一條佇列）；只有一台時為 null")
+            InstanceResultDto others) {
+
+        static HotSpotDto from(HotSpot hotSpot) {
+            return hotSpot == null ? null
+                    : new HotSpotDto(InstanceResultDto.from(hotSpot.hottest()), InstanceResultDto.from(hotSpot.others()));
+        }
+    }
+
+    @Schema(name = "InstanceResult", description = "節點裡一部分機器的結果，欄位意義同 NodeResult；多台時是合起來的流量，ρ 是每台相同的使用率")
+    public record InstanceResultDto(
             @Schema(requiredMode = REQUIRED) ClassRatesDto arrivalRps,
             @Schema(requiredMode = REQUIRED) double throughputRps,
             @Schema(requiredMode = REQUIRED) double droppedRps,
@@ -144,9 +157,10 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, nullable = true, description = "過載時為 null") Double avgLatencyMs,
             @Schema(requiredMode = REQUIRED) Status status) {
 
-        static ShardResultDto from(ShardResult shard) {
-            return new ShardResultDto(ClassRatesDto.from(shard.arrivalRps()), shard.throughputRps(),
-                    shard.droppedRps(), shard.utilization(), shard.avgLatencyMs(), shard.status());
+        static InstanceResultDto from(InstanceResult instance) {
+            return instance == null ? null
+                    : new InstanceResultDto(ClassRatesDto.from(instance.arrivalRps()), instance.throughputRps(),
+                            instance.droppedRps(), instance.utilization(), instance.avgLatencyMs(), instance.status());
         }
     }
 

@@ -58,7 +58,6 @@ export function Canvas({
     () => Math.max(0, ...edges.map((e) => result?.edges[e.id]).map((r) => (r ? totalRps(r.rps) : 0))),
     [edges, result],
   )
-  const mirrored = useMemo(() => mirroredShards(nodes, edges), [nodes, edges])
   const shownNodes = useMemo<SimFlowNode[]>(
     () =>
       nodes.map((n) => ({
@@ -68,10 +67,9 @@ export function Canvas({
           result: result?.nodes[n.id],
           errors: errors.nodes.get(n.id),
           stale,
-          mirroredShards: mirrored.get(n.id),
         },
       })),
-    [nodes, result, errors, stale, mirrored],
+    [nodes, result, errors, stale],
   )
   // 邊的種類看 source 的 type。拖動節點時 nodes 每一幀都在變，只在 id 或 type 變了才重算，邊不用跟著重畫
   const typeKey = JSON.stringify(nodes.map((n) => [n.id, n.data.node.type]))
@@ -144,17 +142,4 @@ export function Canvas({
 function classTag(sourceType: NodeType, edge: Edge): 'R' | 'W' | undefined {
   if (!NODE_KINDS[sourceType].edgeChoiceParams.includes('requestClass')) return undefined
   return edge.requestClass === 'READ' ? 'R' : edge.requestClass === 'WRITE' ? 'W' : undefined
-}
-
-// Read Replica 沿用 primary（連過來的 Database）的 shards，Run 之前就畫成 cluster（spec 4.2.3）
-function mirroredShards(nodes: SimFlowNode[], edges: RpsFlowEdge[]): Map<string, number> {
-  const byId = new Map(nodes.map((n) => [n.id, n.data.node]))
-  const mirrored = new Map<string, number>()
-  for (const e of edges) {
-    const source = byId.get(e.source)
-    if (source?.type === 'DATABASE' && byId.get(e.target)?.type === 'READ_REPLICA') {
-      mirrored.set(e.target, source.params.shards ?? 1)
-    }
-  }
-  return mirrored
 }

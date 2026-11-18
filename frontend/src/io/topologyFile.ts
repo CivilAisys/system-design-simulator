@@ -125,13 +125,17 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     }
     kept[param] = value
   }
-  // 省略時平均分配，沒有預設值可以補；範圍（1/shards ～ 1）和其他參數一樣留給後端驗證
-  if (kind.numberParams.includes('shards') && params.hotShardShare !== undefined) {
-    if (!isFiniteNumber(params.hotShardShare)) {
-      fail('params.hotShardShare 必須是數字（或數值太大）')
+  // 0.6.0 之前的存檔：分片節點的 instances 是每個 shard 的台數，換成總台數；shards、hotShardShare 丟掉（spec 4.2.2）
+  if (kept.instances !== undefined && isFiniteNumber(params.shards) && params.shards > 1) {
+    kept.instances *= params.shards
+  }
+  // 省略時沒有熱點，沒有預設值可以補；範圍（1/instances ～ 1）和其他參數一樣留給後端驗證
+  if (kind.hasHotShare && params.hotShare !== undefined) {
+    if (!isFiniteNumber(params.hotShare)) {
+      fail('params.hotShare 必須是數字（或數值太大）')
       return null
     }
-    kept.hotShardShare = params.hotShardShare
+    kept.hotShare = params.hotShare
   }
   // 省略時不估算磁碟幾天後會滿，同樣沒有預設值可以補
   if (kind.numberParams.includes('retentionDays') && params.diskGbPerShard !== undefined) {

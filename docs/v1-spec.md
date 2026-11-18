@@ -18,7 +18,7 @@
 ### 1.2 不做什麼（Non-goals）
 - ❌ 時間推進的動態模擬、p99 等百分位數（→ 階段二 DES）
 - ❌ 故障注入、timeout、retry（→ 階段二）
-- ❌ 完整的 Message Queue（重送、順序、consumer 數量變化等，→ 階段二）；0.3.0 起有簡化版的 Message Queue、CDN、Read Replica、sharding（4.2.2～4.2.4）
+- ❌ 完整的 Message Queue（重送、順序、consumer 數量變化等，→ 階段二）；0.3.0 起有簡化版的 Message Queue、CDN、Read Replica（4.2.3、4.2.4）；Cache 可以設定熱點（4.2.2）
 - ❌ 有環（cycle）的拓撲
 - ❌ 阻塞式呼叫模型：Service 等待下游時占用 worker（→ 階段二 DES，見 3.2）
 - ❌ 數字過場動畫、丟棄粒子動畫（→ 階段二，搭配 DES 時間序列一起做）
@@ -102,9 +102,9 @@ system-design-simulator/
 | **Client** | 流量來源 | `rps`、`readRatio`、`readResponseBytes`、`writeRequestBytes` | 依邊的 `weight` 分流 | rps=1000, readRatio=0.9, readResponseBytes=10000, writeRequestBytes=1000 |
 | **Load Balancer** | 分流 | — | 依邊的 `weight` 分流（預設平均） | 1 × 1000, 1ms（≈1M rps） |
 | **Service** | 應用伺服器 | `callMode` | **Fan-out**：每個請求呼叫每個下游 `callsPerRequest` 次；`callMode` 決定依序（`SEQUENTIAL`）或平行（`PARALLEL`） | 2 × 200, 50ms（8,000 rps）, callMode=SEQUENTIAL |
-| **Cache** | 快取（元件面板的「Redis Cluster」是 `shards = 3` 的 Cache） | `hitRatio`、`shards`、`hotShardShare` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
+| **Cache** | 快取（元件面板的「Redis Cluster」是 3 台的 Cache） | `hitRatio`、`hotShare` | read：只有 miss（`1 - hitRatio`）往下送；write：全部往下送 | 1 × 1, 0.01ms（≈100k rps，類似單執行緒 Redis）, hitRatio=0.8 |
 | **CDN** | 邊緣快取，擋在 Client 和後端（origin）之間 | `hitRatio` | 同 Cache | 10 × 1000, 1ms（≈10M rps）, hitRatio=0.95 |
-| **Database** | 資料儲存（終點） | `shards`、`hotShardShare`、`bytesPerWrite`、`retentionDays`、`diskGbPerShard` | 只能連到 Read Replica（複製，4.2.3） | 1 × 100, 10ms（10,000 rps）, bytesPerWrite=1000, retentionDays=365 |
+| **Database** | 資料儲存（終點） | `bytesPerWrite`、`retentionDays`、`diskGbPerShard` | 只能連到 Read Replica（複製，4.2.3） | 1 × 100, 10ms（10,000 rps）, bytesPerWrite=1000, retentionDays=365 |
 | **Read Replica** | primary Database 的唯讀副本 | — | 無下游；write 是 primary 複製過來的，read 由 Service 的 READ 邊送來 | 1 × 100, 10ms（10,000 rps） |
 | **Message Queue** | 非同步佇列（broker） | — | 每條下游邊是一個 consumer group，都收到全部訊息；Client 只等到 ack | 1 × 1000, 1ms（≈1M rps） |
 | **Object Storage** | 存放圖片、影片等大型檔案（例如 S3），終點 | `bytesPerWrite`、`retentionDays`、`diskGbPerShard` | 無下游，同 Database | 1 × 10000, 20ms（≈500k rps）, bytesPerWrite=1000000, retentionDays=365 |
@@ -115,7 +115,7 @@ system-design-simulator/
 >
 > CDN 的流量、延遲、成功率和驗證規則都和 Cache 相同（engine 裡兩者都是 `CachingNode`，4.3、4.3.1 的「Cache」公式也適用於 CDN），只有預設值、圖示和名稱不同，讓架構圖和存下來的 JSON 看得出是 CDN。位置不限制，不一定要接在 Client 後面。
 >
-> Object Storage 的計算和驗證都和 Database 相同（engine 裡兩者都是 `StorageNode`），只有預設值、圖示和名稱不同。容量由供應商負責，所以不支援 sharding，也不能接 Read Replica。
+> Object Storage 的計算和驗證都和 Database 相同（engine 裡兩者都是 `StorageNode`），只有預設值、圖示和名稱不同。容量由供應商負責，所以不能接 Read Replica。
 >
 > Client 的 `readResponseBytes`（每個 read 回應的大小）、`writeRequestBytes`（每個 write 上傳的大小）單位是 bytes，只用來估算使用者端頻寬（4.7），不影響其他計算。
 >
@@ -153,7 +153,7 @@ system-design-simulator/
 |---|---|---|
 | 後端反序列化 | DTO 欄位用包裝型別（`Double`、`Integer`），`@Schema(defaultValue = …)`；轉成 engine 物件時 `null` 換成預設值 | `SimulateEndpointTest.missingEdgeFieldsDefaultToOne`；型別錯誤見 `wrongTypeIsBadRequest` |
 | OpenAPI | 不標 `requiredMode = REQUIRED`，有 `default`。例外：`NodeParams` 的欄位不標 `default`，預設值寫在 `description`，因為 `NodeParams` 是所有 type 共用的，產生的前端型別會把有 `default` 的欄位當成必填 | `OpenApiSyncTest.fieldsWithDefaultsAreOptional` 檢查有預設值的欄位都不在 `required` |
-| 前端讀入 | 節點參數在 `params.ts` 的 spec 標 `optional: true`，省略時用該類型 `defaults` 裡的值；沒有固定預設值的選填參數（例如 `hotShardShare`，省略時代表平均分配）不放進 `defaults`，在 `toNode` 另外讀，省略時不補；邊的欄位在 `topologyFile.ts` 的 `toEdge` 補；邊的下拉選單欄位（例如 `requestClass`）的選項在 `params.ts` 的 `EDGE_CHOICE_SPECS`，哪些起點會顯示寫在 `NODE_KINDS` 的 `edgeChoiceParams` | `topologyFile.test.ts` 的「選填的節點參數」、「邊省略的數值參數用預設值 1，requestClass 用 ALL」 |
+| 前端讀入 | 節點參數在 `params.ts` 的 spec 標 `optional: true`，省略時用該類型 `defaults` 裡的值；沒有固定預設值的選填參數（例如 `hotShare`，省略時代表沒有熱點）不放進 `defaults`，在 `toNode` 另外讀，省略時不補；邊的欄位在 `topologyFile.ts` 的 `toEdge` 補；邊的下拉選單欄位（例如 `requestClass`）的選項在 `params.ts` 的 `EDGE_CHOICE_SPECS`，哪些起點會顯示寫在 `NODE_KINDS` 的 `edgeChoiceParams` | `topologyFile.test.ts` 的「選填的節點參數」、「邊省略的數值參數用預設值 1，requestClass 用 ALL」 |
 
 **新增一種 Node type**：
 
@@ -232,19 +232,23 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 
 觸發限流是設計上預期的行為，不算故障，所以不變色、不發光。External API 超過配額會讓請求失敗，用紅色外框和紅字標出，但不脈動、不列入瓶頸。
 
-### 4.2.2 分片（Sharding）
+### 4.2.2 熱點（Hot spot）
 
-Cache 和 Database 可以分片（CDN、Object Storage 不行），這是能力而不是新的 type。資料依 key 切成 N 份放在 N 台機器上，每台只承擔一部分流量，所以 read 和 write 都能擴展；代價是熱點（hot key）會讓某個 shard 先爆掉。
+畫面只表示機器數：`instances` 是**處理流量的節點數**（Redis Cluster 是主節點數），所有節點共用一條佇列，用 4.2 的 M/M/c 計算（c = instances × concurrency）。模型裡沒有分片參數（0.6.0 移除 `shards`、`hotShardShare`）：資料怎麼切、熱點 shard 怎麼解，照圖補充說明，不在畫面上計算。
 
-- 選填參數 `shards`（1–64 的整數，省略時為 1）和 `hotShardShare`（最熱的 shard 分到的流量比例）。`hotShardShare` 省略時平均分配（`1/N`）；有值時必須介於 `1/N` 和 1 之間。其他 shard 平分剩下的流量。
-- 每個 shard 都套用節點的 instances × concurrency × serviceTimeMs，各自用 4.2 的 M/M/c 計算，read／write 依相同比例分配。實際上只有「最熱的 shard」和「其他 shard」兩種流量。`instances × concurrency` 的上限（1e6）是對每個 shard 的限制。
+Cache 保留一個熱點的教學點：Redis Cluster 一個主就是一個 shard，所以「最熱的 shard」就是「最熱的那台」。
+
+- 選填參數 `hotShare`（只有 Cache 有）：最熱的那台分到的流量比例，必須介於 `1/instances` 和 1 之間。省略時沒有熱點，照上面共用一條佇列。
+- 有 `hotShare` 時，最熱的那台單獨是一個 M/M/c（c = concurrency），到達率 = `hotShare` × λ；其他 `instances − 1` 台共用一條佇列，處理剩下的流量。read／write 依相同比例分配，`hitRatio` 兩邊相同，送往下游的是兩邊的 miss 加總。
 - 節點層級：
-  - ρ 和狀態取最熱 shard 的值（決定瓶頸）。
-  - 容量 `capacityRps` 是所有 shard 的加總（N × 單一 shard 容量）；有熱點時節點的 ρ 會比 `λ / capacityRps` 高。
-  - 處理量和丟棄量是各 shard 的加總，所以 `pass(n)` = 總處理量 ÷ 到達量（4.3.1）。
-  - 節點延遲 `W`、`avgQueueMs` 依各 shard 的流量加權平均；任一有流量的 shard 過載時為 `null`。
-- Cache 分片後每個 shard 的 `hitRatio` 相同，送往下游的是所有 shard 的 miss 加總。
-- 回應的節點結果有 `shards` 陣列（5），最熱的 shard 放第一個，每項有到達率、ρ、狀態、處理量、丟棄量、延遲。`shards = 1` 時沒有這個陣列（`null`），結果和不分片完全相同。
+  - ρ 和狀態取 ρ 較高的一邊（通常是最熱的那台，決定瓶頸）。
+  - 容量 `capacityRps` 是所有機器的加總；有熱點時節點的 ρ 會比 `λ / capacityRps` 高。
+  - 處理量和丟棄量是兩邊的加總，所以 `pass(n)` = 總處理量 ÷ 到達量（4.3.1）。
+  - 節點延遲 `W`、`avgQueueMs` 依兩邊的流量加權平均；有流量的一邊過載時為 `null`。
+- 回應的節點結果有 `hotSpot`（5）：`hottest` 是最熱那台的到達率、ρ、狀態、處理量、丟棄量、延遲；`others` 是其他台合起來的同樣指標（ρ 是每台相同的使用率），只有一台時為 `null`。沒有 `hotShare` 時 `hotSpot` 為 `null`。
+- Database 沒有 `hotShare`：它的 Read Replica 共用一條佇列，primary 的熱點到了 replica 會被平均掉，看起來像被 replica 解決了，教學上是錯的。
+- **補充說明（hot key 的解法）**：熱點的根源是一個 key 只對應到一台機器，不論是 Redis Cluster 的 hash slot 還是 hash ring。讀熱時把 key 複製成 `key#1`～`key#N` 寫到不同機器、讀取時隨機挑一份，或在應用伺服器上做本地快取；寫熱時把 key 拆成多個子 key 寫到不同機器、讀取時合併（只適用計數、集合這類可以合併的資料；Redis 的子 key 不能用 hash tag，否則會落在同一個 slot）。這些是應用層的手法，模擬器不計算。
+- **舊的自動存檔**：0.6.0 之前的存檔裡，有 `shards` 的節點 `instances` 是每個 shard 的台數。前端還原時把 `instances` 乘上 `shards`，丟掉 `shards`、`hotShardShare`；後端收到這兩個欄位時忽略。
 
 ### 4.2.3 Read Replica
 
@@ -254,7 +258,6 @@ Cache 和 Database 可以分片（CDN、Object Storage 不行），這是能力�
 - **Read 怎麼送到 replica**：用 Service 邊的 `requestClass`（3.4），例如 Service ─(WRITE)→ primary、Service ─(READ)→ replica。要分給多個 replica，中間放一個 LB。
 - **唯讀**：write 只能經由複製邊到達 replica，其他路徑送得到 write 就是驗證錯誤 `REPLICA_RECEIVES_WRITES`（4.5），例如 Service ─(ALL 或 WRITE)→ replica，或有 write 的 Client／LB 直接連過去。這條規則只看拓撲、不看算出來的流量：從每個 `readRatio < 1` 的 Client 出發，Service 的邊只有 `requestClass` 包含 write 時才傳下去，Database／Object Storage 的出邊不傳，其他元件原樣往下傳。所以 Service ─(READ)→ LB → 多個 replica、`readRatio = 1` 的 Client → LB → replica 都合法。畫布上從 Service 拉到 Read Replica 的新邊，`requestClass` 預設 `READ`（其他新邊預設 `ALL`）。
 - **過載**：replica 的丟棄量依比例分給 read 和複製寫入。read 的丟棄照常算進失敗率；複製寫入被丟棄時，節點結果的 `warnings` 有 `REPLICATION_LAG`，畫面顯示「複製跟不上」（replication lag 會持續增加）。警告不影響狀態分級。
-- **配合分片**：primary 有 `shards` 時，replica 自動沿用 primary 的配置（相同的 N 和 `hotShardShare`），自己不能設定。replica 的第 i 個 shard 承擔 primary 第 i 個 shard 處理完的寫入，加上分到第 i 個 shard 的 read，結果也有 `shards` 陣列、畫成 cluster。因為每個 shard 的複製寫入不一定和 read 同比例，節點的 ρ 和狀態取 ρ 較高的那一種 shard，成功率的 `pass(n)` 也逐 shard 依各 class 的處理量計算。
 
 ### 4.2.4 Message Queue（簡化版）
 
@@ -381,8 +384,7 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 |---|---|
 | `rps` | 0 ～ 1,000,000,000,000（1e12） |
 | `limitRps`、`quotaRps` | > 0 且 ≤ 1e12 |
-| `shards` | 1 ～ 64 的整數 |
-| `hotShardShare` | `1/shards` ～ 1 |
+| `hotShare`（選填，Cache） | `1/instances` ～ 1 |
 | `readRatio`、`hitRatio` | 0 ～ 1 |
 | `readResponseBytes`、`writeRequestBytes`、`bytesPerWrite` | 0 ～ 1,000,000,000,000（1e12，1 TB） |
 | `retentionDays` | 0 ～ 100,000 |
@@ -421,7 +423,7 @@ Worker 上限 1e6 時單一節點的 Erlang C 最多約 6 ms；1e7 時約 60 ms�
 | 平行呼叫 | 同上，`callMode=PARALLEL` | L = 50 + max(12, 32) = 82ms |
 | Fan-out 成功率 | Client 1000 rps → Service（pass=1）→ DB-A（pass=0.9，callsPerRequest=2）、DB-B（pass=1） | S = 0.9² × 1 = 0.81，successRps=810，dropRate=0.19 |
 | 頻寬 | Client 1000 rps、readRatio=0.9、回應 10 KB、上傳 1 KB → CDN（hit=0.95） | 出口 9,000,000 B/s、入口 100,000 B/s、CDN 擋掉 8,550,000 B/s |
-| 儲存量 | write 100 rps 全部處理、bytesPerWrite=2000、retentionDays=30、shards=2、diskGbPerShard=100、2 個 Read Replica | 每日 17.28 GB、總量 518.4 GB、含副本 1,555.2 GB、每 shard 259.2 GB、約 11.6 天磁碟滿（保留期內會滿） |
+| 儲存量 | write 100 rps 全部處理、bytesPerWrite=2000、retentionDays=30、diskGbPerShard=100、2 個 Read Replica | 每日 17.28 GB、總量 518.4 GB、含副本 1,555.2 GB、約 5.8 天磁碟滿（保留期內會滿） |
 
 ### 4.7 使用者端頻寬
 
@@ -446,8 +448,8 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 每日增量 = 處理完的 write × bytesPerWrite × 86,400
 總量     = 每日增量 × retentionDays
 含副本   = 總量 × (1 + Read Replica 數)
-每 shard = 總量 ÷ shards                              # 資料平均分布：熱點指的是流量，不代表資料多
-磁碟滿   = diskGbPerShard × 10⁹ ÷ (每日增量 ÷ shards)   # 約幾天後磁碟滿
+每 shard = 總量                         # 沒有分片，#112 改成每台
+磁碟滿   = diskGbPerShard × 10⁹ ÷ 每日增量   # 約幾天後磁碟滿
 ```
 
 - 用**成功處理**的 write（丟棄依 read／write 比例發生，4.2），過載時被丟棄的 write 不算，所以過載時數字偏低；容量估算分頁照常標示過載。
@@ -507,7 +509,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
       "avgQueueMs": null,
       "avgLatencyMs": null,
       "status": null,
-      "shards": null,
+      "hotSpot": null,
       "warnings": []
     },
     "svc-1": {
@@ -520,7 +522,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
       "avgQueueMs": 0.0,
       "avgLatencyMs": 50.0,
       "status": "OK",
-      "shards": null,
+      "hotSpot": null,
       "warnings": []
     }
   },
@@ -553,7 +555,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 
 **頻寬**：單位 bytes/s（4.7）。邊結果的 `bandwidth` 只有 Client 的邊有，其他邊為 `null`；`summary.bandwidth` 一定有。
 
-**分片的節點**：`shards` 是每個 shard 的結果陣列（`arrivalRps`、`throughputRps`、`droppedRps`、`utilization`、`avgLatencyMs`、`status`），最熱的放第一個；沒有分片的節點為 `null`（4.2.2）。
+**熱點**：`hotSpot` 只有設定了 `hotShare` 的 Cache 有，`hottest`、`others` 各有 `arrivalRps`、`throughputRps`、`droppedRps`、`utilization`、`avgLatencyMs`、`status`；其他節點為 `null`（4.2.2）。
 
 **Rate Limiter、External API 節點**：`throughputRps` 是放行量；`capacityRps`、`utilization` 為 `null`，`avgQueueMs` 為 0，`avgLatencyMs` 是 Rate Limiter 的 0 或 External API 的 `latencyMs`；`status` 見 4.2.1。
 
@@ -607,12 +609,11 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - 邊上的 label 顯示 RPS，粗細依流量比例。
 - 節點有警告時（Read Replica 的「複製跟不上」、consumer 的「積壓中」）在節點和指標表的狀態旁顯示。Message Queue 的下游邊有積壓時，標籤第二行顯示「積壓 +X rps/s」（不拉長標籤）。邊的標籤畫在節點上面一層，節點靠得近時不會被擋住，也不攔截節點的點擊和拖曳。
 - Rate Limiter、External API 節點沒有 ρ，改顯示拒絕量和狀態（「限流中」／「未觸發」、「超過配額」／「配額內」）。
-- 延遲（指標表、端到端延遲、shard 的提示）取一位小數；小於 0.1 ms 時改用兩位有效數字（例如 Cache 預設的 `0.010 ms`），0 顯示 `0 ms`。
+- 延遲（指標表、端到端延遲）取一位小數；小於 0.1 ms 時改用兩位有效數字（例如 Cache 預設的 `0.010 ms`），0 顯示 `0 ms`。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
-- **Cluster 外觀**：`shards` > 1 的 Cache、Database，以及沿用分片 primary 的 Read Replica，在節點裡排出 N 個格子（一行最多 8 格，64 個 shard 是 8 × 8），每格是一個 shard，最熱的在第一格，依該 shard 的狀態（4.4）上色，過載的格子發光。滑鼠移到格子上顯示該 shard 的到達率、ρ、延遲、丟棄量。格子不能單獨選取或編輯，參數在節點的屬性面板設定。`shards = 1` 時外觀不變。Run 之前、或改了 `shards` 還沒重算時，格子是灰色。
-- **多台機器**：能設定 `instances` 的元件（LB、Service、Cache、CDN、Database、Read Replica、Object Storage、Message Queue）在 `instances` > 1 時，節點內容右側畫一個小機櫃：一台一條橫槽、縱向疊放，最多 5 條（超過 5 台仍是 5 條），槽用節點的狀態色，還沒有結果時是淡灰，結果過期時跟著節點畫淡。右上角用類別色的標籤顯示實際台數（`×2`、`×10`、`×200`，大數字加千分位）。機櫃在節點右側、縱向，和分片格子（節點底部橫排）區分。分片的節點（含沿用分片 primary 的 Read Replica）已經畫成 cluster，不畫機櫃。屬性面板的 `instances` 下方顯示 worker 總數，例如「共 2 台 × 180 並行 ＝ 360 個 worker」，分片時前面加「每個 shard」。
-- **Preset**：元件面板的「Redis Cluster」是 `shards = 3` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
-- 指標表在分片節點的名稱旁顯示 shard 數；屬性面板在 `shards` > 1 時顯示 `hotShardShare`，沒設定時顯示平均值 `1/N`；設定過之後可以按「改回平均」拿掉這個參數，之後改 shard 數占比會跟著 `1/N` 走。
+- **多台機器**：能設定 `instances` 的元件（LB、Service、Cache、CDN、Database、Read Replica、Object Storage、Message Queue）在 `instances` > 1 時，節點內容右側畫一個小機櫃：一台一條橫槽、縱向疊放，最多 5 條（超過 5 台仍是 5 條），槽用節點的狀態色，還沒有結果時是淡灰，結果過期時跟著節點畫淡。右上角用類別色的標籤顯示實際台數（`×2`、`×10`、`×200`，大數字加千分位）。屬性面板的 `instances` 下方顯示 worker 總數，例如「共 2 台 × 180 並行 ＝ 360 個 worker」。
+- **Preset**：元件面板的「Redis Cluster」是 `instances = 3` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
+- 指標表在有熱點的 Cache 名稱旁標示「熱點」；屬性面板在 Cache 的 `instances` ≥ 2 時，`instances` 下方有「設定熱點」，按下去先填平均的兩倍（`min(1, 2/instances)`），之後可以按「沒有熱點」拿掉這個參數。設定了 `hotShare` 時，`instances` 不能減到讓 `hotShare` 小於新的平均。
 - **頻寬**（4.7）：Client 的邊在 RPS 下面一行小字顯示「出 X・入 Y」；結果面板上方的 summary 列出出口、入口頻寬，有 CDN 擋掉流量時加上 origin 出口和擋掉的比例。單位自動換算（B/s、KB/s、MB/s、GB/s…，十進位，最大到 PB/s，超過時用科學記號，例如 `1.2e18 B/s`），括號裡附上 bits（Mbps、Gbps…，同樣最大到 Pbps）。
 - **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每 shard、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB，十進位，超過 PB 時用科學記號）。過載的節點名稱旁標示「過載，偏低」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerShard` 預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。
 - **重點數字**：結果面板的分頁下方、內容上方有一排卡片，每個分頁都顯示，數值直接取自 `summary`；有驗證錯誤時不顯示。窄螢幕時自動換行。

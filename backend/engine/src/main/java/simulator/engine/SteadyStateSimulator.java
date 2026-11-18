@@ -49,10 +49,9 @@ public final class SteadyStateSimulator implements Simulator {
                 }
                 case LoadBalancerNode lb -> process(lb.capacityParams(), arrival, node.id(), nodeResults);
                 case ServiceNode service -> process(service.capacityParams(), arrival, node.id(), nodeResults);
-                case CachingNode cache -> process(cache.capacityParams(), cache.shards(), arrival, node.id(),
+                case CachingNode cache -> process(cache.capacityParams(), cache.hotShare(), arrival, node.id(),
                         nodeResults);
-                case StorageNode storage -> process(storage.capacityParams(), storage.shards(), arrival, node.id(),
-                        nodeResults);
+                case StorageNode storage -> process(storage.capacityParams(), arrival, node.id(), nodeResults);
                 case RateLimiterNode limiter -> admit(node.id(), limiter.limitRps(), 0, Status.LIMITING,
                         Status.NOT_LIMITING, arrival, nodeResults);
                 case ReadReplicaNode replica -> replicate(replica, graph.primaryOf(replica.id()), arrival, nodeResults);
@@ -100,12 +99,12 @@ public final class SteadyStateSimulator implements Simulator {
 
     private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
             Map<String, NodeResult> nodeResults) {
-        return process(params, ShardLayout.SINGLE, arrival, nodeId, nodeResults);
+        return process(params, null, arrival, nodeId, nodeResults);
     }
 
-    private static ClassRates process(CapacityParams params, ShardLayout shards, ClassRates arrival, String nodeId,
+    private static ClassRates process(CapacityParams params, Double hotShare, ClassRates arrival, String nodeId,
             Map<String, NodeResult> nodeResults) {
-        var outcome = MmcQueue.solve(params, shards, arrival);
+        var outcome = MmcQueue.solve(params, hotShare, arrival);
         nodeResults.put(nodeId, outcome.result());
         return outcome.processed();
     }
@@ -160,41 +159,22 @@ public final class SteadyStateSimulator implements Simulator {
 
     /**
      * Read Replica（spec 4.2.3）：write 到達率是 primary 處理完的寫入，再加上 Service 送來的 read。
-     * primary 分片時沿用它的配置：第 i 個 shard 收到 primary 第 i 個 shard 的複製寫入，加上分到第 i 個 shard 的 read。
      * 過載時丟棄量依比例分給 read 和複製寫入，丟到複製寫入就加上 REPLICATION_LAG 警告。
      */
     private static ClassRates replicate(ReadReplicaNode replica, DatabaseNode primary, ClassRates arrival,
             Map<String, NodeResult> nodeResults) {
         NodeResult primaryResult = nodeResults.get(primary.id());
         double replicated = processedWrites(primaryResult.arrivalRps(), primaryResult.throughputRps());
-        // Service 直接送來的部分（通常只有 read）
-        var direct = new ClassRates(arrival.read(), arrival.write() - replicated);
-        ShardLayout layout = primary.shards();
-        MmcQueue.Outcome outcome;
-        boolean lagging;
-        if (layout.count() == 1) {
-            outcome = MmcQueue.solve(replica.capacityParams(), arrival);
-            lagging = replicated > 0 && outcome.result().droppedRps() > 0;
-        } else {
-            ShardResult hot = primaryResult.shards().get(0);
-            ShardResult other = primaryResult.shards().get(1);
-            double hotWrites = processedWrites(hot.arrivalRps(), hot.throughputRps());
-            double otherWrites = processedWrites(other.arrivalRps(), other.throughputRps());
-            outcome = MmcQueue.solve(replica.capacityParams(), layout.count(),
-                    direct.times(layout.hottestShare()).plus(new ClassRates(0, hotWrites)),
-                    direct.times(layout.otherShare()).plus(new ClassRates(0, otherWrites)));
-            List<ShardResult> shards = outcome.result().shards();
-            lagging = (hotWrites > 0 && shards.get(0).droppedRps() > 0)
-                    || (otherWrites > 0 && shards.get(1).droppedRps() > 0);
-        }
+        MmcQueue.Outcome outcome = MmcQueue.solve(replica.capacityParams(), arrival);
         NodeResult result = outcome.result();
+        boolean lagging = replicated > 0 && result.droppedRps() > 0;
         nodeResults.put(replica.id(), lagging ? result.withWarning(NodeWarning.REPLICATION_LAG) : result);
         return outcome.processed();
     }
 
     /**
      * 儲存量估算（spec 4.8）：每日增量 = 處理完的 write × bytesPerWrite × 86,400，總量 = 每日增量 × retentionDays，
-     * 含副本 = 總量 × (1 + Read Replica 數)，每 shard = 總量 ÷ shards（資料平均分布，熱點是流量不是資料）。
+     * 含副本 = 總量 × (1 + Read Replica 數)。每 shard 的用量在 #112 改成每台之前等於總量。
      */
     private static Map<String, StorageEstimate> estimateStorage(Topology topology, TopologyGraph graph,
             Map<String, NodeResult> nodeResults) {
@@ -211,16 +191,15 @@ public final class SteadyStateSimulator implements Simulator {
             }
             NodeResult result = nodeResults.get(node.id());
             StorageSizing sizing = storage.sizing();
-            int shards = storage.shards().count();
             double daily = processedWrites(result.arrivalRps(), result.throughputRps()) * sizing.bytesPerWrite()
                     * SECONDS_PER_DAY;
             double total = daily * sizing.retentionDays();
             int replicaCount = replicas.getOrDefault(node.id(), 0);
             Double daysUntilFull = sizing.diskGbPerShard() == null ? null
-                    : finiteOrNull(sizing.diskGbPerShard() * BYTES_PER_GB / (daily / shards));
+                    : finiteOrNull(sizing.diskGbPerShard() * BYTES_PER_GB / daily);
             boolean fillsDisk = daysUntilFull != null && daysUntilFull < sizing.retentionDays();
             estimates.put(node.id(), new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
-                    total / shards, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerShard()));
+                    total, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerShard()));
         }
         return estimates;
     }
