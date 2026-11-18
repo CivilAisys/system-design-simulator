@@ -20,6 +20,7 @@
 - ❌ 故障注入、timeout、retry（→ 階段二）
 - ❌ 完整的 Message Queue（重送、順序、consumer 數量變化等，→ 階段二）；0.3.0 起有簡化版的 Message Queue、CDN、Read Replica（4.2.3、4.2.4）；Cache 可以設定熱點（4.2.2）
 - ❌ 有環（cycle）的拓撲
+- ❌ 一個請求同時是 read 和 write（例如寫入前先讀一次的 read-modify-write）：`requestClass` 只能篩選、不能轉換，要分開兩條路徑近似（見 3.4）
 - ❌ 阻塞式呼叫模型：Service 等待下游時占用 worker（→ 階段二 DES，見 3.2）
 - ❌ 數字過場動畫、丟棄粒子動畫（→ 階段二，搭配 DES 時間序列一起做）
 - ❌ 前端元件測試和瀏覽器端到端測試（→ 階段二再考慮 Playwright）。純邏輯的單元測試在 0.2.0 加入，見第 9 節
@@ -137,6 +138,7 @@ system-design-simulator/
 
 - 欄位只在對應的起點有意義：`weight` 只用在 Client／LB／CDN 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（存檔一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
 - `requestClass`：一個 class 的請求只呼叫 `requestClass` 符合的下游（`ALL` 兩種都符合），例如 Service ─(READ)→ Read Replica、Service ─(WRITE)→ primary，或 CQRS 的讀寫分流。流量、延遲（4.3）、成功率（4.3.1）都只算符合的下游；沒有任何符合的下游時，Service 就是這個 class 的終點。Client／LB／CDN 的邊不支援（要依 class 重新正規化權重，還要處理某個 class 沒有邊可走的情況）。畫布上 `READ`／`WRITE` 的邊在標籤前面顯示「R」／「W」，邊上的 RPS 和粒子只有那個 class 的流量。
+  - **限制：一個請求不能同時是 read 和 write**。`requestClass` 只能篩選，不能轉換，所以「寫入前先讀一次」（read-modify-write，例如先查庫存再扣）沒辦法表示成一個請求。要近似時分成兩條路徑：把那一次讀也畫成一條 read 路徑（例如另一個 Client 或 `requestClass = READ` 的邊），write 路徑只算寫入。
 - 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
 - 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去。讀入存檔時只擋自己連自己，經過其他節點的環照樣讀入，Run 之後在錯誤分頁顯示。
 
@@ -461,6 +463,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - 用**成功處理**的 write（丟棄依 read／write 比例發生，4.2），過載時被丟棄的 write 不算，所以過載時數字偏低；容量估算分頁照常標示過載。
 - Read Replica 數是 primary 是這個 Database 的 Read Replica 個數；Replica 存的是同一份資料，沒有自己的估算。
 - GB 是十進位（10⁹ bytes）。Object Storage、沒有設定 `diskGbPerInstance`、沒有寫入（資料不會增加），或寫入量小到天數超出浮點數範圍時，`daysUntilFull` 是 `null`。
+- **副本跟不上**：primary 的 Read Replica 有 `REPLICATION_LAG`（4.2.3）時，「含副本」仍照完整副本計算，數字不改，但容量估算分頁在那一列加註「副本複製跟不上，實際副本量會比這少」。
 - **磁碟會滿**（`fillsDisk`）：`daysUntilFull < retentionDays`，也就是保留期內每台的資料會超過磁碟容量。這是另一種瓶頸，和 ρ 分開顯示，不混進「瓶頸 = ρ 最高」的規則（`bottleneckNodeId` 不變）。
 
 ---
