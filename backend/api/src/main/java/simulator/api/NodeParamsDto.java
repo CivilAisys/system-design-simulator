@@ -21,9 +21,8 @@ public record NodeParamsDto(
         @Schema(description = "EXTERNAL_API：固定的回應時間") Double latencyMs,
         @Schema(description = "EXTERNAL_API：對方給的配額") Double quotaRps,
         // 不標 defaultValue：產生的前端型別會把有預設值的欄位當成必填，每種 type 的 params 都得帶上它（spec 3.6）
-        @Schema(description = "CACHE, DATABASE：shard 數，省略時為 1（不分片）") Integer shards,
-        @Schema(description = "CACHE, DATABASE：最熱的 shard 分到的流量比例，省略時平均分配（1/shards）")
-        Double hotShardShare,
+        @Schema(description = "CACHE：最熱的那台分到的流量比例（1/instances ～ 1），省略時所有機器共用一條佇列")
+        Double hotShare,
         @Schema(description = "DATABASE, OBJECT_STORAGE：每次 write 平均新增的資料量（bytes），只用來估算儲存量，省略時 DATABASE 為 1000、OBJECT_STORAGE 為 1000000")
         Double bytesPerWrite,
         @Schema(description = "DATABASE, OBJECT_STORAGE：資料保留天數，只用來估算儲存量，省略時為 365")

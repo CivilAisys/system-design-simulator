@@ -75,7 +75,34 @@ export function toTopology(data: unknown): ParseResult {
   if (errors.length > 0) {
     return { ok: false, errors }
   }
+  convertLegacyShards(data.nodes, nodes, edges)
   return { ok: true, topology: { version: SUPPORTED_VERSION, nodes: placeUnpositioned(nodes), edges } }
+}
+
+// 0.6.0 之前的存檔（spec 4.2.2）：分片節點的 instances 是每個 shard 的台數，換成總台數；
+// 它的 Read Replica 沿用同樣的分片，也一起換。shards、hotShardShare 在 toNode 已經丟掉
+function convertLegacyShards(rawNodes: unknown[], nodes: Node[], edges: Edge[]) {
+  const shardsById = new Map<string, number>()
+  for (const raw of rawNodes) {
+    const shards = isObject(raw) && isObject(raw.params) ? raw.params.shards : undefined
+    const id = rawId(raw)
+    if (id != null && typeof shards === 'number' && Number.isInteger(shards) && shards > 1) {
+      shardsById.set(id, shards)
+    }
+  }
+  if (shardsById.size === 0) return
+  for (const edge of edges) {
+    const shards = shardsById.get(edge.source)
+    if (shards !== undefined && nodes.find((n) => n.id === edge.target)?.type === 'READ_REPLICA') {
+      shardsById.set(edge.target, shards)
+    }
+  }
+  for (const node of nodes) {
+    const shards = shardsById.get(node.id)
+    if (shards !== undefined && node.params.instances !== undefined) {
+      node.params.instances *= shards
+    }
+  }
 }
 
 // 只留下該類型用得到的參數和已知欄位，其他欄位丟掉。沒有 ui 時先不給座標，見 placeUnpositioned
@@ -125,13 +152,13 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
     }
     kept[param] = value
   }
-  // 省略時平均分配，沒有預設值可以補；範圍（1/shards ～ 1）和其他參數一樣留給後端驗證
-  if (kind.numberParams.includes('shards') && params.hotShardShare !== undefined) {
-    if (!isFiniteNumber(params.hotShardShare)) {
-      fail('params.hotShardShare 必須是數字（或數值太大）')
+  // 省略時沒有熱點，沒有預設值可以補；範圍（1/instances ～ 1）和其他參數一樣留給後端驗證
+  if (kind.hasHotShare && params.hotShare !== undefined) {
+    if (!isFiniteNumber(params.hotShare)) {
+      fail('params.hotShare 必須是數字（或數值太大）')
       return null
     }
-    kept.hotShardShare = params.hotShardShare
+    kept.hotShare = params.hotShare
   }
   // 省略時不估算磁碟幾天後會滿，同樣沒有預設值可以補
   if (kind.numberParams.includes('retentionDays') && params.diskGbPerShard !== undefined) {

@@ -33,7 +33,7 @@ class SimulateEndpointTest {
 
     private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps", "rejectedRps",
             "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status",
-            "shards", "warnings");
+            "hotSpot", "warnings");
     private static final List<String> SERVER_FIELDS = List.of("capacityRps", "utilization", "avgQueueMs",
             "avgLatencyMs", "status");
 
@@ -192,43 +192,22 @@ class SimulateEndpointTest {
         assertThat(body.at("/summary/bottleneckNodeId").asText()).isNotEqualTo("ext-1");
     }
 
-    // 「分片熱點」情境：4 個 shard 但有熱點，容量撐不到 4 倍；平均分配時撐得住
+    // 「Redis Cluster 熱點 key」情境：最熱的那台過載，其他兩台還很閒；沒有熱點時撐得住
     @Test
-    void shardingHotShardOverloads() throws Exception {
-        ObjectNode scenario = (ObjectNode) mapper.readTree(readScenario("sharding.json"));
-        JsonNode hot = simulate(mapper.writeValueAsBytes(scenario));
-        // 28,000 × 0.4 = 11,200 > 每個 shard 的 10,000
-        assertThat(hot.at("/nodes/db-1/status").asText()).isEqualTo("OVERLOADED");
-        assertThat(hot.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(40_000, within(1e-6));
-        assertThat(hot.at("/nodes/db-1/shards/0/status").asText()).isEqualTo("OVERLOADED");
-        assertThat(hot.at("/nodes/db-1/shards/1/status").asText()).isEqualTo("OK");
-        assertThat(hot.at("/summary/bottleneckNodeId").asText()).isEqualTo("db-1");
-
-        remove(scenario, "/nodes/3/params/hotShardShare");
-        JsonNode even = simulate(mapper.writeValueAsBytes(scenario));
-        assertThat(even.at("/nodes/db-1/utilization").asDouble()).isCloseTo(0.7, within(1e-9));
-        assertThat(even.at("/summary/dropRate").asDouble()).isZero();
-        // 儲存量：write 2,800/s × 2 KB × 86,400 = 483.84 GB/天，每 shard 120.96 GB/天，2 TB 的磁碟約 16.5 天就滿
-        assertThat(even.at("/storage/db-1/dailyBytes").asDouble()).isCloseTo(2_800 * 2_000 * 86_400.0, within(1e-3));
-        assertThat(even.at("/storage/db-1/daysUntilFull").asDouble())
-                .isCloseTo(2_000e9 / (2_800 * 2_000 * 86_400.0 / 4), within(1e-9));
-        assertThat(even.at("/storage/db-1/fillsDisk").asBoolean()).isTrue();
-    }
-
-    // 「Redis Cluster 熱點 key」情境：一個 shard 過載，其他 shard 還很閒
-    @Test
-    void redisClusterHasOneHotShard() throws Exception {
+    void redisClusterHasOneHotInstance() throws Exception {
         ObjectNode scenario = (ObjectNode) mapper.readTree(readScenario("redis-cluster.json"));
         JsonNode hot = simulate(mapper.writeValueAsBytes(scenario));
-        // 250,000 × 0.5 = 125,000 > 每個 shard 的 100,000；其他兩個各 62,500
-        assertThat(hot.at("/nodes/cache-1/shards").size()).isEqualTo(3);
-        assertThat(hot.at("/nodes/cache-1/shards/0/status").asText()).isEqualTo("OVERLOADED");
-        assertThat(hot.at("/nodes/cache-1/shards/1/status").asText()).isEqualTo("OK");
-        assertThat(hot.at("/nodes/cache-1/shards/2/status").asText()).isEqualTo("OK");
+        // 250,000 × 0.5 = 125,000 > 每台的 100,000；其他兩台共 125,000，ρ 0.625
+        assertThat(fieldNames(hot.at("/nodes/cache-1/hotSpot"))).containsExactlyInAnyOrder("hottest", "others");
+        assertThat(hot.at("/nodes/cache-1/hotSpot/hottest/status").asText()).isEqualTo("OVERLOADED");
+        assertThat(hot.at("/nodes/cache-1/hotSpot/others/status").asText()).isEqualTo("OK");
+        assertThat(hot.at("/nodes/cache-1/hotSpot/others/utilization").asDouble()).isCloseTo(0.625, within(1e-9));
+        assertThat(hot.at("/nodes/cache-1/capacityRps").asDouble()).isCloseTo(300_000, within(1e-6));
         assertThat(hot.at("/summary/bottleneckNodeId").asText()).isEqualTo("cache-1");
 
-        remove(scenario, "/nodes/2/params/hotShardShare");
+        remove(scenario, "/nodes/2/params/hotShare");
         JsonNode even = simulate(mapper.writeValueAsBytes(scenario));
+        assertThat(even.at("/nodes/cache-1/hotSpot").isNull()).isTrue();
         assertThat(even.at("/summary/dropRate").asDouble()).isZero();
     }
 
@@ -449,18 +428,39 @@ class SimulateEndpointTest {
     }
 
     @Test
-    void omittedShardsMeanNoSharding() throws Exception {
-        // straight-topology.json 的 Database 沒有 shards、hotShardShare：等於 1 個 shard，回應沒有 shards 陣列
-        JsonNode body = mapper.readTree(postTopology(straightTopology())
+    void hotShareOnCacheReportsHotSpot() throws Exception {
+        String topology = """
+                { "version": 1,
+                  "nodes": [
+                    { "id": "c", "type": "CLIENT", "name": "Users", "params": { "rps": 1000, "readRatio": 1 } },
+                    { "id": "cache", "type": "CACHE", "name": "Redis",
+                      "params": { "instances": 4, "concurrency": 1, "serviceTimeMs": 1, "hitRatio": 1,
+                                  "hotShare": 0.4 } },
+                    { "id": "db", "type": "DATABASE", "name": "DB",
+                      "params": { "instances": 1, "concurrency": 100, "serviceTimeMs": 10 } } ],
+                  "edges": [
+                    { "id": "e1", "source": "c", "target": "cache" },
+                    { "id": "e2", "source": "cache", "target": "db" } ] }
+                """;
+
+        JsonNode body = mapper.readTree(mvc.perform(post("/api/v1/simulate")
+                        .contentType(MediaType.APPLICATION_JSON).content(topology))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString());
 
-        assertThat(body.at("/nodes/db-1/shards").isNull()).isTrue();
-        assertThat(body.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(10_000, within(1e-6));
+        // 每台容量 1000：最熱那台 400（ρ 0.4），其他 3 台共 600（ρ 0.2）
+        JsonNode hottest = body.at("/nodes/cache/hotSpot/hottest");
+        assertThat(fieldNames(hottest)).containsExactlyInAnyOrder("arrivalRps", "throughputRps", "droppedRps",
+                "utilization", "avgLatencyMs", "status");
+        assertThat(hottest.at("/arrivalRps/read").asDouble()).isCloseTo(400, within(1e-6));
+        assertThat(body.at("/nodes/cache/hotSpot/others/arrivalRps/read").asDouble()).isCloseTo(600, within(1e-6));
+        assertThat(body.at("/nodes/cache/utilization").asDouble()).isCloseTo(0.4, within(1e-9));
+        assertThat(body.at("/nodes/db/hotSpot").isNull()).isTrue();
     }
 
     @Test
-    void shardedDatabaseReportsEachShardHottestFirst() throws Exception {
+    void legacyShardFieldsAreIgnored() throws Exception {
+        // 0.6.0 之前的拓撲有 shards、hotShardShare：前端還原時會轉換，後端直接忽略
         ObjectNode topology = straightTopology();
         set(topology, "/nodes/2/params/shards", mapper.getNodeFactory().numberNode(4));
         set(topology, "/nodes/2/params/hotShardShare", mapper.getNodeFactory().numberNode(0.4));
@@ -469,13 +469,8 @@ class SimulateEndpointTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString());
 
-        JsonNode shards = body.at("/nodes/db-1/shards");
-        assertThat(shards.size()).isEqualTo(4);
-        assertThat(fieldNames(shards.get(0))).containsExactlyInAnyOrder("arrivalRps", "throughputRps", "droppedRps",
-                "utilization", "avgLatencyMs", "status");
-        assertThat(shards.get(0).at("/arrivalRps/read").asDouble()).isCloseTo(360, within(1e-6));
-        assertThat(shards.get(1).at("/arrivalRps/read").asDouble()).isCloseTo(180, within(1e-6));
-        assertThat(body.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(40_000, within(1e-6));
+        assertThat(body.at("/nodes/db-1/capacityRps").asDouble()).isCloseTo(10_000, within(1e-6));
+        assertThat(body.at("/nodes/db-1/hotSpot").isNull()).isTrue();
     }
 
     @Test

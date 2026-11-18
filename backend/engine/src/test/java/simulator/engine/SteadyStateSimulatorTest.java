@@ -283,7 +283,7 @@ class SteadyStateSimulatorTest {
         SimulationResult objectStorage = runInto(new ObjectStorageNode("storage", "S3", NodeHealth.HEALTHY, params,
                 sizing));
         SimulationResult database = runInto(new DatabaseNode("storage", "DB", NodeHealth.HEALTHY, params,
-                ShardLayout.SINGLE, sizing));
+                sizing));
 
         assertThat(objectStorage.valid()).isTrue();
         assertThat(objectStorage).isEqualTo(database);

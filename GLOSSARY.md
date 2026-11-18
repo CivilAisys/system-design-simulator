@@ -68,15 +68,15 @@ _Avoid_: third-party service、外部服務
 _Avoid_: blob storage、S3（具體產品名）
 
 **Shard（分片）**:
-Cache 或 Database 依 key 切出來的一份資料和承擔它的機器，每個 shard 都套用節點的處理能力參數。
+依 key 切出來的一份資料。模型裡沒有分片參數：`instances` 是處理流量的節點數，資料怎麼切照圖補充說明（spec 4.2.2）。Redis Cluster 一個主節點就是一個 shard。
 _Avoid_: partition、分區
 
 **Redis Cluster**:
-元件面板上的 preset，就是 shards = 3 的 Cache，JSON 裡 type 仍是 CACHE。
+元件面板上的 preset，就是 instances = 3 的 Cache，JSON 裡 type 仍是 CACHE。
 
-**Hot shard（熱點 shard）**:
-因為熱門 key 而分到最多流量的 shard，它的 ρ 決定整個節點的 ρ 和狀態。
-_Avoid_: hot key（hot key 是原因，hot shard 是結果）
+**Hot spot（熱點）**:
+Cache 的 `hotShare`：最熱的那台分到較多流量，它的 ρ 決定整個節點的 ρ 和狀態。熱門 key 是原因，最熱的那台是結果。
+_Avoid_: hot shard（模型裡沒有 shard）
 
 ### 流量
 

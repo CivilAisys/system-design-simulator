@@ -9,8 +9,8 @@ public sealed interface CachingNode extends Node permits CacheNode, CdnNode {
 
     double hitRatio();
 
-    /** 只有 Cache 能分片，CDN 沒有。 */
-    default ShardLayout shards() {
-        return ShardLayout.SINGLE;
+    /** 只有 Cache 能設定熱點，CDN 沒有。 */
+    default Double hotShare() {
+        return null;
     }
 }

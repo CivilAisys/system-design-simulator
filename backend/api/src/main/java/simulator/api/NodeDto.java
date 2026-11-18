@@ -17,7 +17,6 @@ import simulator.engine.ObjectStorageNode;
 import simulator.engine.RateLimiterNode;
 import simulator.engine.ReadReplicaNode;
 import simulator.engine.ServiceNode;
-import simulator.engine.ShardLayout;
 import simulator.engine.StorageSizing;
 
 /** {@code state} 省略時為 HEALTHY；{@code ui} 只給前端用，後端忽略。 */
@@ -45,10 +44,9 @@ public record NodeDto(
             case SERVICE -> new ServiceNode(id, name, health, capacityParams(),
                     require(params.callMode(), "callMode"));
             case CACHE -> new CacheNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"),
-                    shardLayout());
+                    params.hotShare());
             case CDN -> new CdnNode(id, name, health, capacityParams(), require(params.hitRatio(), "hitRatio"));
-            case DATABASE -> new DatabaseNode(id, name, health, capacityParams(), shardLayout(),
-                    sizing(DatabaseNode.DEFAULT_SIZING));
+            case DATABASE -> new DatabaseNode(id, name, health, capacityParams(), sizing(DatabaseNode.DEFAULT_SIZING));
             case OBJECT_STORAGE -> new ObjectStorageNode(id, name, health, capacityParams(),
                     sizing(ObjectStorageNode.DEFAULT_SIZING));
             case RATE_LIMITER -> new RateLimiterNode(id, name, health, require(params.limitRps(), "limitRps"));
@@ -64,11 +62,6 @@ public record NodeDto(
                 require(params.instances(), "instances"),
                 require(params.concurrency(), "concurrency"),
                 require(params.serviceTimeMs(), "serviceTimeMs"));
-    }
-
-    /** {@code shards} 省略時為 1（不分片），{@code hotShardShare} 省略時平均分配。 */
-    private ShardLayout shardLayout() {
-        return new ShardLayout(params.shards() == null ? 1 : params.shards(), params.hotShardShare());
     }
 
     /** 省略的欄位用該 type 的預設值；{@code diskGbPerShard} 省略時不估算磁碟幾天後會滿。 */

@@ -164,15 +164,10 @@
             "format" : "double",
             "description" : "EXTERNAL_API：對方給的配額"
           },
-          "shards" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "CACHE, DATABASE：shard 數，省略時為 1（不分片）"
-          },
-          "hotShardShare" : {
+          "hotShare" : {
             "type" : "number",
             "format" : "double",
-            "description" : "CACHE, DATABASE：最熱的 shard 分到的流量比例，省略時平均分配（1/shards）"
+            "description" : "CACHE：最熱的那台分到的流量比例（1/instances ～ 1），省略時所有機器共用一條佇列"
           },
           "bytesPerWrite" : {
             "type" : "number",
@@ -320,6 +315,51 @@
         },
         "required" : [ "approximate", "ms", "overloadedNodeIds", "undefinedReason" ]
       },
+      "HotSpot" : {
+        "type" : "object",
+        "properties" : {
+          "hottest" : {
+            "$ref" : "#/components/schemas/InstanceResult",
+            "description" : "最熱的那台"
+          },
+          "others" : {
+            "$ref" : "#/components/schemas/InstanceResult",
+            "description" : "其他台合起來（共用一條佇列）"
+          }
+        },
+        "required" : [ "hottest", "others" ]
+      },
+      "InstanceResult" : {
+        "type" : "object",
+        "description" : "節點裡一部分機器的結果，欄位意義同 NodeResult；多台時是合起來的流量，ρ 是每台相同的使用率",
+        "properties" : {
+          "arrivalRps" : {
+            "$ref" : "#/components/schemas/ClassRates"
+          },
+          "throughputRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "droppedRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "utilization" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "avgLatencyMs" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "過載時為 null"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED", "LIMITING", "NOT_LIMITING", "OVER_QUOTA", "WITHIN_QUOTA" ]
+          }
+        },
+        "required" : [ "arrivalRps", "avgLatencyMs", "droppedRps", "status", "throughputRps", "utilization" ]
+      },
       "NodeResult" : {
         "type" : "object",
         "properties" : {
@@ -373,12 +413,13 @@
             "type" : [ "string", "null" ],
             "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED", "LIMITING", "NOT_LIMITING", "OVER_QUOTA", "WITHIN_QUOTA" ]
           },
-          "shards" : {
-            "type" : [ "array", "null" ],
-            "description" : "只有分片（shards > 1）的節點有：每個 shard 的結果，最熱的放第一個（spec 4.2.2）",
-            "items" : {
-              "$ref" : "#/components/schemas/ShardResult"
-            }
+          "hotSpot" : {
+            "description" : "只有設定了 hotShare 的 Cache 有：最熱的那台和其他台的結果（spec 4.2.2）",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/HotSpot"
+            }, {
+              "type" : "null"
+            } ]
           },
           "warnings" : {
             "type" : "array",
@@ -389,38 +430,7 @@
             }
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "rejectedRps", "shards", "status", "successRps", "throughputRps", "utilization", "warnings" ]
-      },
-      "ShardResult" : {
-        "type" : "object",
-        "description" : "一個 shard 的結果，欄位意義同 NodeResult",
-        "properties" : {
-          "arrivalRps" : {
-            "$ref" : "#/components/schemas/ClassRates"
-          },
-          "throughputRps" : {
-            "type" : "number",
-            "format" : "double"
-          },
-          "droppedRps" : {
-            "type" : "number",
-            "format" : "double"
-          },
-          "utilization" : {
-            "type" : "number",
-            "format" : "double"
-          },
-          "avgLatencyMs" : {
-            "type" : [ "number", "null" ],
-            "format" : "double",
-            "description" : "過載時為 null"
-          },
-          "status" : {
-            "type" : "string",
-            "enum" : [ "OK", "WARN", "CRITICAL", "OVERLOADED", "LIMITING", "NOT_LIMITING", "OVER_QUOTA", "WITHIN_QUOTA" ]
-          }
-        },
-        "required" : [ "arrivalRps", "avgLatencyMs", "droppedRps", "status", "throughputRps", "utilization" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "hotSpot", "rejectedRps", "status", "successRps", "throughputRps", "utilization", "warnings" ]
       },
       "SimulationResult" : {
         "type" : "object",

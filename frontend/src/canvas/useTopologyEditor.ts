@@ -25,7 +25,7 @@ const EDGE_DEFAULTS: Omit<Edge, 'id' | 'source' | 'target'> = {
   requestClass: 'ALL',
 }
 
-// clearParams：拿掉的選填參數（例如 hotShardShare 改回平均分配）。params 裡的 undefined 代表「沒有改」，不能用來刪除
+// clearParams：拿掉的選填參數（例如 hotShare 改回沒有熱點）。params 裡的 undefined 代表「沒有改」，不能用來刪除
 export type NodePatch = { name?: string; params?: Partial<NodeParams>; clearParams?: (keyof NodeParams)[] }
 export type EdgePatch = Partial<Pick<Edge, 'weight' | 'callsPerRequest' | 'latencyMs' | 'requestClass'>>
 

@@ -10,7 +10,7 @@ type RackProps = {
 }
 
 // 多台機器的節點右側的小機櫃（spec 第 6 節）：一台一條橫槽、縱向疊放，用節點的狀態色。
-// 和分片格子（節點底部橫排的方格）用位置、方向和形狀區分。還沒有結果時用淡灰，過期時跟著節點畫淡
+// 還沒有結果時用淡灰，過期時跟著節點畫淡
 export function Rack({ rack, status, stale }: RackProps) {
   return (
     <div
