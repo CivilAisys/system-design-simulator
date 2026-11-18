@@ -1,12 +1,15 @@
 // PROTOTYPE（0.8.0 側邊面板收合）：用完就丟，不要合進 develop。
-// 三種版面用 ?variant=A|B|C 切換，畫面底部中央的切換列可以左右切。
+// 第二輪：使用者選了第一輪的 A，右側不變；左側收合後只剩圖示列，hover 圖示只顯示名稱。
+// 這一輪比較左側「展開／收合」按鈕放哪裡：?variant=A 上方、?variant=B 下方。
+// 第一輪的三種版面（圖示列＋浮出、浮動卡片、整個收起來）在 commit c33f020。
 // 快捷鍵：[ 切換左側元件面板、] 切換右側屬性面板（輸入框裡不觸發）。
-// 釘選狀態只放在記憶體裡，重新整理會回到預設。
-import { useEffect, useState, type DragEvent, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, LayoutGrid, PanelLeftOpen, PanelRightOpen, Pin, PinOff, SlidersHorizontal, X } from 'lucide-react'
-import { NODE_KINDS, PALETTE, type PaletteItem } from '@/canvas/catalog'
+// 狀態只放在記憶體裡，重新整理會回到預設。
+import { Fragment, useEffect, useState, type DragEvent, type ReactNode } from 'react'
+import { ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, PanelRightOpen, Pin, PinOff } from 'lucide-react'
+import { CATEGORIES, NODE_KINDS, PALETTE, type PaletteItem } from '@/canvas/catalog'
 import { PALETTE_ITEM_MIME } from '@/canvas/Canvas'
 import { CategoryIcon } from '@/canvas/CategoryIcon'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 type Slots = {
@@ -19,9 +22,8 @@ type Slots = {
 }
 
 const VARIANTS = {
-  A: '圖示列＋浮出',
-  B: '浮動卡片',
-  C: '整個收起來',
+  A: '左側按鈕在上方',
+  B: '左側按鈕在下方',
 } as const
 type VariantKey = keyof typeof VARIANTS
 const KEYS = Object.keys(VARIANTS) as VariantKey[]
@@ -42,9 +44,7 @@ export function PanelLayoutPrototype(slots: Slots) {
 
   return (
     <>
-      {variant === 'A' && <VariantA key="A" {...slots} />}
-      {variant === 'B' && <VariantB key="B" {...slots} />}
-      {variant === 'C' && <VariantC key="C" {...slots} />}
+      <Layout key={variant} buttonAt={variant === 'A' ? 'top' : 'bottom'} {...slots} />
       {import.meta.env.DEV && (
         <div className="fixed bottom-4 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-1 rounded-full bg-black px-2 py-1 text-sm text-white shadow-lg ring-2 ring-yellow-400">
           <button className="rounded-full p-1 hover:bg-white/20" onClick={() => go(-1)} aria-label="上一個版面">
@@ -77,96 +77,98 @@ function usePanelShortcuts(onLeft: () => void, onRight: () => void) {
   })
 }
 
-function IconButton({ onClick, label, children, className }: { onClick: () => void; label: string; children: ReactNode; className?: string }) {
+function IconButton({ onClick, label, children }: { onClick: () => void; label: string; children: ReactNode }) {
   return (
     <button
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={cn('flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground', className)}
+      className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       {children}
     </button>
   )
 }
 
-function PinButton({ pinned, onToggle, shortcut }: { pinned: boolean; onToggle: () => void; shortcut: string }) {
+function PinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
   return (
-    <IconButton onClick={onToggle} label={pinned ? `取消釘選（${shortcut}）` : `釘選（${shortcut}）`}>
+    <IconButton onClick={onToggle} label={pinned ? '取消釘選（]）' : '釘選（]）'}>
       {pinned ? <Pin className="size-4" /> : <PinOff className="size-4" />}
     </IconButton>
   )
 }
 
-// 收合時的元件圖示列：圖示一樣可以拖曳或點擊加入
+// 收合時的元件圖示列：依類別分組，hover 顯示名稱，點擊加入或拖到畫布
 function PaletteRail({ onAdd }: { onAdd: (item: PaletteItem) => void }) {
   function onDragStart(event: DragEvent, item: PaletteItem) {
     event.dataTransfer.setData(PALETTE_ITEM_MIME, item.id)
     event.dataTransfer.effectAllowed = 'copy'
   }
   return (
-    <div className="flex flex-col items-center gap-1 overflow-y-auto py-2">
-      {PALETTE.map((item) => (
-        <button
-          key={item.id}
-          draggable
-          onDragStart={(event) => onDragStart(event, item)}
-          onClick={() => onAdd(item)}
-          title={item.label}
-          className="cursor-grab rounded-[10px] p-1 hover:bg-accent active:cursor-grabbing"
-        >
-          <CategoryIcon icon={item.icon} category={NODE_KINDS[item.type].category} />
-        </button>
+    <TooltipProvider>
+    <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto py-2">
+      {CATEGORIES.map((category, i) => (
+        <Fragment key={category.id}>
+          {i > 0 && <div className="my-1 h-px w-6 shrink-0 bg-border" />}
+          {PALETTE.filter((item) => NODE_KINDS[item.type].category === category.id).map((item) => (
+            <Tooltip key={item.id}>
+              <TooltipTrigger asChild>
+                <button
+                  draggable
+                  onDragStart={(event) => onDragStart(event, item)}
+                  onClick={() => onAdd(item)}
+                  aria-label={`加入 ${item.label}`}
+                  className="shrink-0 cursor-grab rounded-[10px] p-1 hover:bg-accent active:cursor-grabbing"
+                >
+                  <CategoryIcon icon={item.icon} category={category.id} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={6}>
+                {item.label}
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </Fragment>
       ))}
     </div>
+    </TooltipProvider>
   )
 }
 
-// ── A：圖示列＋浮出 ───────────────────────────────────────────────
-// 釘選：跟現在一樣佔版面。取消釘選：左側縮成 48px 圖示列，滑鼠移上去時完整面板浮在畫布上；
-// 右側縮成細條，選取元件或連線時屬性面板自動浮出，點畫布空白處（取消選取）就收回
-function VariantA({ palette, canvas, properties, hasSelection, onAdd }: Slots) {
-  const [leftPinned, setLeftPinned] = useState(true)
+function Layout({ buttonAt, palette, canvas, properties, hasSelection, onAdd }: Slots & { buttonAt: 'top' | 'bottom' }) {
+  const [leftOpen, setLeftOpen] = useState(true)
   const [rightPinned, setRightPinned] = useState(true)
-  const [hoverLeft, setHoverLeft] = useState(false)
-  const [dragging, setDragging] = useState(false)
-  usePanelShortcuts(() => setLeftPinned((p) => !p), () => setRightPinned((p) => !p))
+  usePanelShortcuts(() => setLeftOpen((o) => !o), () => setRightPinned((p) => !p))
 
-  const showLeftOverlay = !leftPinned && hoverLeft && !dragging
+  const collapseButton = (
+    <IconButton onClick={() => setLeftOpen(false)} label="收合元件面板（[）">
+      <PanelLeftClose className="size-4" />
+    </IconButton>
+  )
+  const expandButton = (
+    <IconButton onClick={() => setLeftOpen(true)} label="展開元件面板（[）">
+      <PanelLeftOpen className="size-4" />
+    </IconButton>
+  )
 
   return (
     <div className="relative flex min-h-0 flex-1">
-      {leftPinned ? (
-        <div className="relative flex shrink-0 flex-col border-r">
-          <div className="absolute top-1.5 right-1.5 z-10">
-            <PinButton pinned onToggle={() => setLeftPinned(false)} shortcut="[" />
-          </div>
-          {palette}
+      {leftOpen ? (
+        <div className="relative flex shrink-0 flex-col border-r bg-sidebar">
+          {buttonAt === 'top' && <div className="absolute top-1.5 right-1.5 z-10">{collapseButton}</div>}
+          <div className="min-h-0 flex-1 [&>[data-slot=sidebar]]:h-full">{palette}</div>
+          {buttonAt === 'bottom' && (
+            <div className="flex items-center justify-between border-t px-3 py-1 text-xs text-muted-foreground">
+              收合 <kbd className="ml-1 mr-auto">[</kbd>
+              {collapseButton}
+            </div>
+          )}
         </div>
       ) : (
-        <div
-          className="relative z-30 flex w-12 shrink-0 flex-col border-r bg-sidebar"
-          onMouseEnter={() => setHoverLeft(true)}
-          onMouseLeave={() => setHoverLeft(false)}
-        >
+        <div className="flex w-12 shrink-0 flex-col items-center border-r bg-sidebar">
+          {buttonAt === 'top' && <div className="w-full border-b py-1.5 flex justify-center">{expandButton}</div>}
           <PaletteRail onAdd={onAdd} />
-          {/* 浮出的完整面板一直掛著，只用 CSS 隱藏：從它開始拖曳時來源元素不能被移除 */}
-          <div
-            onDragStart={() => setDragging(true)}
-            onDragEnd={() => {
-              setDragging(false)
-              setHoverLeft(false)
-            }}
-            className={cn(
-              'absolute top-0 bottom-0 left-0 flex flex-col border-r bg-sidebar shadow-2xl transition-all duration-150',
-              showLeftOverlay ? 'translate-x-0 opacity-100' : 'pointer-events-none -translate-x-2 opacity-0',
-            )}
-          >
-            <div className="absolute top-1.5 right-1.5 z-10">
-              <PinButton pinned={false} onToggle={() => setLeftPinned(true)} shortcut="[" />
-            </div>
-            {palette}
-          </div>
+          {buttonAt === 'bottom' && <div className="w-full border-t py-1.5 flex justify-center">{expandButton}</div>}
         </div>
       )}
 
@@ -206,131 +208,7 @@ function RightHeader({ pinned, onToggle }: { pinned: boolean; onToggle: () => vo
   return (
     <div className="flex items-center justify-between border-b px-3 py-1 text-xs font-medium text-muted-foreground">
       屬性
-      <PinButton pinned={pinned} onToggle={onToggle} shortcut="]" />
-    </div>
-  )
-}
-
-// ── B：浮動卡片 ───────────────────────────────────────────────────
-// 畫布永遠滿版，兩側面板是浮在畫布上的卡片，沒有「佔版面」的狀態。
-// 關掉後縮成角落的小按鈕；選取元件時屬性卡片自動打開
-function VariantB({ palette, canvas, properties, hasSelection }: Slots) {
-  const [leftOpen, setLeftOpen] = useState(true)
-  const [rightOpen, setRightOpen] = useState(true)
-  const [dragging, setDragging] = useState(false)
-  usePanelShortcuts(() => setLeftOpen((o) => !o), () => setRightOpen((o) => !o))
-  // 新選取時自動打開
-  const [lastSelection, setLastSelection] = useState(hasSelection)
-  if (hasSelection !== lastSelection) {
-    setLastSelection(hasSelection)
-    if (hasSelection) setRightOpen(true)
-  }
-
-  return (
-    <div className="relative flex min-h-0 flex-1">
-      {canvas}
-
-      {leftOpen ? (
-        <div
-          onDragStart={() => setDragging(true)}
-          onDragEnd={() => setDragging(false)}
-          className={cn(
-            'absolute top-3 left-3 bottom-14 z-30 flex flex-col overflow-hidden rounded-2xl border shadow-xl transition-opacity',
-            dragging && 'pointer-events-none opacity-40',
-          )}
-        >
-          <div className="flex items-center justify-between border-b bg-sidebar px-3 py-1.5 text-xs font-medium text-muted-foreground">
-            元件
-            <IconButton onClick={() => setLeftOpen(false)} label="收起元件（[）">
-              <X className="size-4" />
-            </IconButton>
-          </div>
-          <div className="min-h-0 flex-1">{palette}</div>
-        </div>
-      ) : (
-        <button
-          onClick={() => setLeftOpen(true)}
-          className="absolute top-3 left-3 z-30 flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-md hover:bg-accent"
-        >
-          <LayoutGrid className="size-4" /> 元件 <kbd className="text-xs text-muted-foreground">[</kbd>
-        </button>
-      )}
-
-      {rightOpen ? (
-        <div className="absolute top-3 right-3 bottom-3 z-30 flex flex-col overflow-hidden rounded-2xl border bg-background shadow-xl">
-          <div className="flex items-center justify-between border-b px-3 py-1.5 text-xs font-medium text-muted-foreground">
-            屬性
-            <IconButton onClick={() => setRightOpen(false)} label="收起屬性（]）">
-              <X className="size-4" />
-            </IconButton>
-          </div>
-          <div className="flex min-h-0 flex-1">{properties}</div>
-        </div>
-      ) : (
-        <button
-          onClick={() => setRightOpen(true)}
-          className="absolute top-3 right-3 z-30 flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-md hover:bg-accent"
-        >
-          <SlidersHorizontal className="size-4" /> 屬性 <kbd className="text-xs text-muted-foreground">]</kbd>
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ── C：整個收起來 ─────────────────────────────────────────────────
-// 面板只有「打開（佔版面）」和「收起（寬度 0）」兩種，沒有浮出。
-// 收起後畫布邊緣留一個小把手可以打開；不會因為選取自動打開
-function VariantC({ palette, canvas, properties }: Slots) {
-  const [leftOpen, setLeftOpen] = useState(true)
-  const [rightOpen, setRightOpen] = useState(true)
-  usePanelShortcuts(() => setLeftOpen((o) => !o), () => setRightOpen((o) => !o))
-
-  return (
-    <div className="relative flex min-h-0 flex-1">
-      {leftOpen && (
-        <div className="relative flex shrink-0 flex-col border-r">
-          <div className="absolute top-1.5 right-1.5 z-10">
-            <IconButton onClick={() => setLeftOpen(false)} label="收起元件面板（[）">
-              <ChevronLeft className="size-4" />
-            </IconButton>
-          </div>
-          {palette}
-        </div>
-      )}
-
-      <div className="relative flex min-w-0 flex-1">
-        {canvas}
-        {!leftOpen && (
-          <button
-            onClick={() => setLeftOpen(true)}
-            title="打開元件面板（[）"
-            className="absolute top-1/2 left-0 z-30 flex h-16 w-5 -translate-y-1/2 items-center justify-center rounded-r-lg border border-l-0 bg-background shadow hover:bg-accent"
-          >
-            <PanelLeftOpen className="size-3.5" />
-          </button>
-        )}
-        {!rightOpen && (
-          <button
-            onClick={() => setRightOpen(true)}
-            title="打開屬性面板（]）"
-            className="absolute top-1/2 right-0 z-30 flex h-16 w-5 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 bg-background shadow hover:bg-accent"
-          >
-            <PanelRightOpen className="size-3.5" />
-          </button>
-        )}
-      </div>
-
-      {rightOpen && (
-        <div className="relative flex shrink-0">
-          <div className="absolute top-2 right-2 z-10">
-            <IconButton onClick={() => setRightOpen(false)} label="收起屬性面板（]）">
-              <ChevronRight className="size-4" />
-            </IconButton>
-          </div>
-          {properties}
-        </div>
-      )}
+      <PinButton pinned={pinned} onToggle={onToggle} />
     </div>
   )
 }
