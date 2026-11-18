@@ -75,6 +75,25 @@ class StorageEstimateTest {
     }
 
     @Test
+    void laggingReplicaIsFlaggedButTotalsStayFull() {
+        // replica 容量 50 rps，複製寫入 100 rps 跟不上；另一個 replica 跟得上
+        var slow = new ReadReplicaNode("slow", "slow", NodeHealth.HEALTHY, new CapacityParams(1, 1, 20));
+        SimulationResult result = run(db(AMPLE, new StorageSizing(2_000, 30, null)), slow, replica("r2"));
+        StorageEstimate estimate = result.storage().get("db");
+
+        assertThat(result.nodes().get("slow").warnings()).contains(NodeWarning.REPLICATION_LAG);
+        assertThat(estimate.replicasLagging()).isTrue();
+        assertThat(estimate.totalWithReplicasBytes()).isCloseTo(estimate.totalBytes() * 3, within(EPS));
+    }
+
+    @Test
+    void replicasThatKeepUpAreNotFlagged() {
+        StorageEstimate estimate = run(db(AMPLE, new StorageSizing(2_000, 30, null)), replica("r1")).storage().get("db");
+
+        assertThat(estimate.replicasLagging()).isFalse();
+    }
+
+    @Test
     void daysUntilDiskFullUseDailyGrowthPerInstance() {
         // 2 台：每台每天 17.28 GB ÷ 2 = 8.64 GB；磁碟 100 GB → 約 11.57 天，保留 30 天內就會滿
         var two = new CapacityParams(2, 10_000, 1);

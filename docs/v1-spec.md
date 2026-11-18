@@ -138,7 +138,7 @@ system-design-simulator/
 
 - 欄位只在對應的起點有意義：`weight` 只用在 Client／LB／CDN 的邊，`callsPerRequest`、`requestClass` 只用在 Service 的邊。其他邊上的這些欄位**計算時忽略**（存檔一律帶著預設值，所以不報錯），屬性面板也只顯示對該起點有意義的欄位。
 - `requestClass`：一個 class 的請求只呼叫 `requestClass` 符合的下游（`ALL` 兩種都符合），例如 Service ─(READ)→ Read Replica、Service ─(WRITE)→ primary，或 CQRS 的讀寫分流。流量、延遲（4.3）、成功率（4.3.1）都只算符合的下游；沒有任何符合的下游時，Service 就是這個 class 的終點。Client／LB／CDN 的邊不支援（要依 class 重新正規化權重，還要處理某個 class 沒有邊可走的情況）。畫布上 `READ`／`WRITE` 的邊在標籤前面顯示「R」／「W」，邊上的 RPS 和粒子只有那個 class 的流量。
-  - **限制：一個請求不能同時是 read 和 write**。`requestClass` 只能篩選，不能轉換，所以「寫入前先讀一次」（read-modify-write，例如先查庫存再扣）沒辦法表示成一個請求。要近似時分成兩條路徑：把那一次讀也畫成一條 read 路徑（例如另一個 Client 或 `requestClass = READ` 的邊），write 路徑只算寫入。
+  - **限制：一個請求不能同時是 read 和 write**。`requestClass` 只能篩選，不能轉換，所以「寫入前先讀一次」（read-modify-write，例如先查庫存再扣）沒辦法表示成一個請求。要近似時分成兩條路徑：另外放一個 `readRatio = 1`、`rps` 等於寫入量的 Client 打到同一個 Database，代表每次寫入前的那一次讀；write 路徑的端到端延遲不包含這次讀。
 - 同一對 source → target 只能有一條邊（見 4.5 `DUPLICATE_EDGE`），畫布也會阻止拉出重複的連線。
 - 不能有環（見 4.5 `CYCLE_DETECTED`）。畫布拉線時就擋掉會成環的連線（含自己連自己），和重複的連線一樣放不下去。讀入存檔時只擋自己連自己，經過其他節點的環照樣讀入，Run 之後在錯誤分頁顯示。
 
@@ -463,7 +463,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - 用**成功處理**的 write（丟棄依 read／write 比例發生，4.2），過載時被丟棄的 write 不算，所以過載時數字偏低；容量估算分頁照常標示過載。
 - Read Replica 數是 primary 是這個 Database 的 Read Replica 個數；Replica 存的是同一份資料，沒有自己的估算。
 - GB 是十進位（10⁹ bytes）。Object Storage、沒有設定 `diskGbPerInstance`、沒有寫入（資料不會增加），或寫入量小到天數超出浮點數範圍時，`daysUntilFull` 是 `null`。
-- **副本跟不上**：primary 的 Read Replica 有 `REPLICATION_LAG`（4.2.3）時，「含副本」仍照完整副本計算，數字不改，但容量估算分頁在那一列加註「副本複製跟不上，實際副本量會比這少」。
+- **副本跟不上**：primary 的 Read Replica 有 `REPLICATION_LAG`（4.2.3）時，「含副本」仍照完整副本計算，數字不改，但回應的 `replicasLagging` 為 true，容量估算分頁在那一列加註「副本複製跟不上，實際副本量會比這少」。
 - **磁碟會滿**（`fillsDisk`）：`daysUntilFull < retentionDays`，也就是保留期內每台的資料會超過磁碟容量。這是另一種瓶頸，和 ρ 分開顯示，不混進「瓶頸 = ρ 最高」的規則（`bottleneckNodeId` 不變）。
 
 ---
@@ -560,7 +560,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 
 **警告**：`warnings` 永遠是陣列，沒有警告時為空；Read Replica 的 `REPLICATION_LAG`（4.2.3）、consumer 的 `BACKLOG`（4.2.4）。邊結果的 `backlogRps` 只有 Message Queue 的下游邊會大於 0（4.2.4）。
 
-**儲存量**：`storage` 以 Database、Object Storage 的 id 為 key（拓撲裡沒有時是 `{}`，例如上面的範例），每筆有 `dailyBytes`、`totalBytes`、`replicas`、`totalWithReplicasBytes`、`perInstanceBytes`（bytes）、`daysUntilFull`（可為 `null`）、`fillsDisk`（4.8），以及計算時用的 `retentionDays`、`diskGbPerInstance`（沒有設定時和 Object Storage 為 `null`），畫面依這兩個欄位顯示，不讀目前的拓撲。驗證失敗時也是 `{}`。
+**儲存量**：`storage` 以 Database、Object Storage 的 id 為 key（拓撲裡沒有時是 `{}`，例如上面的範例），每筆有 `dailyBytes`、`totalBytes`、`replicas`、`totalWithReplicasBytes`、`replicasLagging`（4.8）、`perInstanceBytes`（bytes）、`daysUntilFull`（可為 `null`）、`fillsDisk`（4.8），以及計算時用的 `retentionDays`、`diskGbPerInstance`（沒有設定時和 Object Storage 為 `null`），畫面依這兩個欄位顯示，不讀目前的拓撲。驗證失敗時也是 `{}`。
 
 **頻寬**：單位 bytes/s（4.7）。邊結果的 `bandwidth` 只有 Client 的邊有，其他邊為 `null`；`summary.bandwidth` 一定有。
 
@@ -625,7 +625,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - **Preset**：元件面板的「Redis Cluster」是 `instances = 3`、`replicas = 1` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
 - 指標表在有熱點的 Cache 名稱旁標示「熱點」；屬性面板在 Cache 的 `instances` ≥ 2 時，`instances` 下方有「設定熱點」，按下去先填平均的 1.5 倍（`min(1, 1.5/instances)`），之後可以按「沒有熱點」拿掉這個參數。設定了 `hotShare` 時，`instances` 不能減到 1，也不能減到讓 `hotShare` 小於新的平均。
 - **頻寬**（4.7）：Client 的邊在 RPS 下面一行小字顯示「出 X・入 Y」；結果面板上方的 summary 列出出口、入口頻寬，有 CDN 擋掉流量時加上 origin 出口和擋掉的比例。單位自動換算（B/s、KB/s、MB/s、GB/s…，十進位，最大到 PB/s，超過時用科學記號，例如 `1.2e18 B/s`），括號裡附上 bits（Mbps、Gbps…，同樣最大到 Pbps）。
-- **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每台、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB，十進位，超過 PB 時用科學記號）。過載的節點名稱旁標示「過載，偏低」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerInstance`（只有 Database）預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。Object Storage 那一列只有每日增量和總量，其他欄是「—」；沒有 Database 時不顯示磁碟那一欄。
+- **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每台、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB，十進位，超過 PB 時用科學記號）。過載的節點名稱旁標示「過載，偏低」；有 Read Replica 複製跟不上時，含副本那一格加註「副本複製跟不上，實際副本量會比這少」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerInstance`（只有 Database）預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。Object Storage 那一列只有每日增量和總量，其他欄是「—」；沒有 Database 時不顯示磁碟那一欄。
 - **重點數字**：結果面板的分頁下方、內容上方有一排卡片，每個分頁都顯示，數值直接取自 `summary`；有驗證錯誤時不顯示。窄螢幕時自動換行。
   - 成功率：`1 − dropRate`，有丟棄或拒絕時紅字（少到取一位小數會變成 100.0% 時顯示「> 99.9%」），下面一行是成功的 rps。
   - 端到端延遲：read、write 排在同一行；`null` 時顯示「—」，下面一行是原因（和指標表同樣的說明，兩個 class 原因相同時只列一次），近似值加上「近似」。

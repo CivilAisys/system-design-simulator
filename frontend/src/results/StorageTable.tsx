@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils'
 import type { ComputedResult, Topology } from '@/api/client'
 import { NODE_KINDS } from '@/canvas/catalog'
 import { DASH, formatBytes, formatDays } from '@/canvas/format'
-import { hasLaggingReplica } from './replicaLag'
 
 type StorageTableProps = {
   topology: Topology
@@ -77,7 +76,7 @@ export function StorageTable({ topology, result }: StorageTableProps) {
                   <div className="text-xs text-muted-foreground">{estimate.replicas} 個 replica</div>
                 )}
                 {/* 數字照完整副本算，只加註記（spec 4.8） */}
-                {hasLaggingReplica(topology, result.nodes, node.id) && (
+                {estimate.replicasLagging && (
                   <div className="text-xs text-destructive">副本複製跟不上，實際副本量會比這少</div>
                 )}
               </TableCell>

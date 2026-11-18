@@ -194,6 +194,8 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, description = "dailyBytes × retentionDays") double totalBytes,
             @Schema(requiredMode = REQUIRED, description = "連到這個 Database 的 Read Replica 數") int replicas,
             @Schema(requiredMode = REQUIRED, description = "totalBytes × (1 + replicas)") double totalWithReplicasBytes,
+            @Schema(requiredMode = REQUIRED, description = "有 Read Replica 複製跟不上（REPLICATION_LAG），實際副本量會比 totalWithReplicasBytes 少")
+            boolean replicasLagging,
             @Schema(requiredMode = REQUIRED, description = "totalBytes ÷ instances（資料平均分布）") double perInstanceBytes,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "每台機器的磁碟幾天後會滿；OBJECT_STORAGE、沒有設定 diskGbPerInstance、沒有寫入或寫入量小到天數超出範圍時為 null")
             Double daysUntilFull,
@@ -205,7 +207,7 @@ public record SimulationResponse(
 
         static StorageEstimateDto from(StorageEstimate estimate) {
             return new StorageEstimateDto(estimate.dailyBytes(), estimate.totalBytes(), estimate.replicas(),
-                    estimate.totalWithReplicasBytes(), estimate.perInstanceBytes(), estimate.daysUntilFull(),
+                    estimate.totalWithReplicasBytes(), estimate.replicasLagging(), estimate.perInstanceBytes(), estimate.daysUntilFull(),
                     estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerInstance());
         }
     }
