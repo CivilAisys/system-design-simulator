@@ -1,6 +1,6 @@
 import { totalRps, type HotSpot, type InstanceResult, type Node, type Status } from '@/api/client'
 import { NODE_KINDS } from './catalog'
-import { formatMs, formatPercent, formatRps, formatUtilization } from './format'
+import { formatMs, formatPercent, formatRps, formatUtilization, STALE_RESULT_NOTE } from './format'
 
 // 機櫃最多畫幾條槽，再多台也是這麼多條，實際台數看標籤
 export const MAX_RACK_SLOTS = 5
@@ -45,7 +45,7 @@ export function hotSpotTitle(
   }
   const others = `其他 ${withCommas(rack.instances - 1)} 台`
   const lines = [instanceLine('最熱那台', hotSpot.hottest), instanceLine(others, hotSpot.others)]
-  return (stale ? ['（結果已過期，按 Run 重新計算）', ...lines] : lines).join('\n')
+  return (stale ? [STALE_RESULT_NOTE, ...lines] : lines).join('\n')
 }
 
 function instanceLine(name: string, result: InstanceResult): string {

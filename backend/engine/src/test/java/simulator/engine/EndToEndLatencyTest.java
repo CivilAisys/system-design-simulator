@@ -51,20 +51,20 @@ class EndToEndLatencyTest {
 
     @Test
     void sequentialCallsAddUp() {
-        // L = 50 + 12 + 32
+        // L = 50 + 11 + 31（邊的 latencyMs 是往返，不再乘 2）
         SimulationResult result = runTwoDownstreams(CallMode.SEQUENTIAL, 1);
 
-        assertLatencies(result.nodes().get("client").endToEndMs(), 94.0, 94.0);
-        assertLatencies(result.summary().avgEndToEndMs(), 94.0, 94.0);
+        assertLatencies(result.nodes().get("client").endToEndMs(), 92.0, 92.0);
+        assertLatencies(result.summary().avgEndToEndMs(), 92.0, 92.0);
         assertThat(result.nodes().get("client").endToEndMs().read().approximate()).isFalse();
     }
 
     @Test
     void parallelCallsTakeTheSlowestDownstream() {
-        // L = 50 + max(12, 32)
+        // L = 50 + max(11, 31)
         SimulationResult result = runTwoDownstreams(CallMode.PARALLEL, 1);
 
-        assertLatencies(result.nodes().get("client").endToEndMs(), 82.0, 82.0);
+        assertLatencies(result.nodes().get("client").endToEndMs(), 81.0, 81.0);
         // 平均值的最大值會低估真實延遲，Client 和 summary 都標示近似
         assertThat(result.nodes().get("client").endToEndMs().read().approximate()).isTrue();
         assertThat(result.summary().avgEndToEndMs().write().approximate()).isTrue();
@@ -81,21 +81,21 @@ class EndToEndLatencyTest {
                         new Edge("e1", "client", "svc", 1, 1, 0),
                         new Edge("e2", "svc", "a", 1, 1, 1))));
 
-        assertLatencies(result.nodes().get("client").endToEndMs(), 62.0, 62.0);
+        assertLatencies(result.nodes().get("client").endToEndMs(), 61.0, 61.0);
         assertThat(result.nodes().get("client").endToEndMs().read().approximate()).isFalse();
     }
 
     @Test
     void parallelCallsToTheSameDownstreamStillAddUp() {
-        // 同一個下游呼叫 3 次仍依序：L = 50 + max(3 × 12, 32)
+        // 同一個下游呼叫 3 次仍依序：L = 50 + max(3 × 11, 31)
         SimulationResult result = runTwoDownstreams(CallMode.PARALLEL, 3);
 
-        assertLatencies(result.nodes().get("client").endToEndMs(), 86.0, 86.0);
+        assertLatencies(result.nodes().get("client").endToEndMs(), 83.0, 83.0);
     }
 
     @Test
     void loadBalancerAveragesDownstreamsByWeight() {
-        // L = 1 + 0.25 × 12 + 0.75 × 32
+        // L = 1 + 0.25 × 11 + 0.75 × 31
         SimulationResult result = simulator.simulate(new Topology(
                 List.of(
                         new ClientNode("client", "Users", NodeHealth.HEALTHY, 100, 0.9),
@@ -107,12 +107,12 @@ class EndToEndLatencyTest {
                         new Edge("e2", "lb", "a", 1, 1, 1),
                         new Edge("e3", "lb", "b", 3, 1, 1))));
 
-        assertLatencies(result.nodes().get("client").endToEndMs(), 28.0, 28.0);
+        assertLatencies(result.nodes().get("client").endToEndMs(), 27.0, 27.0);
     }
 
     @Test
     void cacheReadsGoDownstreamOnlyOnMiss() {
-        // Cache read：1 + 0.2 × (2 + 10) = 3.4；write：1 + 2 + 10 = 13；Client 再加上自己那條邊的 2ms
+        // Cache read：1 + 0.2 × (1 + 10) = 3.2；write：1 + 1 + 10 = 12；Client 再加上自己那條邊的 1ms
         SimulationResult result = simulator.simulate(new Topology(
                 List.of(
                         new ClientNode("client", "Users", NodeHealth.HEALTHY, 100, 0.9),
@@ -122,7 +122,7 @@ class EndToEndLatencyTest {
                         new Edge("e1", "client", "cache", 1, 1, 1),
                         new Edge("e2", "cache", "db", 1, 1, 1))));
 
-        assertLatencies(result.nodes().get("client").endToEndMs(), 5.4, 15.0);
+        assertLatencies(result.nodes().get("client").endToEndMs(), 4.2, 13.0);
     }
 
     @Test

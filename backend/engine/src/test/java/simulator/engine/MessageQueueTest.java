@@ -49,8 +49,8 @@ class MessageQueueTest {
         double mq = result.nodes().get("mq").avgLatencyMs();
         double db = result.nodes().get("db").avgLatencyMs();
 
-        // 1×2 + API + (2×2 + MQ) + (1×2 + DB)：worker 和它到 DB 的路徑都不算
-        assertThat(result.summary().avgEndToEndMs().write().ms()).isCloseTo(2 + api + 4 + mq + 2 + db, within(EPS));
+        // 1 + API + (2 + MQ) + (1 + DB)：worker 和它到 DB 的路徑都不算
+        assertThat(result.summary().avgEndToEndMs().write().ms()).isCloseTo(1 + api + 2 + mq + 1 + db, within(EPS));
     }
 
     @Test
