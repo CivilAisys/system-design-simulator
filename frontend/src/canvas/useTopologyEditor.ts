@@ -7,7 +7,15 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import type { Edge, Node, NodeType, Topology } from '@/api/client'
-import { canFeed, newEdgeId, newEdgeRequestClass, newNode, type NodeParams, type PaletteItem } from './catalog'
+import {
+  canFeed,
+  newEdgeId,
+  newEdgeLatencyMs,
+  newEdgeRequestClass,
+  newNode,
+  type NodeParams,
+  type PaletteItem,
+} from './catalog'
 import type { SimFlowNode } from './SimNode'
 import { arrowMarker } from './edgeStyle'
 import { copyNodes, pasteClip, type Clip } from './clipboard'
@@ -99,7 +107,8 @@ export function useTopologyEditor(initial: Topology) {
         }
         const types = edgeTypes(state.nodes, c.source, c.target)
         const requestClass = types ? newEdgeRequestClass(...types) : EDGE_DEFAULTS.requestClass
-        const edge = toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS, requestClass })
+        const latencyMs = types ? newEdgeLatencyMs(...types) : EDGE_DEFAULTS.latencyMs
+        const edge = toFlowEdge({ id, source: c.source, target: c.target, ...EDGE_DEFAULTS, requestClass, latencyMs })
         return { ...state, edges: [...state.edges, edge] }
       })
     },
@@ -114,6 +123,7 @@ export function useTopologyEditor(initial: Topology) {
       edit((state) => ({
         ...state,
         nodes: [...state.nodes.map((n) => withSelected(n, false)), { ...toFlowNode(node), selected: true }],
+        edges: state.edges.map((e) => withSelected(e, false)),
       }))
     },
     [usedIds, edit],

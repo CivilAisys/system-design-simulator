@@ -69,6 +69,9 @@ function storageDefaults(bytesPerWrite: number): NodeParams {
   return { bytesPerWrite, retentionDays: 365 }
 }
 
+// 屬性面板按「設定磁碟容量」時先填的值
+export const NEW_DISK_GB = 1000
+
 // 左側元件面板的順序，同一類別的放在一起，類別的順序同 CATEGORIES
 export const NODE_TYPES: NodeType[] = [
   'CLIENT',
@@ -338,6 +341,12 @@ export function canFeed(source: NodeType, target: NodeType): boolean {
 // 新邊的 requestClass：Read Replica 是唯讀的，Service 連過去的邊預設只送 read（spec 4.2.3），其他維持 ALL
 export function newEdgeRequestClass(source: NodeType, target: NodeType): Edge['requestClass'] {
   return source === 'SERVICE' && target === 'READ_REPLICA' ? 'READ' : 'ALL'
+}
+
+// 新邊的 latencyMs，落在 paramGuide.ts 這條邊的常見範圍內（spec 3.4）：Client、CDN 的出邊走公開網路，
+// 連到 External API 也是，用 30 ms；其他是機房內部，維持 1 ms。只影響新建的邊，存檔省略時仍補 1 ms
+export function newEdgeLatencyMs(source: NodeType, target: NodeType): number {
+  return source === 'CLIENT' || source === 'CDN' || target === 'EXTERNAL_API' ? 30 : 1
 }
 
 // 複製的來源（Database）：連出去的邊是 Read Replica 套用的寫入，不是請求的流向

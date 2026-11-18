@@ -2,6 +2,8 @@ import { useId, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
+import { outOfRangeHint, type ParamGuide } from './paramGuide'
+import { ParamInfo } from './ParamInfo'
 import { ParamLabel } from './ParamLabel'
 import { checkNumber, fromSlider, parseDraft, sliderRange, syncDraft, toSlider, type NumberSpec } from './params'
 
@@ -11,12 +13,20 @@ type NumberFieldProps = {
   onChange: (value: number) => void
   // 預設只檢查 spec 的範圍；instances、concurrency 另外要看乘積
   check?: (value: number) => string | null
+  // 名稱後面 ⓘ 的內容
+  guide?: ParamGuide
 }
 
 // Input 和 Slider 改的是同一個值。Input 打到一半（空白、超出範圍）時只顯示錯誤，
 // 不把不合法的值寫進拓撲，所以送去 Run 的參數一定通過 spec 4.5 的範圍檢查。
 // 不合法的草稿在失焦時還原成目前的值，輸入框不會長期和實際的值不一致
-export function NumberField({ spec, value, onChange, check = (next) => checkNumber(spec, next) }: NumberFieldProps) {
+export function NumberField({
+  spec,
+  value,
+  onChange,
+  check = (next) => checkNumber(spec, next),
+  guide,
+}: NumberFieldProps) {
   const id = useId()
   const [draft, setDraft] = useState(String(value))
   const [shown, setShown] = useState(value)
@@ -27,7 +37,10 @@ export function NumberField({ spec, value, onChange, check = (next) => checkNumb
     setDraft(syncDraft(draft, value))
   }
 
-  const error = check(parseDraft(draft))
+  const parsed = parseDraft(draft)
+  const error = check(parsed)
+  // 不合法時只顯示錯誤，不同時出現黃字
+  const hint = error === null ? outOfRangeHint(guide, spec.unit, parsed) : null
 
   function onInput(text: string) {
     setDraft(text)
@@ -48,9 +61,12 @@ export function NumberField({ spec, value, onChange, check = (next) => checkNumb
   return (
     <div className="grid gap-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <Label htmlFor={id}>
-          <ParamLabel label={spec.label} labelEn={spec.labelEn} />
-        </Label>
+        <div className="flex min-w-0 items-center gap-1">
+          <Label htmlFor={id}>
+            <ParamLabel label={spec.label} labelEn={spec.labelEn} />
+          </Label>
+          {guide && <ParamInfo label={spec.label} guide={guide} unit={spec.unit} />}
+        </div>
         {spec.unit && <span className="text-xs text-muted-foreground">{spec.unit}</span>}
       </div>
       <Input
@@ -62,7 +78,7 @@ export function NumberField({ spec, value, onChange, check = (next) => checkNumb
         onChange={(event) => onInput(event.target.value)}
         onBlur={() => setDraft(syncDraft(draft, value))}
         aria-invalid={error !== null}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
       />
       <Slider
         {...sliderRange(spec)}
@@ -73,6 +89,11 @@ export function NumberField({ spec, value, onChange, check = (next) => checkNumb
       {error && (
         <p id={`${id}-error`} className="text-xs text-destructive">
           {error}
+        </p>
+      )}
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs text-warn-ink">
+          {hint}
         </p>
       )}
     </div>

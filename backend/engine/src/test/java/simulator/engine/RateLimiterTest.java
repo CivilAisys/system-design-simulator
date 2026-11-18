@@ -90,8 +90,8 @@ class RateLimiterTest {
         NodeResult svc = limited.nodes().get("svc");
         assertThat(svc.utilization()).isCloseTo(0.75, within(EPS));
         assertThat(svc.droppedRps()).isZero();
-        // 端到端延遲只算被放行的請求：limiter 的 W = 0，加上各邊來回和下游的 W
-        double expected = 1 * 2 + 0 + 1 * 2 + svc.avgLatencyMs() + 1 * 2 + limited.nodes().get("db").avgLatencyMs();
+        // 端到端延遲只算被放行的請求：limiter 的 W = 0，加上各邊的往返延遲和下游的 W
+        double expected = 1 + 0 + 1 + svc.avgLatencyMs() + 1 + limited.nodes().get("db").avgLatencyMs();
         assertThat(limited.summary().avgEndToEndMs().read().ms()).isCloseTo(expected, within(EPS));
         assertThat(limited.summary().dropRate()).isCloseTo(0.5, within(EPS));
     }

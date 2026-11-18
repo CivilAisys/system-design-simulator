@@ -82,7 +82,7 @@ class ReadReplicaTest {
         // replica 被複製寫入壓到過載：write 的請求只到 primary，延遲和成功率都不受影響
         SimulationResult result = run(1000, 0.4, primary(workers(10)), workers(5));
         NodeResult client = result.nodes().get("client");
-        double write = result.nodes().get("svc").avgLatencyMs() + 2 * 2 + result.nodes().get("db").avgLatencyMs();
+        double write = result.nodes().get("svc").avgLatencyMs() + 2 + result.nodes().get("db").avgLatencyMs();
 
         assertThat(client.endToEndMs().write().ms()).isCloseTo(write, within(EPS));
         // read 走到過載的 replica：延遲無定義，成功率 = replica 的通過率
