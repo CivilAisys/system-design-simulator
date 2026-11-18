@@ -28,10 +28,11 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const status = result?.status ?? null
   const rack = instanceRack(node)
   const replicas = replicaLabel(node)
+  const errorText = errors && errorsTitle(errors, stale)
 
   return (
     <div
-      title={errors && errorsTitle(errors, stale)}
+      title={errorText}
       className={cn(
         'relative max-w-64 min-w-36 rounded-card border border-input bg-card px-3 py-2.5 text-card-foreground',
         // 沒有上游的節點（Client）是流量的來源，不是機器：虛線外框、沒有陰影
@@ -58,8 +59,12 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       <div className="flex items-center gap-2.5">
         <CategoryIcon icon={icon} category={category} />
         <div className="min-w-0 flex-1">
-          {/* 寬度有上限，長名稱截成一行，完整名稱放在 title（節點可能很多，不用 shadcn tooltip） */}
-          <div className="truncate text-[13px] font-semibold" title={node.name}>
+          {/* 寬度有上限，長名稱截成一行，完整名稱放在 title（節點可能很多，不用 shadcn tooltip）。
+              滑過名稱時看不到外層的錯誤說明，所以一起放進來 */}
+          <div
+            className="truncate text-[13px] font-semibold"
+            title={errorText ? `${node.name}\n${errorText}` : node.name}
+          >
             {node.name}
           </div>
           {replicas && <div className="text-[11px] text-muted-foreground">{replicas}</div>}
