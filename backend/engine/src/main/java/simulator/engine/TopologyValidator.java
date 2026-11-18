@@ -231,11 +231,19 @@ final class TopologyValidator {
         }
     }
 
-    /** 最熱的那台至少分到平均值 1/instances，否則它就不是最熱的。instances 不合法時已經回報過，不再檢查。 */
+    /**
+     * 熱點要有兩台以上才有「其他台」；最熱的那台至少分到平均值 1/instances，否則它就不是最熱的。
+     * instances 小於 1 時已經回報過，不再檢查。
+     */
     private static void checkHotShare(CachingNode cache, String where, Consumer<String> report) {
         Double hot = cache.hotShare();
         int instances = cache.capacityParams().instances();
-        if (hot != null && instances >= 1 && !(hot >= 1.0 / instances - SHARE_TOLERANCE && hot <= 1)) {
+        if (hot == null || instances < 1) {
+            return;
+        }
+        if (instances < 2) {
+            report.accept(invalid(where, "instances", "≥ 2（設定了 hotShare）", instances));
+        } else if (!(hot >= 1.0 / instances - SHARE_TOLERANCE && hot <= 1)) {
             report.accept(invalid(where, "hotShare", "介於 1/" + instances + " 和 1 之間", hot));
         }
     }

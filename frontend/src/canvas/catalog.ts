@@ -178,7 +178,7 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     outputTargets: ['READ_REPLICA'],
     nodeMetric: 'utilization',
   },
-  // primary 的唯讀副本：write 是 primary 複製過來的，read 由 Service 的 READ 邊送來；分片沿用 primary（spec 4.2.3）
+  // primary 的唯讀副本：write 是 primary 複製過來的，read 由 Service 的 READ 邊送來（spec 4.2.3）
   READ_REPLICA: {
     label: 'Read Replica',
     icon: DatabaseBackup,

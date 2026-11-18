@@ -88,17 +88,6 @@ class HotSpotTest {
     }
 
     @Test
-    void singleInstanceHasNoOthers() {
-        var one = new CapacityParams(1, 10, 10);
-        NodeResult plain = run(800, one, null).nodes().get("cache");
-        NodeResult hot = run(800, one, 1.0).nodes().get("cache");
-
-        assertThat(hot.hotSpot().others()).isNull();
-        assertThat(hot.utilization()).isEqualTo(plain.utilization());
-        assertThat(hot.avgLatencyMs()).isEqualTo(plain.avgLatencyMs());
-    }
-
-    @Test
     void missesOfBothSidesGoDownstream() {
         // 最熱那台 1200 只處理 1000；其他 1800 全部處理：處理完的 2800 裡 read 2520、write 280
         SimulationResult result = run(3000, FOUR, 0.4);

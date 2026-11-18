@@ -33,19 +33,16 @@ final class MmcQueue {
     /**
      * 有熱點的 Cache（spec 4.2.2）：最熱的那台單獨是一個 M/M/c（c = concurrency），分到 {@code hotShare} 的流量；
      * 其他 instances − 1 台共用一條佇列，處理剩下的流量。節點的 ρ 和狀態取 ρ 較高的一邊，處理量和丟棄量加總，
-     * 延遲依流量加權平均，任一邊有流量且過載時為 null。{@code hotShare} 為 null 時所有機器共用一條佇列。
+     * 延遲依流量加權平均，任一邊有流量且過載時為 null。{@code hotShare} 為 null 時所有機器共用一條佇列；
+     * 有值時 instances 至少 2（TopologyValidator 檢查）。
      */
     static Outcome solve(CapacityParams params, Double hotShare, ClassRates arrival) {
         if (hotShare == null) {
             return solve(params, arrival);
         }
-        int others = params.instances() - 1;
         Outcome hot = solve(params.withInstances(1), arrival.times(hotShare));
-        Outcome rest = others > 0 ? solve(params.withInstances(others), arrival.times(1 - hotShare)) : null;
+        Outcome rest = solve(params.withInstances(params.instances() - 1), arrival.times(1 - hotShare));
         NodeResult h = hot.result();
-        if (rest == null) {
-            return new Outcome(withHotSpot(h, new HotSpot(instance(h), null)), hot.processed());
-        }
         NodeResult o = rest.result();
         NodeResult busiest = o.utilization() > h.utilization() ? o : h;
         double hotFlow = h.arrivalRps().total();
@@ -58,7 +55,7 @@ final class MmcQueue {
                 : weighted(h.avgLatencyMs(), hotFlow, o.avgLatencyMs(), otherFlow, lambda);
         var result = new NodeResult(arrival, h.throughputRps() + o.throughputRps(),
                 h.droppedRps() + o.droppedRps(), 0, null, null, params.capacityRps(), busiest.utilization(), queueMs,
-                latencyMs, busiest.status(), new HotSpot(instance(h), instance(o)), List.of());
+                latencyMs, busiest.status(), new HotSpot(InstanceResult.of(h), InstanceResult.of(o)), List.of());
         return new Outcome(result, hot.processed().plus(rest.processed()));
     }
 
@@ -69,17 +66,6 @@ final class MmcQueue {
         }
         double sum = hotFlow > 0 ? hot * hotFlow : 0;
         return (sum + (otherFlow > 0 ? other * otherFlow : 0)) / total;
-    }
-
-    private static InstanceResult instance(NodeResult result) {
-        return new InstanceResult(result.arrivalRps(), result.throughputRps(), result.droppedRps(),
-                result.utilization(), result.avgLatencyMs(), result.status());
-    }
-
-    private static NodeResult withHotSpot(NodeResult r, HotSpot hotSpot) {
-        return new NodeResult(r.arrivalRps(), r.throughputRps(), r.droppedRps(), r.rejectedRps(), r.successRps(),
-                r.endToEndMs(), r.capacityRps(), r.utilization(), r.avgQueueMs(), r.avgLatencyMs(), r.status(),
-                hotSpot, r.warnings());
     }
 
     /**

@@ -107,8 +107,12 @@ describe('checkNodeParam', () => {
     const hot: NodeParams = { instances: 4, concurrency: 1, hotShare: 0.4 }
     expect(checkNodeParam(hot, 'instances', 3)).toBeNull()
     expect(checkNodeParam(hot, 'instances', 2)).toBe('hotShare 不能小於平均 1/2（0.5）')
+    // 只剩 1 台就沒有「其他台」
+    expect(checkNodeParam({ instances: 2, concurrency: 1, hotShare: 1 }, 'instances', 1)).toBe(
+      '設定了熱點時至少要 2 台，先按「沒有熱點」',
+    )
     // 沒設定時沒有熱點，台數怎麼改都合法
-    expect(checkNodeParam({ instances: 4, concurrency: 1 }, 'instances', 2)).toBeNull()
+    expect(checkNodeParam({ instances: 4, concurrency: 1 }, 'instances', 1)).toBeNull()
   })
 })
 

@@ -323,12 +323,8 @@
             "description" : "最熱的那台"
           },
           "others" : {
-            "description" : "其他台合起來（共用一條佇列）；只有一台時為 null",
-            "oneOf" : [ {
-              "$ref" : "#/components/schemas/InstanceResult"
-            }, {
-              "type" : "null"
-            } ]
+            "$ref" : "#/components/schemas/InstanceResult",
+            "description" : "其他台合起來（共用一條佇列）"
           }
         },
         "required" : [ "hottest", "others" ]

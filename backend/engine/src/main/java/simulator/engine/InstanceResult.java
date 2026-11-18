@@ -6,4 +6,10 @@ package simulator.engine;
  */
 public record InstanceResult(ClassRates arrivalRps, double throughputRps, double droppedRps, double utilization,
         Double avgLatencyMs, Status status) {
+
+    /** 取一部分機器單獨計算出來的節點結果。 */
+    static InstanceResult of(NodeResult result) {
+        return new InstanceResult(result.arrivalRps(), result.throughputRps(), result.droppedRps(),
+                result.utilization(), result.avgLatencyMs(), result.status());
+    }
 }

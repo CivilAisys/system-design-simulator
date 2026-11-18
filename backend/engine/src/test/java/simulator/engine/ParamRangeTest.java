@@ -146,10 +146,19 @@ class ParamRangeTest {
         assertThat(runHotCache(hotShare).errors()).isEmpty();
     }
 
+    @Test
+    void hotShareNeedsAtLeastTwoInstances() {
+        assertInvalidParam(runHotCache(1, 1.0), "cache", null, "instances 必須 ≥ 2（設定了 hotShare）");
+    }
+
     private SimulationResult runHotCache(double hotShare) {
+        return runHotCache(4, hotShare);
+    }
+
+    private SimulationResult runHotCache(int instances, double hotShare) {
         return simulator.simulate(new Topology(
                 List.of(client(100, 0.9),
-                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, new CapacityParams(4, 100, 10), 0.8,
+                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, new CapacityParams(instances, 100, 10), 0.8,
                                 hotShare),
                         new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
                 List.of(new Edge("e1", "c", "cache", 1, 1, 1), new Edge("e2", "cache", "db", 1, 1, 1))));

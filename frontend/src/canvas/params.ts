@@ -263,6 +263,10 @@ export function checkNodeParam(params: NodeParams, param: NodeNumberParam, value
   if (param === 'hotShare' || param === 'instances') {
     const instances = param === 'instances' ? value : nodeParam(params, 'instances')
     const hot = param === 'hotShare' ? value : params.hotShare
+    // 熱點要有其他台可以比，和後端 TopologyValidator 一致
+    if (hot !== undefined && instances < 2) {
+      return '設定了熱點時至少要 2 台，先按「沒有熱點」'
+    }
     // 容許浮點誤差，和後端 TopologyValidator 一致：1/3 算出來的值不會因為最後一位被擋掉
     if (hot !== undefined && hot < 1 / instances - SHARE_TOLERANCE) {
       return `hotShare 不能小於平均 1/${instances}（${formatShare(1 / instances)}）`

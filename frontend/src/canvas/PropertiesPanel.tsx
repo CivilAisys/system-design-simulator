@@ -66,9 +66,9 @@ export function PropertiesPanel({ nodes, edges, nodeResults, onUpdateNode, onUpd
 // 按「設定磁碟容量」時先填的值
 const NEW_DISK_GB = 1000
 
-// 按「設定熱點」時先填平均的兩倍，看得出最熱那台比較忙
+// 按「設定熱點」時先填平均的 1.5 倍：看得出最熱那台比較忙，2 台時另一台也還有流量
 function newHotShare(instances: number): number {
-  return Math.min(1, 2 / instances)
+  return Math.min(1, 1.5 / instances)
 }
 
 type NodePropertiesProps = {

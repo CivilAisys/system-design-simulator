@@ -157,6 +157,27 @@ describe('合法的檔案', () => {
       expect(db.params).toEqual(validFile().nodes[4].params)
     })
 
+    it('0.6.0 之前分片 Database 的 Read Replica 也換成總台數', () => {
+      const file = validFile()
+      Object.assign(file.nodes[4].params, { shards: 3 })
+      const replica = {
+        id: 'replica',
+        type: 'READ_REPLICA',
+        name: 'Replica',
+        params: { instances: 2, concurrency: 100, serviceTimeMs: 10 },
+        ui: { x: 1200, y: 100 },
+      }
+      const withReplica = {
+        ...file,
+        nodes: [...file.nodes, replica],
+        edges: [...file.edges, { id: 'e9', source: 'db', target: 'replica' }],
+      }
+
+      const nodes = topologyOf(withReplica).nodes
+      expect(nodes[4].params.instances).toBe(3)
+      expect(nodes[5].params.instances).toBe(6)
+    })
+
     it('儲存量參數省略時用預設值，diskGbPerShard 不補，代表不估算磁碟', () => {
       const file = validFile()
       for (const param of ['bytesPerWrite', 'retentionDays', 'diskGbPerShard']) {

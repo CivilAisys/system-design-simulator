@@ -139,8 +139,7 @@ public record SimulationResponse(
     @Schema(name = "HotSpot")
     public record HotSpotDto(
             @Schema(requiredMode = REQUIRED, description = "最熱的那台") InstanceResultDto hottest,
-            @Schema(requiredMode = REQUIRED, nullable = true, description = "其他台合起來（共用一條佇列）；只有一台時為 null")
-            InstanceResultDto others) {
+            @Schema(requiredMode = REQUIRED, description = "其他台合起來（共用一條佇列）") InstanceResultDto others) {
 
         static HotSpotDto from(HotSpot hotSpot) {
             return hotSpot == null ? null
@@ -158,9 +157,8 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED) Status status) {
 
         static InstanceResultDto from(InstanceResult instance) {
-            return instance == null ? null
-                    : new InstanceResultDto(ClassRatesDto.from(instance.arrivalRps()), instance.throughputRps(),
-                            instance.droppedRps(), instance.utilization(), instance.avgLatencyMs(), instance.status());
+            return new InstanceResultDto(ClassRatesDto.from(instance.arrivalRps()), instance.throughputRps(),
+                    instance.droppedRps(), instance.utilization(), instance.avgLatencyMs(), instance.status());
         }
     }
 

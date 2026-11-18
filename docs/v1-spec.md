@@ -238,14 +238,14 @@ C    = c·B(c) / (c − a·(1 − B(c)))
 
 Cache 保留一個熱點的教學點：Redis Cluster 一個主就是一個 shard，所以「最熱的 shard」就是「最熱的那台」。
 
-- 選填參數 `hotShare`（只有 Cache 有）：最熱的那台分到的流量比例，必須介於 `1/instances` 和 1 之間。省略時沒有熱點，照上面共用一條佇列。
+- 選填參數 `hotShare`（只有 Cache 有）：最熱的那台分到的流量比例，必須介於 `1/instances` 和 1 之間，而且 `instances` 至少 2（否則沒有「其他台」）。省略時沒有熱點，照上面共用一條佇列。
 - 有 `hotShare` 時，最熱的那台單獨是一個 M/M/c（c = concurrency），到達率 = `hotShare` × λ；其他 `instances − 1` 台共用一條佇列，處理剩下的流量。read／write 依相同比例分配，`hitRatio` 兩邊相同，送往下游的是兩邊的 miss 加總。
 - 節點層級：
   - ρ 和狀態取 ρ 較高的一邊（通常是最熱的那台，決定瓶頸）。
   - 容量 `capacityRps` 是所有機器的加總；有熱點時節點的 ρ 會比 `λ / capacityRps` 高。
   - 處理量和丟棄量是兩邊的加總，所以 `pass(n)` = 總處理量 ÷ 到達量（4.3.1）。
   - 節點延遲 `W`、`avgQueueMs` 依兩邊的流量加權平均；有流量的一邊過載時為 `null`。
-- 回應的節點結果有 `hotSpot`（5）：`hottest` 是最熱那台的到達率、ρ、狀態、處理量、丟棄量、延遲；`others` 是其他台合起來的同樣指標（ρ 是每台相同的使用率），只有一台時為 `null`。沒有 `hotShare` 時 `hotSpot` 為 `null`。
+- 回應的節點結果有 `hotSpot`（5）：`hottest` 是最熱那台的到達率、ρ、狀態、處理量、丟棄量、延遲；`others` 是其他台合起來的同樣指標（ρ 是每台相同的使用率）。沒有 `hotShare` 時 `hotSpot` 為 `null`。
 - Database 沒有 `hotShare`：它的 Read Replica 共用一條佇列，primary 的熱點到了 replica 會被平均掉，看起來像被 replica 解決了，教學上是錯的。
 - **補充說明（hot key 的解法）**：熱點的根源是一個 key 只對應到一台機器，不論是 Redis Cluster 的 hash slot 還是 hash ring。讀熱時把 key 複製成 `key#1`～`key#N` 寫到不同機器、讀取時隨機挑一份，或在應用伺服器上做本地快取；寫熱時把 key 拆成多個子 key 寫到不同機器、讀取時合併（只適用計數、集合這類可以合併的資料；Redis 的子 key 不能用 hash tag，否則會落在同一個 slot）。這些是應用層的手法，模擬器不計算。
 - **舊的自動存檔**：0.6.0 之前的存檔裡，有 `shards` 的節點 `instances` 是每個 shard 的台數。前端還原時把 `instances` 乘上 `shards`，丟掉 `shards`、`hotShardShare`；後端收到這兩個欄位時忽略。
@@ -384,7 +384,7 @@ Rate Limiter 和 External API 的狀態不看 ρ（4.2.1）：Rate Limiter 只�
 |---|---|
 | `rps` | 0 ～ 1,000,000,000,000（1e12） |
 | `limitRps`、`quotaRps` | > 0 且 ≤ 1e12 |
-| `hotShare`（選填，Cache） | `1/instances` ～ 1 |
+| `hotShare`（選填，Cache） | `1/instances` ～ 1，且 `instances` ≥ 2 |
 | `readRatio`、`hitRatio` | 0 ～ 1 |
 | `readResponseBytes`、`writeRequestBytes`、`bytesPerWrite` | 0 ～ 1,000,000,000,000（1e12，1 TB） |
 | `retentionDays` | 0 ～ 100,000 |
@@ -613,7 +613,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
 - **多台機器**：能設定 `instances` 的元件（LB、Service、Cache、CDN、Database、Read Replica、Object Storage、Message Queue）在 `instances` > 1 時，節點內容右側畫一個小機櫃：一台一條橫槽、縱向疊放，最多 5 條（超過 5 台仍是 5 條），槽用節點的狀態色，還沒有結果時是淡灰，結果過期時跟著節點畫淡。右上角用類別色的標籤顯示實際台數（`×2`、`×10`、`×200`，大數字加千分位）。屬性面板的 `instances` 下方顯示 worker 總數，例如「共 2 台 × 180 並行 ＝ 360 個 worker」。
 - **Preset**：元件面板的「Redis Cluster」是 `instances = 3` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
-- 指標表在有熱點的 Cache 名稱旁標示「熱點」；屬性面板在 Cache 的 `instances` ≥ 2 時，`instances` 下方有「設定熱點」，按下去先填平均的兩倍（`min(1, 2/instances)`），之後可以按「沒有熱點」拿掉這個參數。設定了 `hotShare` 時，`instances` 不能減到讓 `hotShare` 小於新的平均。
+- 指標表在有熱點的 Cache 名稱旁標示「熱點」；屬性面板在 Cache 的 `instances` ≥ 2 時，`instances` 下方有「設定熱點」，按下去先填平均的 1.5 倍（`min(1, 1.5/instances)`），之後可以按「沒有熱點」拿掉這個參數。設定了 `hotShare` 時，`instances` 不能減到 1，也不能減到讓 `hotShare` 小於新的平均。
 - **頻寬**（4.7）：Client 的邊在 RPS 下面一行小字顯示「出 X・入 Y」；結果面板上方的 summary 列出出口、入口頻寬，有 CDN 擋掉流量時加上 origin 出口和擋掉的比例。單位自動換算（B/s、KB/s、MB/s、GB/s…，十進位，最大到 PB/s，超過時用科學記號，例如 `1.2e18 B/s`），括號裡附上 bits（Mbps、Gbps…，同樣最大到 Pbps）。
 - **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每 shard、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB，十進位，超過 PB 時用科學記號）。過載的節點名稱旁標示「過載，偏低」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerShard` 預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。
 - **重點數字**：結果面板的分頁下方、內容上方有一排卡片，每個分頁都顯示，數值直接取自 `summary`；有驗證錯誤時不顯示。窄螢幕時自動換行。
