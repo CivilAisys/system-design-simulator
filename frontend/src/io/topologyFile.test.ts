@@ -208,11 +208,15 @@ describe('合法的檔案', () => {
       ).toEqual(['nodes[4]（id "db"）：params.diskGbPerShard 必須是數字（或數值太大）'])
     })
 
-    it('不估算儲存量的 type 丟掉 diskGbPerInstance', () => {
+    it('沒有磁碟容量的 type 丟掉 diskGbPerInstance，舊存檔的 Object Storage 也是', () => {
       const file = validFile()
       Object.assign(file.nodes[3].params, { diskGbPerInstance: 100 })
-
       expect(topologyOf(file).nodes[3].params).not.toHaveProperty('diskGbPerInstance')
+
+      const old = withObjectStorage()
+      Object.assign(old.nodes[old.nodes.length - 1].params, { diskGbPerShard: 500 })
+      const storage = topologyOf(old).nodes.find((n) => n.type === 'OBJECT_STORAGE')!
+      expect(storage.params).not.toHaveProperty('diskGbPerInstance')
     })
 
     it('沒有熱點的 type 丟掉 hotShare', () => {

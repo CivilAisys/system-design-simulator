@@ -80,7 +80,7 @@ type NodePropertiesProps = {
 function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProps) {
   const nameId = useId()
   const node = flowNode.data.node
-  const { label, icon, category, numberParams, choiceParams, hasHotShare } = NODE_KINDS[node.type]
+  const { label, icon, category, numberParams, choiceParams, hasHotShare, hasDisk } = NODE_KINDS[node.type]
   const utilization = result?.utilization ?? null
   const status = result?.status ?? null
 
@@ -160,8 +160,8 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           )}
         </Fragment>
       ))}
-      {/* 磁碟容量選填：沒設定時不估算磁碟幾天後會滿（spec 4.8） */}
-      {numberParams.includes('retentionDays') &&
+      {/* 磁碟容量選填：沒設定時不估算磁碟幾天後會滿（spec 4.8）；Object Storage 沒有 */}
+      {hasDisk &&
         (node.params.diskGbPerInstance === undefined ? (
           <Button
             variant="link"

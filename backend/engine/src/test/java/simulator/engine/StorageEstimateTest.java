@@ -135,6 +135,19 @@ class StorageEstimateTest {
     }
 
     @Test
+    void objectStorageHasNoDiskToFill() {
+        // 容量由供應商負責：給了磁碟容量也不估算幾天後會滿
+        var sizing = new StorageSizing(2_000, 30, 1.0);
+        StorageEstimate estimate = run(new ObjectStorageNode("db", "S3", NodeHealth.HEALTHY, AMPLE, sizing))
+                .storage().get("db");
+
+        assertThat(estimate.diskGbPerInstance()).isNull();
+        assertThat(estimate.daysUntilFull()).isNull();
+        assertThat(estimate.fillsDisk()).isFalse();
+        assertThat(estimate.totalBytes()).isCloseTo(100 * 2_000 * DAY * 30, within(EPS));
+    }
+
+    @Test
     void objectStorageUsesItsOwnDefaults() {
         StorageEstimate estimate = run(new ObjectStorageNode("db", "S3", NodeHealth.HEALTHY, AMPLE))
                 .storage().get("db");

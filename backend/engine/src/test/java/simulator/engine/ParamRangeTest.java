@@ -186,9 +186,9 @@ class ParamRangeTest {
     @ParameterizedTest
     @MethodSource("invalidSizings")
     void invalidStorageSizingIsRejected(StorageSizing sizing) {
-        var storage = new ObjectStorageNode("s3", "S3", NodeHealth.HEALTHY, CAPACITY, sizing);
+        var storage = new DatabaseNode("db", "Orders", NodeHealth.HEALTHY, CAPACITY, sizing);
         assertInvalidParam(simulator.simulate(new Topology(List.of(client(100, 0.9), storage),
-                List.of(new Edge("e1", "c", "s3", 1, 1, 1)))), "s3", null, "「S3」");
+                List.of(new Edge("e1", "c", "db", 1, 1, 1)))), "db", null, "「Orders」");
     }
 
     @ParameterizedTest
