@@ -187,7 +187,7 @@
           "diskGbPerInstance" : {
             "type" : "number",
             "format" : "double",
-            "description" : "DATABASE, OBJECT_STORAGE：每台機器的磁碟容量（GB），省略時不估算磁碟幾天後會滿"
+            "description" : "DATABASE：每台機器的磁碟容量（GB），省略時不估算磁碟幾天後會滿；OBJECT_STORAGE 給了也忽略"
           }
         }
       },

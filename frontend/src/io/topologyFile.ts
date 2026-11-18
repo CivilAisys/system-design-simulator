@@ -164,7 +164,7 @@ function toNode(raw: unknown, fail: (message: string) => void): Node | null {
   // 0.6.0 之前的存檔叫 diskGbPerShard，數值不變
   const diskKey = params.diskGbPerInstance === undefined ? 'diskGbPerShard' : 'diskGbPerInstance'
   const diskGb = params[diskKey]
-  if (kind.numberParams.includes('retentionDays') && diskGb !== undefined) {
+  if (kind.hasDisk && diskGb !== undefined) {
     if (!isFiniteNumber(diskGb)) {
       fail(`params.${diskKey} 必須是數字（或數值太大）`)
       return null
