@@ -16,10 +16,13 @@ export function formatClassRates({ read, write }: ClassRates): string {
   return `read ${formatRpsNumber(read)}・write ${formatRpsNumber(write)}`
 }
 
-// 滑鼠移到邊的 rps 標籤上的提示。過期時拓撲在那次 Run 之後改過，同 errorsTitle 先註明
-export function classRatesTitle(rates: ClassRates, stale: boolean | undefined): string {
-  const line = formatClassRates(rates)
-  return stale ? `（結果已過期，按 Run 重新計算）\n${line}` : line
+// 滑鼠提示的第一行：拓撲在那次 Run 之後改過，提示裡的數字可能對不上
+export const STALE_RESULT_NOTE = '（結果已過期，按 Run 重新計算）'
+
+// 滑鼠移到邊的 rps 標籤上的提示。只有一行、沒有總和，所以兩個數字都帶單位
+export function classRatesTitle({ read, write }: ClassRates, stale: boolean | undefined): string {
+  const line = `read ${formatRps(read)}・write ${formatRps(write)}`
+  return stale ? `${STALE_RESULT_NOTE}\n${line}` : line
 }
 
 export function formatRpsNumber(rps: number): string {

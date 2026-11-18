@@ -51,11 +51,11 @@ describe('formatClassRates', () => {
 
 describe('classRatesTitle', () => {
   it('其中一項是 0 也照樣顯示', () => {
-    expect(classRatesTitle({ read: 0, write: 50 }, false)).toBe('read 0・write 50')
+    expect(classRatesTitle({ read: 0, write: 50 }, false)).toBe('read 0 rps・write 50 rps')
   })
 
   it('過期時先註明', () => {
-    expect(classRatesTitle({ read: 180, write: 100 }, true)).toBe('（結果已過期，按 Run 重新計算）\nread 180・write 100')
+    expect(classRatesTitle({ read: 180, write: 100 }, true)).toBe('（結果已過期，按 Run 重新計算）\nread 180 rps・write 100 rps')
   })
 })
 

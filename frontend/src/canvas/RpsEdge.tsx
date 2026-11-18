@@ -73,7 +73,8 @@ export function RpsEdge({
         <EdgeLabelRenderer>
           <div
             className={cn(
-              'nodrag nopan absolute border border-input bg-card px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-secondary-foreground',
+              // 不加 nopan：有結果時標籤接收滑鼠事件，從標籤上拖曳照樣能平移畫布
+              'nodrag absolute border border-input bg-card px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-secondary-foreground',
               // 只有一行時是膠囊，多了積壓、頻寬的第二行就改成圓角矩形
               result?.backlogRps || result?.bandwidth ? 'rounded-xl' : 'rounded-full',
               // 有結果時要能 hover 看 read／write 拆分；沒有時讓點擊穿過標籤落到邊上
