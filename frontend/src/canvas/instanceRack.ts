@@ -61,6 +61,21 @@ export function workersHint(instances: number, concurrency: number): string {
   return `共 ${withCommas(instances)} 台 × ${withCommas(concurrency)} 並行 ＝ ${workers} 個 worker`
 }
 
+// 叢集內的從節點（Cache 的 replicas，只是標記）：節點上顯示「3 主 3 從」，沒有從節點時不顯示
+export function replicaLabel(node: Node): string | null {
+  const replicas = node.params.replicas ?? 0
+  if (replicas <= 0) {
+    return null
+  }
+  const instances = node.params.instances ?? 1
+  return `${withCommas(instances)} 主 ${withCommas(instances * replicas)} 從`
+}
+
+// 有從節點時 workersHint 下面再一行：從節點只做備援，不算在處理流量的台數裡
+export function replicasHint(instances: number, replicas: number): string {
+  return `另有 ${withCommas(instances * replicas)} 個從節點，共 ${withCommas(instances * (1 + replicas))} 個節點；從節點不分擔流量`
+}
+
 // 有熱點時 workersHint 下面再一行
 export function hotShareHint(hotShare: number): string {
   return `最熱那台分到 ${formatPercent(hotShare)}`

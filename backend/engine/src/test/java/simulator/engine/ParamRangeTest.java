@@ -146,6 +146,18 @@ class ParamRangeTest {
         assertThat(runHotCache(hotShare).errors()).isEmpty();
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {-1, 6})
+    void replicasOutside0To5AreRejected(int replicas) {
+        SimulationResult result = simulator.simulate(new Topology(
+                List.of(client(100, 0.9),
+                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, CAPACITY, 0.8, null, replicas),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, CAPACITY)),
+                List.of(new Edge("e1", "c", "cache", 1, 1, 1), new Edge("e2", "cache", "db", 1, 1, 1))));
+
+        assertInvalidParam(result, "cache", null, "replicas 必須 介於 0 和 5");
+    }
+
     @Test
     void hotShareNeedsAtLeastTwoInstances() {
         assertInvalidParam(runHotCache(1, 1.0), "cache", null, "instances 必須 ≥ 2（設定了 hotShare）");

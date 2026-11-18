@@ -169,6 +169,11 @@
             "format" : "double",
             "description" : "CACHE：最熱的那台分到的流量比例（1/instances ～ 1），省略時所有機器共用一條佇列"
           },
+          "replicas" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "CACHE：每個主有幾個從（0 ～ 5），只是標記、不影響計算，省略時為 0"
+          },
           "bytesPerWrite" : {
             "type" : "number",
             "format" : "double",

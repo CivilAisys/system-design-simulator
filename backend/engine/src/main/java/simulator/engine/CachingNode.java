@@ -13,4 +13,9 @@ public sealed interface CachingNode extends Node permits CacheNode, CdnNode {
     default Double hotShare() {
         return null;
     }
+
+    /** 每個主有幾個從，只是標記；只有 Cache 有。 */
+    default int replicas() {
+        return 0;
+    }
 }

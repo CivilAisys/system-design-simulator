@@ -98,6 +98,22 @@ class HotSpotTest {
     }
 
     @Test
+    void replicasAreOnlyALabel() {
+        // Redis Cluster 3 主 3 從：從節點只做備援，結果和沒有從節點完全相同
+        SimulationResult plain = run(3000, FOUR, 0.4);
+        SimulationResult withReplicas = simulator.simulate(new Topology(
+                List.of(
+                        new ClientNode("client", "Users", NodeHealth.HEALTHY, 3000, 0.9),
+                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, FOUR, 0.8, 0.4, 2),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, AMPLE)),
+                List.of(
+                        new Edge("e1", "client", "cache", 1, 1, 1),
+                        new Edge("e2", "cache", "db", 1, 1, 1))));
+
+        assertThat(withReplicas).isEqualTo(plain);
+    }
+
+    @Test
     void cdnHasNoHotSpot() {
         assertThat(new CdnNode("cdn", "CDN", NodeHealth.HEALTHY, FOUR, 0.9).hotShare()).isNull();
     }

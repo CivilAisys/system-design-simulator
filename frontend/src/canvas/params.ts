@@ -14,6 +14,7 @@ export type NodeNumberParam =
   | 'latencyMs'
   | 'quotaRps'
   | 'hotShare'
+  | 'replicas'
   | 'bytesPerWrite'
   | 'retentionDays'
   | 'diskGbPerShard'
@@ -126,6 +127,16 @@ export const NODE_PARAM_SPECS: Record<NodeNumberParam, NumberSpec> = {
     min: 0,
     max: 1,
     slider: { min: 0, max: 1, scale: 'linear', step: 0.01 },
+  },
+  // Cache 每個主的從節點數：只是標記，不影響計算（spec 4.2.2），舊檔沒有這個欄位
+  replicas: {
+    label: '每個主的從節點數',
+    labelEn: 'replicas',
+    integer: true,
+    optional: true,
+    min: 0,
+    max: 5,
+    slider: { min: 0, max: 5, scale: 'linear', step: 1 },
   },
   limitRps: upperLimitSpec('限流上限', 'limitRps'),
 

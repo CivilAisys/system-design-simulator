@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { HotSpot, InstanceResult, Node, NodeType, Status } from '@/api/client'
 import { NODE_KINDS } from './catalog'
-import { hotShareHint, hotSpotTitle, instanceRack, rackSlotStatuses, workersHint } from './instanceRack'
+import {
+  hotShareHint,
+  hotSpotTitle,
+  instanceRack,
+  rackSlotStatuses,
+  replicaLabel,
+  replicasHint,
+  workersHint,
+} from './instanceRack'
 
 function node(type: NodeType, params: Node['params'] = {}): Node {
   return {
@@ -97,6 +105,18 @@ describe('hotSpotTitle', () => {
   })
 })
 
+describe('replicaLabel', () => {
+  it('有從節點時顯示幾主幾從', () => {
+    expect(replicaLabel(node('CACHE', { instances: 3, replicas: 1 }))).toBe('3 主 3 從')
+    expect(replicaLabel(node('CACHE', { instances: 2, replicas: 2 }))).toBe('2 主 4 從')
+  })
+
+  it('沒有從節點、或沒有 replicas 參數的元件不顯示', () => {
+    expect(replicaLabel(node('CACHE', { instances: 3 }))).toBeNull()
+    expect(replicaLabel(node('DATABASE', { instances: 3 }))).toBeNull()
+  })
+})
+
 describe('workersHint', () => {
   it('列出台數、並行數和 worker 總數', () => {
     expect(workersHint(2, 180)).toBe('共 2 台 × 180 並行 ＝ 360 個 worker')
@@ -104,6 +124,10 @@ describe('workersHint', () => {
 
   it('大數字加千分位', () => {
     expect(workersHint(1000, 1000)).toBe('共 1,000 台 × 1,000 並行 ＝ 1,000,000 個 worker')
+  })
+
+  it('有從節點時另一行列出總節點數', () => {
+    expect(replicasHint(3, 1)).toBe('另有 3 個從節點，共 6 個節點；從節點不分擔流量')
   })
 
   it('有熱點時另一行列出最熱那台分到的比例', () => {

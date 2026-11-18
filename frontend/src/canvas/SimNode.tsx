@@ -5,7 +5,7 @@ import { NODE_KINDS } from './catalog'
 import { CATEGORY_DOT } from './category'
 import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
-import { hotSpotTitle, instanceRack, rackSlotStatuses } from './instanceRack'
+import { hotSpotTitle, instanceRack, rackSlotStatuses, replicaLabel } from './instanceRack'
 import { Rack } from './Rack'
 import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
 import { errorsTitle } from './validation'
@@ -27,6 +27,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   // status 為 null（Client）時不變色
   const status = result?.status ?? null
   const rack = instanceRack(node)
+  const replicas = replicaLabel(node)
 
   return (
     <div
@@ -58,6 +59,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         <CategoryIcon icon={icon} category={category} />
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-semibold">{node.name}</div>
+          {replicas && <div className="text-[11px] text-muted-foreground">{replicas}</div>}
           {result && (
             <div className="mt-0.5 flex items-center justify-between gap-3 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground">

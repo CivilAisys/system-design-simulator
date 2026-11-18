@@ -72,7 +72,11 @@ _Avoid_: blob storage、S3（具體產品名）
 _Avoid_: partition、分區
 
 **Redis Cluster**:
-元件面板上的 preset，就是 instances = 3 的 Cache，JSON 裡 type 仍是 CACHE。
+元件面板上的 preset，就是 instances = 3、replicas = 1（3 主 3 從）的 Cache，JSON 裡 type 仍是 CACHE。
+
+**叢集內從節點（Cache 的 replicas）**:
+Cache 每個主節點的從節點數，只是標記、不影響計算：從節點預設不分擔讀取，只做備援。`instances` 只算主節點。
+_Avoid_: Read Replica（那是 Database 的獨立元件，會分擔 read）
 
 **Hot spot（熱點）**:
 Cache 的 `hotShare`：最熱的那台分到較多流量，它的 ρ 決定整個節點的 ρ 和狀態。熱門 key 是原因，最熱的那台是結果。

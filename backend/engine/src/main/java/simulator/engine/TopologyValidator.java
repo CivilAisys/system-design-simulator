@@ -32,6 +32,8 @@ final class TopologyValidator {
     static final double MAX_RETENTION_DAYS = 100_000;
     // 每個 shard 的磁碟容量（GB），1 EB
     static final double MAX_DISK_GB = 1e9;
+    // Cache 每個主的從節點數，只是標記
+    static final int MAX_REPLICAS = 5;
     // hotShare 的下限 1/instances 容許浮點誤差，前端 params.ts 用同一個值
     static final double SHARE_TOLERANCE = 1e-12;
 
@@ -196,6 +198,7 @@ final class TopologyValidator {
                 checkCapacityParams(cache.capacityParams(), where, report);
                 requireBetween(cache.hitRatio(), 0, 1, where, "hitRatio", report);
                 checkHotShare(cache, where, report);
+                requireBetween(cache.replicas(), 0, MAX_REPLICAS, where, "replicas", report);
             }
             case StorageNode storage -> {
                 checkCapacityParams(storage.capacityParams(), where, report);

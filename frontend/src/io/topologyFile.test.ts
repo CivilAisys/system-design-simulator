@@ -35,7 +35,7 @@ function validFile() {
         id: 'cache',
         type: 'CACHE',
         name: 'Redis',
-        params: { instances: 3, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, hotShare: 0.5 },
+        params: { instances: 3, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, hotShare: 0.5, replicas: 1 },
         ui: { x: 900, y: -100 },
       },
       {
@@ -134,8 +134,11 @@ describe('合法的檔案', () => {
       remove(file.nodes[0].params, 'readResponseBytes')
       remove(file.nodes[0].params, 'writeRequestBytes')
 
-      const [client, , svc] = topologyOf(file).nodes
+      remove(file.nodes[3].params, 'replicas')
+
+      const [client, , svc, cache] = topologyOf(file).nodes
       expect(svc.params.callMode).toBe('SEQUENTIAL')
+      expect(cache.params.replicas).toBe(0)
       expect(client.params).toMatchObject({ readResponseBytes: 10_000, writeRequestBytes: 1_000 })
     })
 
@@ -153,7 +156,7 @@ describe('合法的檔案', () => {
       Object.assign(file.nodes[4].params, { shards: 1 })
 
       const [, , , cache, db] = topologyOf(file).nodes
-      expect(cache.params).toEqual({ instances: 8, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8 })
+      expect(cache.params).toEqual({ instances: 8, concurrency: 1, serviceTimeMs: 0.01, hitRatio: 0.8, replicas: 1 })
       expect(db.params).toEqual(validFile().nodes[4].params)
     })
 
