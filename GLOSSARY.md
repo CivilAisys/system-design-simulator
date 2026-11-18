@@ -33,7 +33,7 @@ _Avoid_: server、app、backend
 擋在下游前面的快取，read 命中時不往下送，write 一律往下送。
 
 **CDN**:
-放在 Client 和後端（origin）之間的快取，行為和 Cache 相同，只有預設值和名稱不同。
+放在 Client 和後端（origin）之間的快取，行為和 Cache 相同，只有預設值和名稱不同；但可以有多個下游，依邊的 weight 分配（例如靜態檔案送到 Object Storage、API 送到 LB）。
 
 **Read Replica**:
 primary Database 的唯讀副本：分擔 read，但要套用 primary 的所有寫入，所以無法擴展寫入。

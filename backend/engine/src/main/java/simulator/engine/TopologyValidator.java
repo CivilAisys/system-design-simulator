@@ -127,10 +127,10 @@ final class TopologyValidator {
         if ((TopologyGraph.splitsByWeight(node) || node instanceof MessageQueueNode) && downstream == 0) {
             nodeError(node, "NO_DOWNSTREAM", name + " 沒有下游，請求沒有地方送");
         }
-        // CDN 沿用 Cache 的錯誤碼，訊息用它自己的 type 名稱
-        if (node instanceof CachingNode && downstream != 1) {
-            nodeError(node, "CACHE_DOWNSTREAM_COUNT", (node instanceof CdnNode ? "CDN " : "Cache ") + name
-                    + " 必須剛好連到一個下游，目前有 " + downstream + " 個");
+        // CDN 可以有多個下游（依 weight 分流），沒有下游時是上面的 NO_DOWNSTREAM
+        if (node instanceof CacheNode && downstream != 1) {
+            nodeError(node, "CACHE_DOWNSTREAM_COUNT", "Cache " + name + " 必須剛好連到一個下游，目前有 " + downstream
+                    + " 個");
         }
         if (node instanceof RateLimiterNode && downstream != 1) {
             nodeError(node, "RATE_LIMITER_DOWNSTREAM_COUNT",

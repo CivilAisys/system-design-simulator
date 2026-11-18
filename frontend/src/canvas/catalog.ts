@@ -158,7 +158,8 @@ export const NODE_KINDS: Record<NodeType, NodeKind> = {
     choiceParams: [],
     hasInput: true,
     hasOutput: true,
-    edgeParams: ['latencyMs'],
+    // 可以有多個下游，依 weight 分配（同 LB）
+    edgeParams: ['weight', 'latencyMs'],
     edgeChoiceParams: [],
     outputEdgeKind: 'SYNC',
     nodeMetric: 'utilization',
