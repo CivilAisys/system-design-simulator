@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import { RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -6,13 +6,11 @@ import type { SimulationResult, Topology } from '@/api/client'
 import type { Theme } from '@/theme'
 import { STALE_RESULT_NOTE } from '@/canvas/format'
 import { cn } from '@/lib/utils'
-import { MAX_MULTIPLIERS, parseMaxMultiplier, type MaxMultiplier } from './loadCurve'
+import { MAX_MULTIPLIERS, parseMaxMultiplier, useStoredMaxMultiplier } from './loadCurve'
 import { useLoadSweep } from './useLoadSweep'
 
 // ECharts 很大，切到這個分頁才載入（同 Sankey）
 const LoadCurveChart = lazy(() => import('./LoadCurveChart').then((module) => ({ default: module.LoadCurveChart })))
-
-const STORAGE_KEY = 'loadCurveMax'
 
 type LoadCurvePanelProps = {
   // 畫面上的拓撲，用來找節點名稱
@@ -28,7 +26,12 @@ type LoadCurvePanelProps = {
 export function LoadCurvePanel({ topology, result, resultTopology, stale, theme }: LoadCurvePanelProps) {
   const [maxMultiplier, setMaxMultiplier] = useStoredMaxMultiplier()
   const sweep = useLoadSweep(result.valid ? resultTopology : null, maxMultiplier)
-  const nodeName = (id: string) => topology.nodes.find((node) => node.id === id)?.name ?? id
+  // 只在名稱改了時才換函式：拖動節點時 topology 也會換，圖表不能因此重畫
+  const namesKey = JSON.stringify(topology.nodes.map((node) => [node.id, node.name]))
+  const nodeName = useMemo(() => {
+    const names = new Map<string, string>(JSON.parse(namesKey))
+    return (id: string) => names.get(id) ?? id
+  }, [namesKey])
 
   let body
   if (!result.valid) {
@@ -43,7 +46,8 @@ export function LoadCurvePanel({ topology, result, resultTopology, stale, theme 
         </Button>
       </div>
     )
-  } else if (!sweep.data) {
+  } else if (!sweep.data || (sweep.loading && sweep.data.currentRps === 0)) {
+    // 還沒有曲線，或上一次沒有流量：等這次的結果，不能先說「沒有流量」
     body = <Message>計算中…</Message>
   } else if (sweep.data.currentRps === 0) {
     body = <Message>Client 的 rps 都是 0，沒有可以放大的流量</Message>
@@ -60,7 +64,7 @@ export function LoadCurvePanel({ topology, result, resultTopology, stale, theme 
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-3 text-sm">
-        <span className="text-muted-foreground">所有 Client 的 rps 一起放大到</span>
+        <span className="text-muted-foreground">所有 Client 的 rps 一起放大，上限</span>
         <Select value={String(maxMultiplier)} onValueChange={(value) => setMaxMultiplier(parseMaxMultiplier(value))}>
           <SelectTrigger size="sm" className="w-20" aria-label="上限倍率">
             <SelectValue />
@@ -82,27 +86,4 @@ export function LoadCurvePanel({ topology, result, resultTopology, stale, theme 
 
 function Message({ children }: { children: string }) {
   return <p className="p-4 text-sm text-muted-foreground">{children}</p>
-}
-
-function readStoredMaxMultiplier(): MaxMultiplier {
-  try {
-    return parseMaxMultiplier(localStorage.getItem(STORAGE_KEY))
-  } catch {
-    return parseMaxMultiplier(null)
-  }
-}
-
-// 上限倍率存在 localStorage，重新整理後保留
-function useStoredMaxMultiplier() {
-  const [value, setValue] = useState(readStoredMaxMultiplier)
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, String(value))
-    } catch {
-      // 無法存取 localStorage 時只是不記住選擇
-    }
-  }, [value])
-
-  return [value, setValue] as const
 }

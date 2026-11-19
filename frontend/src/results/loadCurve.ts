@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { SweepPoint, SweepResult } from '@/api/client'
 import { DASH, formatMs, formatRps, formatSuccessRate, formatUtilization } from '@/canvas/format'
 
@@ -6,9 +7,34 @@ export const MAX_MULTIPLIERS = [2, 5, 10] as const
 export type MaxMultiplier = (typeof MAX_MULTIPLIERS)[number]
 export const DEFAULT_MAX_MULTIPLIER: MaxMultiplier = 2
 
+const STORAGE_KEY = 'loadCurveMax'
+
 // 存在瀏覽器裡的上限；不是三個選項之一（沒存過、被改過）時用預設值
 export function parseMaxMultiplier(stored: string | null): MaxMultiplier {
   return MAX_MULTIPLIERS.find((option) => String(option) === stored) ?? DEFAULT_MAX_MULTIPLIER
+}
+
+function readStoredMaxMultiplier(): MaxMultiplier {
+  try {
+    return parseMaxMultiplier(localStorage.getItem(STORAGE_KEY))
+  } catch {
+    return DEFAULT_MAX_MULTIPLIER
+  }
+}
+
+// 上限倍率存在 localStorage，重新整理後保留
+export function useStoredMaxMultiplier() {
+  const [value, setValue] = useState(readStoredMaxMultiplier)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, String(value))
+    } catch {
+      // 無法存取 localStorage 時只是不記住選擇
+    }
+  }, [value])
+
+  return [value, setValue] as const
 }
 
 // ECharts 的折線資料 [x, y]：x 是總 rps。延遲沒有定義（過載）時是 null，線斷在那裡，不畫到 0

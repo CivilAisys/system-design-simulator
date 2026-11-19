@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { SankeyChart, type SankeySeriesOption } from 'echarts/charts'
 import { TooltipComponent, type TooltipComponentOption } from 'echarts/components'
 import * as echarts from 'echarts/core'
@@ -8,6 +8,7 @@ import type { Theme } from '@/theme'
 import { formatRps } from '@/canvas/format'
 import { isReplicationSource } from '@/canvas/catalog'
 import { SANKEY_COLORS, SANKEY_STATUS_COLOR, type SankeyColors } from '@/canvas/status'
+import { useECharts } from './useECharts'
 
 // 只載入用到的部分，避免把整個 ECharts 打包進來
 echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
@@ -40,27 +41,11 @@ type FlowSankeyProps = {
 }
 
 export function FlowSankey({ topology, result, theme }: FlowSankeyProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<echarts.ECharts | null>(null)
-
-  // 實例只建一次，之後用 setOption 更新，數值才會有過渡動畫、重算時不會閃
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    const chart = echarts.init(container)
-    chartRef.current = chart
-    const observer = new ResizeObserver(() => chart.resize())
-    observer.observe(container)
-    return () => {
-      observer.disconnect()
-      chart.dispose()
-      chartRef.current = null
-    }
-  }, [])
+  const { containerRef, chartRef } = useECharts()
 
   useEffect(() => {
     chartRef.current?.setOption(sankeyOption(topology, result, theme))
-  }, [topology, result, theme])
+  }, [chartRef, topology, result, theme])
 
   return <div ref={containerRef} className="size-full" />
 }

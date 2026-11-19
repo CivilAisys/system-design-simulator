@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { LineChart, type LineSeriesOption } from 'echarts/charts'
 import {
   GridComponent,
@@ -15,8 +15,9 @@ import { CanvasRenderer } from 'echarts/renderers'
 import type { SweepResult } from '@/api/client'
 import type { Theme } from '@/theme'
 import { formatRpsNumber } from '@/canvas/format'
-import { SANKEY_COLORS } from '@/canvas/status'
+import { CURVE_COLORS, SANKEY_COLORS } from '@/canvas/status'
 import { curveSeries, pointTooltip, referenceLines, type ReferenceLine } from './loadCurve'
+import { useECharts } from './useECharts'
 
 // 只載入用到的部分，避免把整個 ECharts 打包進來
 echarts.use([LineChart, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
@@ -25,12 +26,6 @@ type CurveOption = echarts.ComposeOption<
   LineSeriesOption | GridComponentOption | LegendComponentOption | MarkLineComponentOption | TooltipComponentOption
 >
 
-// 三條線的顏色；門檻線用狀態色（WARN 黃、過載紅），和 Sankey、畫布一致
-const LINE_COLORS: Record<Theme, { read: string; write: string; success: string }> = {
-  dark: { read: '#60a5fa', write: '#c084fc', success: '#34d399' },
-  light: { read: '#2563eb', write: '#9333ea', success: '#059669' },
-}
-
 type LoadCurveChartProps = {
   sweep: SweepResult
   nodeName: (id: string) => string
@@ -38,35 +33,20 @@ type LoadCurveChartProps = {
 }
 
 export function LoadCurveChart({ sweep, nodeName, theme }: LoadCurveChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<echarts.ECharts | null>(null)
-
-  // 實例只建一次，之後用 setOption 更新，重算時不會閃（同 FlowSankey）
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    const chart = echarts.init(container)
-    chartRef.current = chart
-    const observer = new ResizeObserver(() => chart.resize())
-    observer.observe(container)
-    return () => {
-      observer.disconnect()
-      chart.dispose()
-      chartRef.current = null
-    }
-  }, [])
+  const { containerRef, chartRef } = useECharts()
 
   useEffect(() => {
-    // notMerge：門檻線消失時（例如加了 Rate Limiter）舊的線不能留著
+    // notMerge：門檻線消失時（例如加了 Rate Limiter）舊的線不能留著。
+    // nodeName 只在名稱改了時才換（見 LoadCurvePanel），拖動節點不會重畫、不會重置 legend
     chartRef.current?.setOption(curveOption(sweep, nodeName, theme), { notMerge: true })
-  }, [sweep, nodeName, theme])
+  }, [chartRef, sweep, nodeName, theme])
 
   return <div ref={containerRef} className="size-full" />
 }
 
 function curveOption(sweep: SweepResult, nodeName: (id: string) => string, theme: Theme): CurveOption {
   const colors = SANKEY_COLORS[theme]
-  const lineColors = LINE_COLORS[theme]
+  const lineColors = CURVE_COLORS[theme]
   const series = curveSeries(sweep.points)
   const referenceColor: Record<ReferenceLine['kind'], string> = {
     current: colors.neutral,
@@ -86,7 +66,8 @@ function curveOption(sweep: SweepResult, nodeName: (id: string) => string, theme
   const axisStyle = { axisLabel: { color: colors.text }, nameTextStyle: { color: colors.text } }
 
   return {
-    legend: { top: 0, textStyle: { color: colors.text } },
+    // 只列三條線；放參考線的那個系列不進 legend
+    legend: { top: 0, data: ['read 延遲', 'write 延遲', '成功率'], textStyle: { color: colors.text } },
     grid: { left: 56, right: 56, top: 40, bottom: 32 },
     tooltip: {
       trigger: 'axis',
@@ -106,7 +87,7 @@ function curveOption(sweep: SweepResult, nodeName: (id: string) => string, theme
       name: '總 rps',
       min: 0,
       max: sweep.points.at(-1)?.totalRps,
-      ...axisStyle,
+      nameTextStyle: { color: colors.text },
       axisLabel: { color: colors.text, formatter: (value: number) => formatRpsNumber(value) },
     },
     yAxis: [
@@ -114,15 +95,7 @@ function curveOption(sweep: SweepResult, nodeName: (id: string) => string, theme
       { type: 'value', name: '成功率 %', min: 0, max: 100, ...axisStyle, splitLine: { show: false } },
     ],
     series: [
-      {
-        name: 'read 延遲',
-        type: 'line',
-        data: series.read,
-        yAxisIndex: 0,
-        showSymbol: false,
-        color: lineColors.read,
-        markLine,
-      },
+      { name: 'read 延遲', type: 'line', data: series.read, yAxisIndex: 0, showSymbol: false, color: lineColors.read },
       {
         name: 'write 延遲',
         type: 'line',
@@ -139,6 +112,8 @@ function curveOption(sweep: SweepResult, nodeName: (id: string) => string, theme
         showSymbol: false,
         color: lineColors.success,
       },
+      // 參考線放在一個沒有資料的系列上：在 legend 關掉 read 延遲時，參考線不會跟著消失
+      { name: 'reference', type: 'line', data: [], yAxisIndex: 0, markLine, tooltip: { show: false } },
     ],
   }
 }
