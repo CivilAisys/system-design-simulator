@@ -68,6 +68,8 @@ describe('formatMs', () => {
   it('小於 0.1 ms 取兩位有效數字，不顯示成 0.0', () => {
     expect(formatMs(0.01)).toBe('0.010 ms')
     expect(formatMs(0.0012)).toBe('0.0012 ms')
+    // 再小的不用科學記號（#189）
+    expect(formatMs(1.9e-212)).toBe('< 0.001 ms')
     expect(formatMs(0.04)).toBe('0.040 ms')
   })
 

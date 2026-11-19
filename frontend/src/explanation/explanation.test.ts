@@ -9,6 +9,9 @@ import {
   hasTerms,
   substitutedFormula,
   symbolicFormula,
+  explanationLines,
+  MERGED_PREFIX,
+  plainParts,
   type ExplanationStep,
 } from './explanation'
 
@@ -41,9 +44,9 @@ describe('formatNumber', () => {
     expect(formatNumber(0.5)).toBe('0.50')
   })
 
-  it('太小的數字用兩位有效數字，不顯示成 0.00', () => {
-    expect(formatNumber(2.806e-13)).toBe('2.8e-13')
+  it('太小的數字用兩位有效數字，不顯示成 0.00；再小的寫「< 0.001」，不用科學記號（#189）', () => {
     expect(formatNumber(0.004)).toBe('0.0040')
+    expect(formatNumber(2.806e-13)).toBe('< 0.001')
   })
 })
 
@@ -175,5 +178,139 @@ describe('explanationState', () => {
   it('拓撲有驗證錯誤、沒有結果時不顯示', () => {
     expect(explanationState({ steps: undefined, unconnected: false, invalid: true })).toBe('hidden')
     expect(explanationState({ steps: undefined, unconnected: true, invalid: true })).toBe('hidden')
+  })
+})
+
+// 一步的預設值：兩種模式都顯示、不分 class
+function step(fields: Partial<ExplanationStep> & Pick<ExplanationStep, 'group' | 'label'>): ExplanationStep {
+  return { formula: '', terms: [], value: null, unit: null, plain: null, view: 'BOTH', requestClass: null, ...fields }
+}
+
+const ARRIVAL_READ = step({
+  group: '進來多少',
+  label: 'read 到達量',
+  formula: '{x₁} × {v₁}',
+  terms: [
+    { symbol: 'x₁', value: 900, unit: 'rps', nodeId: 'client' },
+    { symbol: 'v₁', value: 1, unit: '%', nodeId: null },
+  ],
+  value: 900,
+  unit: 'rps',
+  plain: '每秒進來 {=} = {@x₁} 處理完的 {x₁} × {v₁}',
+  requestClass: 'READ',
+})
+
+// 成功率的一步：read、write 相同時合成一行
+function pass(requestClass: 'READ' | 'WRITE', value: number): ExplanationStep {
+  return step({
+    group: '成功率',
+    label: `${requestClass === 'READ' ? 'read' : 'write'} 通過率 pass`,
+    formula: '{處理量} ÷ {λ}',
+    terms: [
+      { symbol: '處理量', value: 1000 * value, unit: 'rps', nodeId: null },
+      { symbol: 'λ', value: 1000, unit: 'rps', nodeId: null },
+    ],
+    value,
+    unit: '%',
+    plain: '沒被丟掉的比例 {=} = 處理 {處理量} ÷ 進來 {λ}',
+    requestClass,
+  })
+}
+
+describe('plainParts', () => {
+  it('代入值和結果換成數字，{@符號} 是那個代入值來自的節點', () => {
+    expect(plainParts(ARRIVAL_READ)).toEqual([
+      { kind: 'text', text: '每秒進來 900 = ' },
+      { kind: 'node', nodeId: 'client' },
+      { kind: 'text', text: ' 處理完的 900 × 100.0%' },
+    ])
+  })
+
+  it('磁碟幾天後會滿寫成「約 116 天」', () => {
+    const disk = step({ group: '磁碟', label: '磁碟幾天後會滿', plain: '磁碟{=}後會滿', value: 115.7, unit: 'days' })
+
+    expect(plainParts(disk)).toEqual([{ kind: 'text', text: '磁碟約 116 天後會滿' }])
+  })
+
+  it('{@符號} 的代入值沒有 nodeId 時不印東西，不把數值當成名稱', () => {
+    const noNode = { ...ARRIVAL_READ, terms: [{ ...ARRIVAL_READ.terms[0], nodeId: null }, ARRIVAL_READ.terms[1]] }
+
+    expect(plainParts(noNode)).toEqual([{ kind: 'text', text: '每秒進來 900 =  處理完的 900 × 100.0%' }])
+  })
+
+  it('只在看公式顯示的步驟沒有白話', () => {
+    expect(plainParts(step({ group: '在這裡花多久', label: '負載 a', view: 'FORMULA' }))).toEqual([])
+  })
+})
+
+describe('explanationLines', () => {
+  const queue = [
+    step({ group: '在這裡花多久', label: '負載 a', formula: '{λ} ÷ {μ}', view: 'FORMULA' }),
+    step({ group: '在這裡花多久', label: '排隊', plain: '排隊：幾乎不用排隊', view: 'PLAIN' }),
+    step({ group: '在這裡花多久', label: '節點延遲 W', plain: '在這裡花 {=} ms', value: 50, unit: 'ms' }),
+  ]
+
+  it('白話模式不列只在看公式顯示的步驟；只在白話顯示的步驟沒有公式', () => {
+    const [{ lines }] = explanationLines(queue, false)
+
+    expect(lines.map((line) => line.formulas.map((formula) => formula.label))).toEqual([[], ['節點延遲 W']])
+    expect(lines[1].plain).toEqual([{ kind: 'text', text: '在這裡花 50.0 ms' }])
+  })
+
+  it('看公式時只在看公式顯示的步驟也列出來，只有公式', () => {
+    const [{ lines }] = explanationLines(queue, true)
+
+    expect(lines).toHaveLength(3)
+    expect(lines[0].plain).toEqual([])
+    expect(lines[0].formulas.map((formula) => formula.label)).toEqual(['負載 a'])
+  })
+
+  it('read、write 代入後相同時合成一行，公式兩行都留著', () => {
+    const [{ lines }] = explanationLines([pass('READ', 1), pass('WRITE', 1)], true)
+
+    expect(lines).toHaveLength(1)
+    expect(lines[0].prefix).toBe(MERGED_PREFIX)
+    expect(lines[0].formulas.map((formula) => formula.label)).toEqual(['read 通過率 pass', 'write 通過率 pass'])
+  })
+
+  it('不同時分兩行，各自標上 read、write', () => {
+    const [{ lines }] = explanationLines([pass('READ', 1), pass('WRITE', 0.5)], false)
+
+    expect(lines.map((line) => line.prefix)).toEqual(['read：', 'write：'])
+  })
+
+  it('第 k 個 read 對第 k 個 write，不是相鄰的兩步', () => {
+    // 成功率的順序是 pass(read)、S(read)、pass(write)、S(write)
+    const success = (requestClass: 'READ' | 'WRITE', value: number) =>
+      step({ group: '成功率', label: 'S', plain: '從這裡往下都成功的機率 {=}', value, unit: '%', requestClass })
+    const [{ lines }] = explanationLines(
+      [pass('READ', 1), success('READ', 1), pass('WRITE', 1), success('WRITE', 0.9)],
+      false,
+    )
+
+    expect(lines.map((line) => line.prefix)).toEqual([MERGED_PREFIX, 'read：', 'write：'])
+  })
+
+  it('配對在整組裡算，兩種模式一樣', () => {
+    // 假設只在看公式顯示的步驟也分 class：白話模式把它拿掉之後，後面的步驟不能錯開配對
+    const formulaRead = step({ group: '成功率', label: 'x', view: 'FORMULA', requestClass: 'READ' })
+    const steps = [formulaRead, pass('READ', 1), pass('WRITE', 1)]
+
+    expect(explanationLines(steps, false)[0].lines.map((line) => line.prefix)).toEqual(['read：', 'write：'])
+    expect(explanationLines(steps, true)[0].lines.map((line) => line.prefix)).toEqual(['read：', 'read：', 'write：'])
+  })
+
+  it('白話模式下整組都只在看公式顯示時不列這一組', () => {
+    expect(explanationLines([step({ group: 'g', label: 'a', view: 'FORMULA' })], false)).toEqual([])
+  })
+
+  it('節點名稱不同時不合成一行', () => {
+    const write = {
+      ...ARRIVAL_READ,
+      requestClass: 'WRITE' as const,
+      terms: [{ ...ARRIVAL_READ.terms[0], nodeId: 'other' }, ARRIVAL_READ.terms[1]],
+    }
+
+    expect(explanationLines([ARRIVAL_READ, write], false)[0].lines).toHaveLength(2)
   })
 })

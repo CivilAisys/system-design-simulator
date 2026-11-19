@@ -58,7 +58,7 @@ export function StorageTable({ topology, result, onSelectNode }: StorageTablePro
           {showDisk && (
             <TableHead
               className="text-right"
-              title="diskGbPerInstance × 10⁹ ÷ 每台每日增量；沒有設定磁碟容量時不估算，Object Storage 沒有磁碟容量"
+              title="每台磁碟容量 ÷ 每台每日增量；沒有設定磁碟容量時不估算，Object Storage 沒有磁碟容量"
             >
               磁碟滿
             </TableHead>
