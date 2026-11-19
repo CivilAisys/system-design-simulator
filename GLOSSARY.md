@@ -171,6 +171,14 @@ _Avoid_: 狀態（留給 Status）
 **Bottleneck（瓶頸）**:
 使用率最高的 Node。
 
+**Explanation（計算說明）**:
+一個數字是怎麼算出來的：依序列出公式和代入的實際值，每個 Node 只說明自己這一層，上下游的數字當作代入值。
+_Avoid_: 公式說明、derivation
+
+**Load sweep（負載掃描）**:
+所有 Client 的 rps 一起乘上倍率，從 0 放大到上限，每個倍率算一次穩態，找出第一個到 WARN 和第一個過載的 Node；畫成「負載曲線」。
+_Avoid_: 壓測、stress test、benchmark
+
 ### 模擬
 
 **Run**:

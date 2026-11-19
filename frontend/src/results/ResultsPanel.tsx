@@ -13,6 +13,7 @@ import type { Theme } from '@/theme'
 import { formatBitsPerSec, formatBytesPerSec, formatDays, formatPercent } from '@/canvas/format'
 import { ErrorList } from './ErrorList'
 import { KpiStrip } from './KpiStrip'
+import { LoadCurvePanel } from './LoadCurvePanel'
 import { MetricsTable } from './MetricsTable'
 import { StorageTable } from './StorageTable'
 
@@ -22,6 +23,9 @@ const FlowSankey = lazy(() => import('./FlowSankey').then((module) => ({ default
 type ResultsPanelProps = {
   topology: Topology
   result: SimulationResult | null
+  // 上次 Run 算的那一份拓撲（負載曲線掃這一份），和結果是不是已經過期
+  resultTopology: Topology | null
+  stale: boolean
   running: boolean
   theme: Theme
   canFocusError: (error: ValidationError) => boolean
@@ -33,6 +37,8 @@ type ResultsPanelProps = {
 export function ResultsPanel({
   topology,
   result,
+  resultTopology,
+  stale,
   running,
   theme,
   canFocusError,
@@ -52,6 +58,7 @@ export function ResultsPanel({
         <TabsList>
           <TabsTrigger value="metrics">指標表</TabsTrigger>
           <TabsTrigger value="sankey">流量 Sankey</TabsTrigger>
+          <TabsTrigger value="curve">負載曲線</TabsTrigger>
           <TabsTrigger value="storage">容量估算</TabsTrigger>
           <TabsTrigger value="errors">錯誤 ({errorCount})</TabsTrigger>
         </TabsList>
@@ -76,6 +83,20 @@ export function ResultsPanel({
             </Suspense>
           ) : computed ? (
             <p className="p-4 text-sm text-muted-foreground">所有連線的流量都是 0</p>
+          ) : (
+            empty
+          )}
+        </TabsContent>
+        {/* 分頁關著時 Radix 不掛上內容，所以只有開著時才掃描 */}
+        <TabsContent value="curve" className="min-h-56">
+          {result ? (
+            <LoadCurvePanel
+              topology={topology}
+              result={result}
+              resultTopology={resultTopology}
+              stale={stale}
+              theme={theme}
+            />
           ) : (
             empty
           )}

@@ -46,11 +46,14 @@ function Simulator() {
   const { screenToFlowPosition, fitView, getNode, getZoom, setCenter } = useReactFlow()
   const canvasRef = useRef<HTMLElement>(null)
   const bottleneck = useBottleneckToast()
-  const { result, running, error, stale, autoRun, setAutoRun, run, reset } = useSimulation(editor.model, {
-    onResult: bottleneck.notify,
-    // 上一次的瓶頸通知會和 Run 失敗互相矛盾
-    onError: bottleneck.clear,
-  })
+  const { result, resultTopology, running, error, stale, autoRun, setAutoRun, run, reset } = useSimulation(
+    editor.model,
+    {
+      onResult: bottleneck.notify,
+      // 上一次的瓶頸通知會和 Run 失敗互相矛盾
+      onError: bottleneck.clear,
+    },
+  )
   const [resultsHeight, setResultsHeight] = useResultsHeight()
   // 屬性面板沒釘住時收成細條，剛好選了一個節點或一條邊才浮在畫布上
   const [propertiesPinned, togglePropertiesPinned] = usePanelFlag('propertiesPinned', true)
@@ -289,6 +292,8 @@ function Simulator() {
         <ResultsPanel
           topology={topology}
           result={result}
+          resultTopology={resultTopology}
+          stale={stale}
           running={running}
           theme={theme}
           canFocusError={(e) => errorNodeIds(e).length > 0}
