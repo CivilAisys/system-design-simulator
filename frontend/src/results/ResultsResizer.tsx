@@ -4,8 +4,8 @@ import { clampResultsHeight, maxResultsHeight, MIN_RESULTS_HEIGHT, useViewportHe
 // 方向鍵每按一次調整的高度
 const KEY_STEP = 16
 
-// 握把的三個點
-const GRIP_DOTS = [0, 1, 2]
+// 握把的點數
+const GRIP_DOT_COUNT = 3
 
 type ResultsResizerProps = {
   // 結果面板的 id，給 aria-controls
@@ -94,12 +94,12 @@ export function ResultsResizer({ panelId, height, onResize }: ResultsResizerProp
       onKeyDown={onKeyDown}
       className="group flex h-2.5 shrink-0 cursor-row-resize touch-none items-center justify-center gap-1 border-t bg-background outline-none transition-colors hover:bg-primary/15 focus-visible:bg-primary/25"
     >
-      {/* 握把：平常就看得到，讓人知道這條線可以拖；滑過或聚焦時換成強調色 */}
-      {GRIP_DOTS.map((dot) => (
+      {/* 握把：平常就看得到，讓人知道這條線可以拖 */}
+      {Array.from({ length: GRIP_DOT_COUNT }, (_, dot) => (
         <span
           key={dot}
           aria-hidden
-          className="size-1 rounded-full bg-muted-foreground/60 transition-colors group-hover:bg-primary group-focus-visible:bg-primary"
+          className="size-1 rounded-full bg-muted-foreground transition-colors group-hover:bg-primary group-focus-visible:bg-primary"
         />
       ))}
     </div>
