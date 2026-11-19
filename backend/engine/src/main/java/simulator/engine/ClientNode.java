@@ -14,4 +14,9 @@ public record ClientNode(String id, String name, NodeHealth health, double rps, 
     public ClientNode(String id, String name, NodeHealth health, double rps, double readRatio) {
         this(id, name, health, rps, readRatio, DEFAULT_READ_RESPONSE_BYTES, DEFAULT_WRITE_REQUEST_BYTES);
     }
+
+    /** 同一個 Client 換成 {@code rps}，其他參數不變（負載掃描用，spec 4.10）。 */
+    ClientNode withRps(double rps) {
+        return new ClientNode(id, name, health, rps, readRatio, readResponseBytes, writeRequestBytes);
+    }
 }

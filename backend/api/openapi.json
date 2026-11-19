@@ -791,24 +791,11 @@
               "$ref" : "#/components/schemas/SweepPoint"
             }
           },
-          "warn" : {
-            "description" : "第一個節點 ρ 到 0.7 的位置；範圍內沒有到時為 null",
-            "oneOf" : [ {
-              "$ref" : "#/components/schemas/SweepThreshold"
-            }, {
-              "type" : "null"
-            } ]
-          },
-          "overload" : {
-            "description" : "第一個節點過載（ρ 到 1）的位置；範圍內沒有到時為 null",
-            "oneOf" : [ {
-              "$ref" : "#/components/schemas/SweepThreshold"
-            }, {
-              "type" : "null"
-            } ]
+          "thresholds" : {
+            "$ref" : "#/components/schemas/SweepThresholds"
           }
         },
-        "required" : [ "currentRps", "errors", "overload", "points", "valid", "warn" ]
+        "required" : [ "currentRps", "errors", "points", "thresholds", "valid" ]
       },
       "SweepThreshold" : {
         "type" : "object",
@@ -827,6 +814,28 @@
           }
         },
         "required" : [ "multiplier", "nodeId", "totalRps" ]
+      },
+      "SweepThresholds" : {
+        "type" : "object",
+        "properties" : {
+          "warn" : {
+            "description" : "第一個節點 ρ 到 0.7 的位置；範圍內沒有到時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/SweepThreshold"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "overload" : {
+            "description" : "第一個節點過載（ρ 到 1）的位置；範圍內沒有到時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/SweepThreshold"
+            }, {
+              "type" : "null"
+            } ]
+          }
+        },
+        "required" : [ "overload", "warn" ]
       }
     }
   }

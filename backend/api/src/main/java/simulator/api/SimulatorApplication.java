@@ -18,6 +18,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
+import simulator.engine.LoadSweep;
 import simulator.engine.Simulator;
 import simulator.engine.SteadyStateSimulator;
 
@@ -31,6 +32,11 @@ public class SimulatorApplication {
     @Bean
     Simulator simulator() {
         return new SteadyStateSimulator();
+    }
+
+    @Bean
+    LoadSweep loadSweep(Simulator simulator) {
+        return new LoadSweep(simulator);
     }
 
     /**

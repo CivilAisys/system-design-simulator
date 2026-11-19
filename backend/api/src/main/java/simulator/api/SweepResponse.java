@@ -18,15 +18,20 @@ public record SweepResponse(
         @Schema(requiredMode = REQUIRED, description = "目前所有 Client 的 rps 加總（倍率 1）；驗證失敗時為 0") double currentRps,
         @Schema(requiredMode = REQUIRED, description = "依倍率排序：從 0 到上限均分 40 點，加上門檻那幾點；放大後超出參數範圍的點略過")
         List<SweepPointDto> points,
-        @Schema(requiredMode = REQUIRED, nullable = true, description = "第一個節點 ρ 到 0.7 的位置；範圍內沒有到時為 null")
-        SweepThresholdDto warn,
-        @Schema(requiredMode = REQUIRED, nullable = true, description = "第一個節點過載（ρ 到 1）的位置；範圍內沒有到時為 null")
-        SweepThresholdDto overload) {
+        @Schema(requiredMode = REQUIRED) SweepThresholdsDto thresholds) {
 
     static SweepResponse from(SweepResult result) {
         return new SweepResponse(result.valid(), result.errors().stream().map(ValidationErrorDto::from).toList(),
                 result.currentRps(), result.points().stream().map(SweepPointDto::from).toList(),
-                SweepThresholdDto.from(result.warn()), SweepThresholdDto.from(result.overload()));
+                new SweepThresholdsDto(SweepThresholdDto.from(result.warn()), SweepThresholdDto.from(result.overload())));
+    }
+
+    @Schema(name = "SweepThresholds")
+    public record SweepThresholdsDto(
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "第一個節點 ρ 到 0.7 的位置；範圍內沒有到時為 null")
+            SweepThresholdDto warn,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "第一個節點過載（ρ 到 1）的位置；範圍內沒有到時為 null")
+            SweepThresholdDto overload) {
     }
 
     @Schema(name = "SweepPoint")

@@ -28,9 +28,9 @@ class SimulateController {
     private final Simulator simulator;
     private final LoadSweep sweep;
 
-    SimulateController(Simulator simulator) {
+    SimulateController(Simulator simulator, LoadSweep sweep) {
         this.simulator = simulator;
-        this.sweep = new LoadSweep(simulator);
+        this.sweep = sweep;
     }
 
     @PostMapping("/simulate")
@@ -41,8 +41,14 @@ class SimulateController {
     /** 負載掃描（spec 4.10）：所有 Client 的 rps 乘上 0 到 {@code maxMultiplier} 倍。 */
     @PostMapping("/simulate/sweep")
     SweepResponse sweep(@RequestBody SweepRequestDto request) {
-        double maxMultiplier = request.checkedMaxMultiplier();
-        return SweepResponse.from(sweep.sweep(Required.of(request.topology(), "topology").toTopology(), maxMultiplier));
+        double maxMultiplier = Required.of(request.maxMultiplier(), "maxMultiplier");
+        var topology = Required.of(request.topology(), "topology").toTopology();
+        try {
+            return SweepResponse.from(sweep.sweep(topology, maxMultiplier));
+        } catch (IllegalArgumentException e) {
+            // 範圍由 engine 檢查（maxMultiplier 不在 (0, 10] 之內），對請求來說是格式錯誤
+            throw new TopologyFormatException(e.getMessage());
+        }
     }
 
     @ExceptionHandler(TopologyFormatException.class)

@@ -37,8 +37,8 @@ class SweepEndpointTest {
         JsonNode body = mapper.readTree(sweep(request(scenario("basic-web-app.json"), 10))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
 
-        assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "currentRps", "points", "warn",
-                "overload");
+        assertThat(fieldNames(body)).containsExactlyInAnyOrder("valid", "errors", "currentRps", "points", "thresholds");
+        assertThat(fieldNames(body.get("thresholds"))).containsExactlyInAnyOrder("warn", "overload");
         assertThat(body.get("valid").asBoolean()).isTrue();
         assertThat(body.get("currentRps").asDouble()).isEqualTo(1000);
         assertThat(body.get("points").size()).isGreaterThanOrEqualTo(40);
@@ -58,7 +58,7 @@ class SweepEndpointTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valid").value(false))
                 .andExpect(jsonPath("$.points").isEmpty())
-                .andExpect(jsonPath("$.warn").isEmpty());
+                .andExpect(jsonPath("$.thresholds.warn").isEmpty());
     }
 
     @ParameterizedTest

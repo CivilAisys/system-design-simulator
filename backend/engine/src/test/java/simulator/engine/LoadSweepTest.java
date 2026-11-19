@@ -89,14 +89,73 @@ class LoadSweepTest {
         assertThat(result.points().getLast().successRate()).isCloseTo(0.15, within(1e-9));
     }
 
+    @Test
+    void smallThresholdIsStillPrecise() {
+        // 1e9 rps 打到容量 100 的 Service：k = 7e-8 時到 0.7、1e-7 時過載，遠小於第一個均分點
+        Topology topology = new Topology(
+                List.of(
+                        new ClientNode("c", "Users", NodeHealth.HEALTHY, 1e9, 0.9),
+                        new ServiceNode("svc", "API", NodeHealth.HEALTHY, workers(1), CallMode.SEQUENTIAL)),
+                List.of(new Edge("e1", "c", "svc", 1, 1, 1)));
+        SweepResult result = sweep.sweep(topology, 10);
+
+        assertThat(result.warn().multiplier()).isCloseTo(7e-8, within(7e-8 * RELATIVE));
+        assertThat(result.overload().multiplier()).isCloseTo(1e-7, within(1e-7 * RELATIVE));
+    }
+
+    @Test
+    void thresholdsAreFoundBelowTheRangeThatCannotBeComputed() {
+        // 2e11 rps × 5 以上超過 rps 上限 1e12，那些點略過；k = 1 時就已經過載，門檻照樣找得到
+        Topology topology = new Topology(
+                List.of(
+                        new ClientNode("c", "Users", NodeHealth.HEALTHY, 2e11, 0.9),
+                        new ServiceNode("svc", "API", NodeHealth.HEALTHY, workers(1), CallMode.SEQUENTIAL)),
+                List.of(new Edge("e1", "c", "svc", 1, 1, 1)));
+        SweepResult result = sweep.sweep(topology, 10);
+
+        assertThat(result.points()).allSatisfy(point -> assertThat(point.totalRps()).isLessThanOrEqualTo(1e12));
+        assertThat(result.overload()).isNotNull();
+        assertThat(result.overload().multiplier()).isCloseTo(5e-10, within(5e-10 * RELATIVE));
+    }
+
     @ParameterizedTest
     @ValueSource(doubles = {2, 5, 10})
     void highestUtilizationNeverDecreases(double maxMultiplier) {
-        SweepResult result = sweep.sweep(clientServiceDb(workers(20), workers(15)), maxMultiplier);
+        assertThat(utilizations(sweep.sweep(clientServiceDb(workers(20), workers(15)), maxMultiplier))).isSorted();
+    }
 
-        List<Double> utilizations = result.points().stream()
+    @Test
+    void highestUtilizationNeverDecreasesWithEveryKindOfNode() {
+        // Rate Limiter、熱點 Cache、上游過載、Read Replica、Message Queue 都在路徑上
+        Topology topology = new Topology(
+                List.of(
+                        new ClientNode("c", "Users", NodeHealth.HEALTHY, 1000, 0.9),
+                        new RateLimiterNode("rl", "Limiter", NodeHealth.HEALTHY, 3000),
+                        new ServiceNode("api", "API", NodeHealth.HEALTHY, workers(25), CallMode.SEQUENTIAL),
+                        new CacheNode("cache", "Redis", NodeHealth.HEALTHY, new CapacityParams(3, 4, 5), 0.8, 0.5),
+                        new DatabaseNode("db", "DB", NodeHealth.HEALTHY, workers(10)),
+                        new ReadReplicaNode("replica", "Replica", NodeHealth.HEALTHY, workers(5)),
+                        new MessageQueueNode("mq", "Queue", NodeHealth.HEALTHY, AMPLE),
+                        new ServiceNode("worker", "Worker", NodeHealth.HEALTHY, workers(2), CallMode.SEQUENTIAL)),
+                List.of(
+                        new Edge("e1", "c", "rl", 1, 1, 1),
+                        new Edge("e2", "rl", "api", 1, 1, 1),
+                        new Edge("e3", "api", "cache", 1, 1, 1),
+                        new Edge("e4", "cache", "db", 1, 1, 1),
+                        new Edge("e5", "db", "replica", 1, 1, 1),
+                        new Edge("e6", "api", "replica", 1, 1, 1, RequestClass.READ),
+                        new Edge("e7", "api", "mq", 1, 1, 1),
+                        new Edge("e8", "mq", "worker", 1, 1, 1)));
+        SweepResult result = sweep.sweep(topology, 10);
+
+        assertThat(result.valid()).as("%s", result.errors()).isTrue();
+        assertThat(utilizations(result)).isSorted();
+        assertThat(result.overload()).isNotNull();
+    }
+
+    private static List<Double> utilizations(SweepResult result) {
+        return result.points().stream()
                 .map(point -> point.busiest() == null ? 0 : point.busiest().utilization()).toList();
-        assertThat(utilizations).isSorted();
     }
 
     @Test
