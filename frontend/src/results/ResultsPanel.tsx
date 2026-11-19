@@ -26,9 +26,19 @@ type ResultsPanelProps = {
   theme: Theme
   canFocusError: (error: ValidationError) => boolean
   onFocusError: (error: ValidationError) => void
+  // 容量估算表的算式裡點節點名稱
+  onSelectNode: (id: string) => void
 }
 
-export function ResultsPanel({ topology, result, running, theme, canFocusError, onFocusError }: ResultsPanelProps) {
+export function ResultsPanel({
+  topology,
+  result,
+  running,
+  theme,
+  canFocusError,
+  onFocusError,
+  onSelectNode,
+}: ResultsPanelProps) {
   // 驗證失敗時不做任何計算，指標表和 Sankey 都沒有東西可畫
   const computed = isComputed(result) ? result : null
   const errorCount = result?.errors.length ?? 0
@@ -71,7 +81,7 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
           )}
         </TabsContent>
         <TabsContent value="storage" className="min-h-40 overflow-auto">
-          {computed ? <StorageTable topology={topology} result={computed} /> : empty}
+          {computed ? <StorageTable topology={topology} result={computed} onSelectNode={onSelectNode} /> : empty}
         </TabsContent>
         <TabsContent value="errors" className="min-h-40 overflow-auto">
           {result ? (

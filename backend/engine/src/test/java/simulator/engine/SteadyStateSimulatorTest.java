@@ -286,7 +286,13 @@ class SteadyStateSimulatorTest {
                 sizing));
 
         assertThat(objectStorage.valid()).isTrue();
-        assertThat(objectStorage).isEqualTo(database);
+        assertThat(objectStorage.nodes()).isEqualTo(database.nodes());
+        assertThat(objectStorage.edges()).isEqualTo(database.edges());
+        assertThat(objectStorage.summary()).isEqualTo(database.summary());
+        assertThat(objectStorage.explanations()).isEqualTo(database.explanations());
+        // 儲存量的計算說明不同：Object Storage 沒有副本、機器數和磁碟的步驟
+        assertThat(objectStorage.storage().get("storage").withExplanation(List.of()))
+                .isEqualTo(database.storage().get("storage").withExplanation(List.of()));
         if (concurrency == 20) {
             assertThat(objectStorage.nodes().get("client").endToEndMs().read().ms()).isNotNull();
         } else {

@@ -478,6 +478,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - GB 是十進位（10⁹ bytes）。Object Storage、沒有設定 `diskGbPerInstance`、沒有寫入（資料不會增加），或寫入量小到天數超出浮點數範圍時，`daysUntilFull` 是 `null`。
 - **副本跟不上**：primary 的 Read Replica 有 `REPLICATION_LAG`（4.2.3）時，「含副本」仍照完整副本計算，數字不改，但回應的 `replicasLagging` 為 true，容量估算分頁在那一列加註「副本複製跟不上，實際副本量會比這少」。
 - **磁碟會滿**（`fillsDisk`）：`daysUntilFull < retentionDays`，也就是保留期內每台的資料會超過磁碟容量。這是另一種瓶頸，和 ρ 分開顯示，不混進「瓶頸 = ρ 最高」的規則（`bottleneckNodeId` 不變）。
+- **計算說明**：每筆估算的 `explanation` 是上面公式的步驟（格式同 4.9），分組是「每日增量」（處理完的 write，代入值指到這個節點自己；每日增量）、「總量」（總量；含副本，名稱列出是哪幾個 Read Replica，副本跟不上時加註）、「每台」、「磁碟」（每台每日增量；磁碟幾天後會滿，名稱寫和保留期幾天比較、保留期內會不會滿）。沒有對應數字的步驟不列：Object Storage 只有每日增量和總量；沒有設定 `diskGbPerInstance` 或沒有寫入時不列磁碟那組。未連線的節點是空陣列。
 
 ### 4.9 計算說明
 
@@ -493,7 +494,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 | `terms` | 代入值 `{ symbol, value, unit, nodeId }`，依在 `formula` 裡出現的順序，`symbol` 對應大括號裡的文字 |
 | `value`、`unit` | 這一步的結果 |
 
-- `unit` 是 `rps`、`ms`、`%`（0–1 的比例，顯示成百分比）或 `null`（沒有單位，例如 ρ、c）。
+- `unit` 是 `rps`、`ms`、`%`（0–1 的比例，顯示成百分比）、`bytes`、`days`、`GB`（儲存量估算用）或 `null`（沒有單位，例如 ρ、c）。
 - `value` 為 `null` 表示**沒有定義**（例如過載時的延遲），不是 0；代入值也一樣（例如下游過載時它的端到端延遲）。
 - 代入值來自另一個節點時（上游送來的量、下游的成功率或延遲），`nodeId` 是那個節點，前端可以點過去；其他時候為 `null`。
 - 名稱和公式文字由後端產生（跟驗證錯誤的 `message` 一樣），數字由前端用自己的格式顯示，畫面上是「ρ = λ ÷ (c × μ) = 1,000 ÷ (2 × 1,000) = 0.50」。
@@ -629,7 +630,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 
 **儲存量**：`storage` 以 Database、Object Storage 的 id 為 key（拓撲裡沒有時是 `{}`，例如上面的範例），每筆有 `dailyBytes`、`totalBytes`、`replicas`、`totalWithReplicasBytes`、`replicasLagging`（4.8）、`perInstanceBytes`（bytes）、`daysUntilFull`（可為 `null`）、`fillsDisk`（4.8），以及計算時用的 `retentionDays`、`diskGbPerInstance`（沒有設定時和 Object Storage 為 `null`），畫面依這兩個欄位顯示，不讀目前的拓撲。驗證失敗時也是 `{}`。
 
-**計算說明**：每個節點的 `explanation` 是計算步驟（4.9），上面的範例各只列一步；未連線的節點是 `[]`。
+**計算說明**：每個節點的 `explanation` 是計算步驟（4.9），上面的範例各只列一步；`storage` 的每筆也有 `explanation`（4.8）；未連線的節點是 `[]`。
 
 **頻寬**：單位 bytes/s（4.7）。邊結果的 `bandwidth` 只有 Client 的邊有，其他邊為 `null`；`summary.bandwidth` 一定有。
 
@@ -696,7 +697,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - **Preset**：元件面板的「Redis Cluster」是 `instances = 3`、`replicas = 1` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
 - 指標表在有熱點的 Cache 名稱旁標示「熱點」；屬性面板在 Cache 的 `instances` ≥ 2 時，`instances` 下方有「設定熱點」，按下去先填平均的 1.5 倍（`min(1, 1.5/instances)`），之後可以按「沒有熱點」拿掉這個參數。設定了 `hotShare` 時，`instances` 不能減到 1，也不能減到讓 `hotShare` 小於新的平均。
 - **頻寬**（4.7）：Client 的邊在 RPS 下面一行小字顯示「出 X・入 Y」；結果面板上方的 summary 列出出口、入口頻寬，有 CDN 擋掉流量時加上 origin 出口和擋掉的比例。單位自動換算（B/s、KB/s、MB/s、GB/s…，十進位，最大到 PB/s，超過時用科學記號，例如 `1.2e18 B/s`），括號裡附上 bits（Mbps、Gbps…，同樣最大到 Pbps）。
-- **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每台、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB，十進位，超過 PB 時用科學記號）。過載的節點名稱旁標示「過載，偏低」；有 Read Replica 複製跟不上時，含副本那一格加註「副本複製跟不上，實際副本量會比這少」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerInstance`（只有 Database）預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。Object Storage 那一列只有每日增量和總量，其他欄是「—」；沒有 Database 時不顯示磁碟那一欄。
+- **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每台、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB，十進位，超過 PB 時用科學記號）。過載的節點名稱旁標示「過載，偏低」；有 Read Replica 複製跟不上時，含副本那一格加註「副本複製跟不上，實際副本量會比這少」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerInstance`（只有 Database）預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。Object Storage 那一列只有每日增量和總量，其他欄是「—」；沒有 Database 時不顯示磁碟那一欄。點一列（或名稱前的箭頭按鈕）在那一列下方展開它的算式（4.8 的計算說明，顯示方式同屬性面板的「怎麼算的」），再點一次收起，可以同時展開多列；算式裡的節點名稱一樣可以點；未連線的節點展開後寫「未連線，沒有計算」。
 - **重點數字**：結果面板的分頁下方、內容上方有一排卡片，每個分頁都顯示，數值直接取自 `summary`；有驗證錯誤時不顯示。窄螢幕時自動換行。
   - 成功率：`1 − dropRate`，有丟棄或拒絕時紅字（少到取一位小數會變成 100.0% 時顯示「> 99.9%」），下面一行是成功的 rps。
   - 端到端延遲：read、write 排在同一行；`null` 時顯示「—」，下面一行是原因（和指標表同樣的說明，兩個 class 原因相同時只列一次），近似值加上「近似」。

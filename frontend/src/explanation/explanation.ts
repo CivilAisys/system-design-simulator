@@ -1,5 +1,14 @@
 import type { components } from '@/api/schema'
-import { DASH, formatMs, formatMsNumber, formatPercent, formatRps, formatRpsNumber } from '@/canvas/format'
+import {
+  DASH,
+  formatBytes,
+  formatDays,
+  formatMs,
+  formatMsNumber,
+  formatPercent,
+  formatRps,
+  formatRpsNumber,
+} from '@/canvas/format'
 
 // 計算說明的一步（spec 4.9）：formula 裡大括號中的符號是代入值，對應 terms 裡同名的項目
 export type ExplanationStep = components['schemas']['ExplanationStep']
@@ -39,8 +48,13 @@ export function formatResult(step: Pick<ExplanationStep, 'value' | 'unit'>): str
   return step.value == null ? UNDEFINED_VALUE : formatValue(step.value, step.unit, true)
 }
 
+// bytes 會換成 KB、GB 等單位，代入值也帶著單位；其他和指標表、容量估算表一樣。GB 只當代入值（磁碟容量），和沒有單位的數字一樣
 function formatValue(value: number, unit: string | null, withUnit: boolean): string {
   switch (unit) {
+    case 'bytes':
+      return formatBytes(value)
+    case 'days':
+      return withUnit ? formatDays(value) : formatNumber(value)
     case 'rps':
       return withUnit ? formatRps(value) : formatRpsNumber(value)
     case 'ms':

@@ -7,12 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ExplanationSteps } from '@/explanation/ExplanationSteps'
+import { ExplanationBody } from '@/explanation/ExplanationSteps'
 import { explanationState, type ExplanationStep } from '@/explanation/explanation'
 import { cn } from '@/lib/utils'
 import { NEW_DISK_GB, NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
-import { formatClassRates, formatRps, formatUtilization, STALE_RESULT_NOTE } from './format'
+import { formatClassRates, formatRps, formatUtilization } from './format'
 import { unconnectedNodeIds } from './graph'
 import { hotShareHint, replicasHint, workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
@@ -354,25 +354,9 @@ function ExplanationSection({
   onSelectNode,
 }: ExplanationSectionProps) {
   const contentId = useId()
-  const state = explanationState({ steps, unconnected, invalid })
-  if (state === 'hidden') {
+  // 驗證錯誤、沒有結果時連「怎麼算的」標題都不顯示，錯誤分頁會說明
+  if (explanationState({ steps, unconnected, invalid }) === 'hidden') {
     return null
-  }
-
-  let content
-  if (state === 'unconnected') {
-    content = <p className="text-xs text-muted-foreground">未連線，沒有計算</p>
-  } else if (state === 'pending' || !steps) {
-    content = <p className="text-xs text-muted-foreground">Run 之後顯示</p>
-  } else {
-    content = (
-      <>
-        {stale && <p className="text-xs text-muted-foreground">{STALE_RESULT_NOTE}</p>}
-        <div className={cn(stale && 'opacity-50')}>
-          <ExplanationSteps steps={steps} nodeName={nodeName} onSelectNode={onSelectNode} />
-        </div>
-      </>
-    )
   }
 
   return (
@@ -390,7 +374,14 @@ function ExplanationSection({
       </Button>
       {open && (
         <div id={contentId} className="grid gap-2">
-          {content}
+          <ExplanationBody
+            steps={steps}
+            unconnected={unconnected}
+            invalid={invalid}
+            stale={stale}
+            nodeName={nodeName}
+            onSelectNode={onSelectNode}
+          />
         </div>
       )}
     </div>

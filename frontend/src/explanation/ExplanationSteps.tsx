@@ -1,5 +1,8 @@
 import { Fragment } from 'react'
+import { STALE_RESULT_NOTE } from '@/canvas/format'
+import { cn } from '@/lib/utils'
 import {
+  explanationState,
   formatResult,
   groupSteps,
   hasTerms,
@@ -7,6 +10,35 @@ import {
   symbolicFormula,
   type ExplanationStep,
 } from './explanation'
+
+type ExplanationBodyProps = {
+  steps: ExplanationStep[] | undefined
+  unconnected: boolean
+  // 上次 Run 驗證失敗，沒有計算結果
+  invalid: boolean
+  // 拓撲在上次 Run 之後改過：算式照樣顯示，畫淡並註明
+  stale: boolean
+} & Omit<ExplanationStepsProps, 'steps'>
+
+// 屬性面板和容量估算表共用：依狀態（explanationState）顯示訊息或算式；驗證錯誤、沒有結果時不顯示
+export function ExplanationBody({ steps, unconnected, invalid, stale, nodeName, onSelectNode }: ExplanationBodyProps) {
+  const state = explanationState({ steps, unconnected, invalid })
+  if (state === 'hidden') return null
+  if (state === 'unconnected') return <Note>未連線，沒有計算</Note>
+  if (state === 'pending' || !steps) return <Note>Run 之後顯示</Note>
+  return (
+    <>
+      {stale && <Note>{STALE_RESULT_NOTE}</Note>}
+      <div className={cn(stale && 'opacity-50')}>
+        <ExplanationSteps steps={steps} nodeName={nodeName} onSelectNode={onSelectNode} />
+      </div>
+    </>
+  )
+}
+
+function Note({ children }: { children: string }) {
+  return <p className="text-xs text-muted-foreground">{children}</p>
+}
 
 type ExplanationStepsProps = {
   steps: ExplanationStep[]

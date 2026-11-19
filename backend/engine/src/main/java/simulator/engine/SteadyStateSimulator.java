@@ -185,14 +185,14 @@ public final class SteadyStateSimulator implements Simulator {
      */
     private static Map<String, StorageEstimate> estimateStorage(Topology topology, TopologyGraph graph,
             Map<String, NodeResult> nodeResults) {
-        Map<String, Integer> replicas = new HashMap<>();
+        Map<String, List<Node>> replicas = new HashMap<>();
         Set<String> lagging = new HashSet<>();
         for (Node node : topology.nodes()) {
             // 未連線的 replica 沒有 primary，不算進任何 Database 的副本
             DatabaseNode primaryNode = node instanceof ReadReplicaNode ? graph.primaryOf(node.id()) : null;
             if (primaryNode != null) {
                 String primary = primaryNode.id();
-                replicas.merge(primary, 1, Integer::sum);
+                replicas.computeIfAbsent(primary, id -> new ArrayList<>()).add(node);
                 if (nodeResults.get(node.id()).warnings().contains(NodeWarning.REPLICATION_LAG)) {
                     lagging.add(primary);
                 }
@@ -205,18 +205,22 @@ public final class SteadyStateSimulator implements Simulator {
             }
             NodeResult result = nodeResults.get(node.id());
             StorageSizing sizing = storage.sizing();
-            double daily = processedWrites(result.arrivalRps(), result.throughputRps()) * sizing.bytesPerWrite()
-                    * SECONDS_PER_DAY;
+            double writes = processedWrites(result.arrivalRps(), result.throughputRps());
+            double daily = writes * sizing.bytesPerWrite() * SECONDS_PER_DAY;
             double total = daily * sizing.retentionDays();
-            int replicaCount = replicas.getOrDefault(node.id(), 0);
+            List<Node> replicaNodes = replicas.getOrDefault(node.id(), List.of());
+            int replicaCount = replicaNodes.size();
             // 資料平均分布在處理流量的機器上
             int instances = storage.capacityParams().instances();
             double dailyPerInstance = daily / instances;
             Double daysUntilFull = sizing.diskGbPerInstance() == null ? null
                     : finiteOrNull(sizing.diskGbPerInstance() * BYTES_PER_GB / dailyPerInstance);
             boolean fillsDisk = daysUntilFull != null && daysUntilFull < sizing.retentionDays();
-            estimates.put(node.id(), new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
-                    lagging.contains(node.id()), total / instances, daysUntilFull, fillsDisk, sizing.retentionDays(), sizing.diskGbPerInstance()));
+            var estimate = new StorageEstimate(daily, total, replicaCount, total * (1 + replicaCount),
+                    lagging.contains(node.id()), total / instances, daysUntilFull, fillsDisk, sizing.retentionDays(),
+                    sizing.diskGbPerInstance(), List.of());
+            estimates.put(node.id(), graph.isUnconnected(node.id()) ? estimate
+                    : estimate.withExplanation(Explanations.storage(storage, result, writes, replicaNodes, estimate)));
         }
         return estimates;
     }
