@@ -59,6 +59,8 @@ function Simulator() {
   // 通知和畫布右緣的距離：浮出的面板蓋住畫布右側時，通知移到它的左邊
   const toastRight = TOAST_GAP + (propertiesFloating ? FLOATING_PANEL_INSET : 0)
   const pinButton = useRefocusAfterToggle(propertiesPinned)
+  // 屬性面板的「怎麼算的」預設收起，展開後換節點仍保持展開；重新整理後回到收起
+  const [explanationOpen, setExplanationOpen] = useState(false)
   useEditShortcuts({ undo, redo, copy: editor.copy, paste: editor.paste })
   useAutosave(topology, restored)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
@@ -267,6 +269,8 @@ function Simulator() {
             invalid={result != null && !result.valid}
             onUpdateNode={editor.updateNode}
             onSelectNode={focusNode}
+            explanationOpen={explanationOpen}
+            onToggleExplanation={() => setExplanationOpen((open) => !open)}
             onUpdateEdge={editor.updateEdge}
             pinned={propertiesPinned}
             onTogglePin={pinButton.wrap(togglePropertiesPinned)}

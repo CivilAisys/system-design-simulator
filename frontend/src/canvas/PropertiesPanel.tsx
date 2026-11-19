@@ -1,4 +1,4 @@
-import { Fragment, useId, useState, type ReactNode, type Ref } from 'react'
+import { Fragment, useId, type ReactNode, type Ref } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { ChevronDown, PanelRightOpen, Pin, PinOff, Trash2 } from 'lucide-react'
 import { totalRps, type EdgeResult, type NodeResult } from '@/api/client'
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ExplanationSteps } from '@/explanation/ExplanationSteps'
-import type { ExplanationStep } from '@/explanation/explanation'
+import { explanationState, type ExplanationStep } from '@/explanation/explanation'
 import { cn } from '@/lib/utils'
 import { NEW_DISK_GB, NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
@@ -46,6 +46,9 @@ type PropertiesPanelProps = {
   onUpdateNode: (id: string, patch: NodePatch) => void
   // 點計算說明裡的節點名稱：選取它並移到畫面上
   onSelectNode: (id: string) => void
+  // 「怎麼算的」有沒有展開。放在 App：沒釘住時面板會隨選取消失再出現，換節點後仍要保持展開
+  explanationOpen: boolean
+  onToggleExplanation: () => void
   onUpdateEdge: (id: string, patch: EdgePatch) => void
   // 釘住時固定在畫布右側；沒釘住時浮在畫布上（App 只在剛好選了一個時放出來）
   pinned: boolean
@@ -63,6 +66,8 @@ export function PropertiesPanel({
   invalid,
   onUpdateNode,
   onSelectNode,
+  explanationOpen,
+  onToggleExplanation,
   onUpdateEdge,
   pinned,
   onTogglePin,
@@ -70,8 +75,6 @@ export function PropertiesPanel({
 }: PropertiesPanelProps) {
   const selectedNodes = nodes.filter((n) => n.selected)
   const selectedEdges = edges.filter((e) => e.selected)
-  // 「怎麼算的」展開後，換到別的節點（包括點算式裡的名稱）時保持展開
-  const [explanationOpen, setExplanationOpen] = useState(false)
 
   let content
   if (selectedNodes.length === 1 && selectedEdges.length === 0) {
@@ -92,7 +95,7 @@ export function PropertiesPanel({
             invalid={invalid}
             stale={stale}
             open={explanationOpen}
-            onToggle={() => setExplanationOpen((open) => !open)}
+            onToggle={onToggleExplanation}
             nodeName={(id) => nodes.find((n) => n.id === id)?.data.node.name}
             onSelectNode={onSelectNode}
           />
@@ -351,15 +354,15 @@ function ExplanationSection({
   onSelectNode,
 }: ExplanationSectionProps) {
   const contentId = useId()
-  // 拓撲有驗證錯誤、沒有結果時不顯示，錯誤分頁會說明
-  if (invalid && !steps) {
+  const state = explanationState({ steps, unconnected, invalid })
+  if (state === 'hidden') {
     return null
   }
 
   let content
-  if (unconnected) {
+  if (state === 'unconnected') {
     content = <p className="text-xs text-muted-foreground">未連線，沒有計算</p>
-  } else if (!steps) {
+  } else if (state === 'pending' || !steps) {
     content = <p className="text-xs text-muted-foreground">Run 之後顯示</p>
   } else {
     content = (

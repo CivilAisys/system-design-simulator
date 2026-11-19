@@ -15,7 +15,7 @@ type ExplanationStepsProps = {
   onSelectNode: (id: string) => void
 }
 
-// 計算說明（spec 4.9）：依分組列出每一步，「名稱、公式、代入值、結果」各一行，窄的面板裡也不出現水平捲軸
+// 計算說明（spec 4.9）：依分組列出，每一步一行「名稱 = 公式 = 代入值 = 結果」，太長時換行，不出現水平捲軸
 export function ExplanationSteps({ steps, nodeName, onSelectNode }: ExplanationStepsProps) {
   return (
     <div className="grid gap-3">
@@ -32,14 +32,15 @@ export function ExplanationSteps({ steps, nodeName, onSelectNode }: ExplanationS
 }
 
 function Step({ step, nodeName, onSelectNode }: { step: ExplanationStep } & Omit<ExplanationStepsProps, 'steps'>) {
+  const result = <span className="font-semibold">{formatResult(step)}</span>
   return (
-    <div className="grid gap-0.5 border-l-2 pl-2 text-xs break-words">
-      <div className="font-medium">{step.label}</div>
-      {/* 沒有代入值的是純文字說明，例如過載時延遲沒有定義，只列文字和結果 */}
-      <div className="text-muted-foreground">{symbolicFormula(step)}</div>
-      {hasTerms(step) && (
-        <div>
-          ={' '}
+    <p className="border-l-2 pl-2 text-xs leading-relaxed break-words">
+      <span className="font-medium">{step.label}</span>
+      {hasTerms(step) ? (
+        <>
+          {' = '}
+          <span className="text-muted-foreground">{symbolicFormula(step)}</span>
+          {' = '}
           {substitutedFormula(step).map((part, i) => (
             <Fragment key={i}>
               {part.text}
@@ -48,10 +49,18 @@ function Step({ step, nodeName, onSelectNode }: { step: ExplanationStep } & Omit
               )}
             </Fragment>
           ))}
-        </div>
+          {' = '}
+          {result}
+        </>
+      ) : (
+        // 純文字說明，例如過載時延遲沒有定義：結果後面接著說明
+        <>
+          {' = '}
+          {result}
+          <span className="text-muted-foreground">（{step.formula}）</span>
+        </>
       )}
-      <div className="font-semibold">= {formatResult(step)}</div>
-    </div>
+    </p>
   )
 }
 
@@ -61,7 +70,7 @@ function NodeLink({ id, name, onSelect }: { id: string; name: string | undefined
   return (
     <button
       type="button"
-      className="text-primary underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none"
+      className="rounded-sm text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
       title={`選取 ${name}，看它的算式`}
       onClick={() => onSelect(id)}
     >
