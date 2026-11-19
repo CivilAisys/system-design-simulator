@@ -478,6 +478,47 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - **副本跟不上**：primary 的 Read Replica 有 `REPLICATION_LAG`（4.2.3）時，「含副本」仍照完整副本計算，數字不改，但回應的 `replicasLagging` 為 true，容量估算分頁在那一列加註「副本複製跟不上，實際副本量會比這少」。
 - **磁碟會滿**（`fillsDisk`）：`daysUntilFull < retentionDays`，也就是保留期內每台的資料會超過磁碟容量。這是另一種瓶頸，和 ρ 分開顯示，不混進「瓶頸 = ρ 最高」的規則（`bottleneckNodeId` 不變）。
 
+### 4.9 計算說明
+
+讓每個數字都能說明是怎麼算出來的：引擎在同一次計算裡替每個節點列出步驟，放在回應的節點結果 `explanation`（第 5 節），前端不重算。
+
+**格式**：一串步驟，依計算順序排列。每一步有：
+
+| 欄位 | 意思 |
+|---|---|
+| `group` | 分組標題，例如「到達量」「容量與使用率」「最熱那台」；同一組的步驟相鄰 |
+| `label` | 這一步算的是什麼，例如「使用率 ρ（0.7 ≤ ρ < 0.9：WARN）」 |
+| `formula` | 公式，用大括號標出代入值，例如 `{λ} ÷ ({c} × {μ})`；沒有大括號的是純文字說明 |
+| `terms` | 代入值 `{ symbol, value, unit, nodeId }`，依在 `formula` 裡出現的順序，`symbol` 對應大括號裡的文字 |
+| `value`、`unit` | 這一步的結果 |
+
+- `unit` 是 `rps`、`ms`、`%`（0–1 的比例，顯示成百分比）或 `null`（沒有單位，例如 ρ、c）。
+- `value` 為 `null` 表示**沒有定義**（例如過載時的延遲），不是 0；代入值也一樣（例如下游過載時它的端到端延遲）。
+- 代入值來自另一個節點時（上游送來的量、下游的成功率或延遲），`nodeId` 是那個節點，前端可以點過去；其他時候為 `null`。
+- 名稱和公式文字由後端產生（跟驗證錯誤的 `message` 一樣），數字由前端用自己的格式顯示，畫面上是「ρ = λ ÷ (c × μ) = 1,000 ÷ (2 × 1,000) = 0.50」。
+
+**每個節點只說明自己這一層**：上下游的數字直接當作代入值，不展開它們的算式；要往下追就點那個節點。
+
+**涵蓋範圍**（依順序；沒有的部分不列）：
+
+| 分組 | 步驟 |
+|---|---|
+| 送出（Client） | read = rps × readRatio、write = rps − read |
+| 到達量 | read、write 各是每條上游邊送來的量加總（上游處理完的流量 × visits，3.3、3.4），再加成 λ |
+| 容量與使用率 | c = instances × concurrency、μ = 1000 ÷ serviceTimeMs、容量 c × μ、ρ = λ ÷ (c × μ)；ρ 的名稱後面寫判斷狀態的門檻（4.4） |
+| 節點延遲（ρ < 1） | a = λ ÷ μ、P_wait = ErlangC(c, a)、Wq = P_wait ÷ (c × μ − λ)、W = Wq + 1/μ（4.2，Erlang C 只列結果，不列遞迴過程） |
+| 過載（ρ ≥ 1） | 處理量 = c × μ、超過容量的部分 = λ − c × μ、W 沒有定義 |
+| 最熱那台、其他 N 台、整個節點（有 hotShare 的 Cache） | 兩邊各自的到達量和上面兩組；整個節點的 ρ 取較高的一邊、處理量和丟棄量加總、延遲依流量加權平均（4.2.2） |
+| 往下游（Cache、CDN） | 沒命中、往下游送的 read = 處理的 read × (1 − hitRatio) |
+| 限流、配額（Rate Limiter、External API） | 放行量 = min(λ, 上限)、拒絕量 = λ − 放行量（名稱寫狀態）、固定的節點延遲（4.2.1） |
+| 複製（Read Replica） | 有 `REPLICATION_LAG` 時，丟掉的複製寫入 = 丟棄量 × λ_write ÷ λ（4.2.3） |
+| Message Queue 積壓（consumer） | 有 `BACKLOG` 時，每條 Message Queue 送來的邊每秒留在 queue 的訊息，以及扣掉留在 queue 的部分之後的丟棄量（4.2.4） |
+| 成功率 | 每個有流量的 class：通過率 pass = 處理量 ÷ λ，以及從這個節點開始的 S（4.3.1），下游的 S 當作代入值；Client 再加上每秒完整成功的請求數 |
+| 端到端延遲 | 每個有流量的 class：從這個節點開始的 L = W + Σ visits × (邊的延遲 + 下游的 L)，平行呼叫取最大值；非同步的下游不在路徑上（4.3） |
+
+- **未連線的節點**（4.5）沒有步驟，`explanation` 是空陣列。有連線但 λ = 0 的節點照常列出到達量和容量與使用率；沒有流量的 class 不列成功率和端到端延遲。
+- 步驟的結果直接取自同一次計算的結果，跟 `nodes` 裡的欄位相同（測試鎖住）；中間值用同一組函式重算。
+
 ---
 
 ## 5. API
@@ -531,7 +572,13 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
       "avgLatencyMs": null,
       "status": null,
       "hotSpot": null,
-      "warnings": []
+      "warnings": [],
+      "explanation": [
+        { "group": "送出", "label": "read", "formula": "{rps} × {readRatio}",
+          "terms": [{ "symbol": "rps", "value": 1000, "unit": "rps", "nodeId": null },
+                    { "symbol": "readRatio", "value": 0.9, "unit": "%", "nodeId": null }],
+          "value": 900, "unit": "rps" }
+      ]
     },
     "svc-1": {
       "arrivalRps": { "read": 900, "write": 100 },
@@ -544,7 +591,14 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
       "avgLatencyMs": 50.0,
       "status": "OK",
       "hotSpot": null,
-      "warnings": []
+      "warnings": [],
+      "explanation": [
+        { "group": "容量與使用率", "label": "使用率 ρ（ρ < 0.7：OK）", "formula": "{λ} ÷ ({c} × {μ})",
+          "terms": [{ "symbol": "λ", "value": 1000, "unit": "rps", "nodeId": null },
+                    { "symbol": "c", "value": 400, "unit": null, "nodeId": null },
+                    { "symbol": "μ", "value": 20, "unit": "rps", "nodeId": null }],
+          "value": 0.125, "unit": null }
+      ]
     }
   },
   "edges": {
@@ -573,6 +627,8 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 **警告**：`warnings` 永遠是陣列，沒有警告時為空；Read Replica 的 `REPLICATION_LAG`（4.2.3）、consumer 的 `BACKLOG`（4.2.4）。邊結果的 `backlogRps` 只有 Message Queue 的下游邊會大於 0（4.2.4）。
 
 **儲存量**：`storage` 以 Database、Object Storage 的 id 為 key（拓撲裡沒有時是 `{}`，例如上面的範例），每筆有 `dailyBytes`、`totalBytes`、`replicas`、`totalWithReplicasBytes`、`replicasLagging`（4.8）、`perInstanceBytes`（bytes）、`daysUntilFull`（可為 `null`）、`fillsDisk`（4.8），以及計算時用的 `retentionDays`、`diskGbPerInstance`（沒有設定時和 Object Storage 為 `null`），畫面依這兩個欄位顯示，不讀目前的拓撲。驗證失敗時也是 `{}`。
+
+**計算說明**：每個節點的 `explanation` 是計算步驟（4.9），上面的範例各只列一步；未連線的節點是 `[]`。
 
 **頻寬**：單位 bytes/s（4.7）。邊結果的 `bandwidth` 只有 Client 的邊有，其他邊為 `null`；`summary.bandwidth` 一定有。
 

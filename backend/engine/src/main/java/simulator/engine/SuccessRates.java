@@ -29,6 +29,11 @@ final class SuccessRates {
         return sent.read() * success.get(clientId, true) + sent.write() * success.get(clientId, false);
     }
 
+    /** S(n, class)：一個請求從這個節點開始、最後完整成功的機率。 */
+    double of(String nodeId, boolean read) {
+        return success.get(nodeId, read);
+    }
+
     /**
      * 這個 class 到達節點的請求中，節點處理了、但下游失敗的比例：pass(n) − S(n)。
      * 用在 Message Queue 的 consumer：這些訊息沒有完整成功，留在 queue 裡（spec 4.2.4）。
@@ -72,7 +77,7 @@ final class SuccessRates {
      * 這個 class 的通過率 = 實際處理量 / 到達量；Client 和沒有流量的節點為 1。
      * 丟棄依 read／write 比例分配；有熱點的 Cache 兩邊的 read／write 比例相同，所以也一樣。
      */
-    private double pass(Node node, boolean read) {
+    double pass(Node node, boolean read) {
         if (node instanceof ClientNode) {
             return 1;
         }
