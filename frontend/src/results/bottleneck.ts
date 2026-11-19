@@ -24,12 +24,12 @@ export function describeBottleneck(topology: Pick<Topology, 'nodes'>, result: Bo
   }
   const utilization = metrics.utilization ?? 0
   if (isAlerting(metrics.status)) {
-    // 結果可能比目前畫布舊一點（Auto-run 還在 debounce），節點被刪掉時退回顯示 id
     return { kind: 'bottleneck', name: nodeName(topology, id), utilization }
   }
   return utilization > 0 ? { kind: 'calm', name: nodeName(topology, id), utilization } : { kind: 'idle' }
 }
 
+// 結果可能比目前畫布舊一點（Auto-run 還在 debounce），節點被刪掉時退回顯示 id
 function nodeName(topology: Pick<Topology, 'nodes'>, id: string): string {
   return topology.nodes.find((node) => node.id === id)?.name ?? id
 }

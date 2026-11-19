@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { NodeResult } from '@/api/client'
+import type { NodeResult, Topology } from '@/api/client'
 import { describeBottleneck } from './bottleneck'
 
-const topology = { nodes: [{ id: 'db', type: 'DATABASE', name: 'Orders DB' }] } as Parameters<
-  typeof describeBottleneck
->[0]
+const topology = { nodes: [{ id: 'db', type: 'DATABASE', name: 'Orders DB' }] } as Pick<Topology, 'nodes'>
 
 function result(bottleneckNodeId: string | null, utilization: number | null, status: NodeResult['status']) {
   return { summary: { bottleneckNodeId }, nodes: { db: { utilization, status } } }
