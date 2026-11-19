@@ -33,7 +33,7 @@ class SimulateEndpointTest {
 
     private static final List<String> NODE_FIELDS = List.of("arrivalRps", "throughputRps", "droppedRps", "rejectedRps",
             "successRps", "endToEndMs", "capacityRps", "utilization", "avgQueueMs", "avgLatencyMs", "status",
-            "hotSpot", "warnings");
+            "hotSpot", "warnings", "explanation");
     private static final List<String> SERVER_FIELDS = List.of("capacityRps", "utilization", "avgQueueMs",
             "avgLatencyMs", "status");
 
@@ -59,6 +59,11 @@ class SimulateEndpointTest {
         for (JsonNode node : nodes) {
             assertThat(fieldNames(node)).containsExactlyInAnyOrderElementsOf(NODE_FIELDS);
             assertThat(fieldNames(node.get("arrivalRps"))).containsExactlyInAnyOrder("read", "write");
+            // 步驟的內容由 engine 的 ExplanationTest 驗算，這裡只確認 JSON 形狀
+            JsonNode step = node.at("/explanation/0");
+            assertThat(fieldNames(step)).containsExactlyInAnyOrder("group", "label", "formula", "terms", "value",
+                    "unit");
+            assertThat(fieldNames(step.at("/terms/0"))).containsExactlyInAnyOrder("symbol", "value", "unit", "nodeId");
         }
 
         JsonNode client = nodes.get("client-1");

@@ -36,6 +36,16 @@ final class EndToEndLatencies {
                 sent.write() > 0 ? latency(paths.get(clientId, false)) : noTraffic());
     }
 
+    /** L(n, class)：從這個節點開始的端到端延遲；路徑上有節點過載時為 null。 */
+    Double ms(String nodeId, boolean read) {
+        return paths.get(nodeId, read).ms();
+    }
+
+    /** L(n, class) 是不是平行呼叫多個下游取最大值的近似。 */
+    boolean approximate(String nodeId, boolean read) {
+        return paths.get(nodeId, read).approximate();
+    }
+
     /** summary：各 Client 依該 class 的請求數加權平均。{@code clients} 的 endToEndMs 要已經算好。 */
     ClassLatencies average(List<NodeResult> clients) {
         return new ClassLatencies(average(clients, true), average(clients, false));

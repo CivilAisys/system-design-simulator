@@ -161,7 +161,7 @@ system-design-simulator/
 **新增一種 Node type**：
 
 - 後端 api：`NodeType` 加一個值；`NodeParamsDto` 加該類型的參數（`description` 寫上用到它的 type）；`NodeDto.toNode` 建出 engine 的節點。改完跑 `./gradlew :api:generateOpenApi` 更新 `openapi.json`，前端的型別跟著重新產生。
-- 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`。
+- 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則、`Explanations` 的計算步驟和成功率說明），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`、`Explanations`。新元件的計算步驟要補進 4.9 的涵蓋範圍。
 - 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。只換名稱、圖示和部分預設值、type 不變的元件（例如 Redis Cluster）不是新的 type，加在同一個檔案的 `PRESETS`，元件面板讀的是由兩者組成的 `PALETTE`。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、類別（流量／運算／資料／非同步，元件面板依它分組、圖示方塊依它上色；`NODE_TYPES` 要把同類別的排在一起）、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類、節點上顯示的指標，元件面板、畫布、屬性面板和讀入存檔都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
 - 計算和既有 type 完全相同、只差預設值和名稱的新 type（例如 CDN 之於 Cache、Object Storage 之於 Database）：engine 讓兩者實作同一個 sealed 子介面（`CachingNode`、`StorageNode`），`switch` 對子介面寫一個分支，計算和驗證共用；前端 `NODE_KINDS` 仍各寫一筆。
 - 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。只能連到特定 type 時寫在 `outputTargets`（例如 Database 只能連到 Read Replica）。
@@ -478,6 +478,47 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - **副本跟不上**：primary 的 Read Replica 有 `REPLICATION_LAG`（4.2.3）時，「含副本」仍照完整副本計算，數字不改，但回應的 `replicasLagging` 為 true，容量估算分頁在那一列加註「副本複製跟不上，實際副本量會比這少」。
 - **磁碟會滿**（`fillsDisk`）：`daysUntilFull < retentionDays`，也就是保留期內每台的資料會超過磁碟容量。這是另一種瓶頸，和 ρ 分開顯示，不混進「瓶頸 = ρ 最高」的規則（`bottleneckNodeId` 不變）。
 
+### 4.9 計算說明
+
+讓每個數字都能說明是怎麼算出來的：引擎在同一次計算裡替每個節點列出步驟，放在回應的節點結果 `explanation`（第 5 節），前端不重算。
+
+**格式**：一串步驟，依計算順序排列。每一步有：
+
+| 欄位 | 意思 |
+|---|---|
+| `group` | 分組標題，例如「到達量」「容量與使用率」「最熱那台」；同一組的步驟相鄰 |
+| `label` | 這一步算的是什麼，例如「使用率 ρ（0.7 ≤ ρ < 0.9：WARN）」 |
+| `formula` | 公式，用大括號標出代入值，例如 `{λ} ÷ ({c} × {μ})`；沒有大括號的是純文字說明 |
+| `terms` | 代入值 `{ symbol, value, unit, nodeId }`，依在 `formula` 裡出現的順序，`symbol` 對應大括號裡的文字 |
+| `value`、`unit` | 這一步的結果 |
+
+- `unit` 是 `rps`、`ms`、`%`（0–1 的比例，顯示成百分比）或 `null`（沒有單位，例如 ρ、c）。
+- `value` 為 `null` 表示**沒有定義**（例如過載時的延遲），不是 0；代入值也一樣（例如下游過載時它的端到端延遲）。
+- 代入值來自另一個節點時（上游送來的量、下游的成功率或延遲），`nodeId` 是那個節點，前端可以點過去；其他時候為 `null`。
+- 名稱和公式文字由後端產生（跟驗證錯誤的 `message` 一樣），數字由前端用自己的格式顯示，畫面上是「ρ = λ ÷ (c × μ) = 1,000 ÷ (2 × 1,000) = 0.50」。
+
+**每個節點只說明自己這一層**：上下游的數字直接當作代入值，不展開它們的算式；要往下追就點那個節點。
+
+**涵蓋範圍**（依順序；沒有的部分不列）：
+
+| 分組 | 步驟 |
+|---|---|
+| 送出（Client） | read = rps × readRatio、write = rps − read |
+| 到達量 | read、write 各是每條上游邊送來的量加總：上游處理完的流量 × visits（3.3、3.4），再加成 λ |
+| 容量與使用率 | c = instances × concurrency、μ = 1000 ÷ serviceTimeMs、容量 c × μ、ρ = λ ÷ (c × μ)；ρ 的名稱後面寫判斷狀態的門檻（4.4） |
+| 節點延遲（ρ < 1） | a = λ ÷ μ、P_wait = ErlangC(c, a)、Wq = P_wait ÷ (c × μ − λ)、W = Wq + 1/μ（4.2，Erlang C 只列結果，不列遞迴過程） |
+| 過載（ρ ≥ 1） | 處理量 = c × μ、超過容量的部分 = λ − c × μ、W 沒有定義 |
+| 最熱那台、其他 N 台、整個節點（有 hotShare 的 Cache） | 兩邊各自的到達量和上面兩組；整個節點的容量、ρ 取較高的一邊、處理量和丟棄量加總、Wq 和 W 依流量加權平均（4.2.2） |
+| 往下游（Cache、CDN） | 沒命中、往下游送的 read = 處理的 read × (1 − hitRatio) |
+| 限流、配額（Rate Limiter、External API） | 放行量 = min(λ, 上限)、拒絕量 = λ − 放行量（名稱寫畫面上的狀態，例如「限流中」）、固定的節點延遲（4.2.1） |
+| 複製（Read Replica） | 複製寫入 = primary 處理完的 write；有 `REPLICATION_LAG` 時，丟掉的複製寫入 = 丟棄量 × λ_write ÷ λ（4.2.3） |
+| Message Queue 積壓（consumer） | 有 `BACKLOG` 時，每條 Message Queue 送來的邊每秒留在 queue 的訊息，以及扣掉留在 queue 的部分之後的丟棄量（4.2.4）；這時「過載」那組的 λ − c × μ 只叫「超過容量」，不叫丟棄 |
+| 成功率 | 每個有流量的 class：通過率 pass = 處理量 ÷ λ，以及從這個節點開始的 S（4.3.1），下游的 S 當作代入值；Client 再加上每秒完整成功的請求數 |
+| 端到端延遲 | 每個有流量的 class：從這個節點開始的 L = W + Σ visits × (邊的延遲 + 下游的 L)，平行呼叫取最大值；非同步的下游不在路徑上（4.3） |
+
+- **未連線的節點**（4.5）沒有步驟，`explanation` 是空陣列。有連線但 λ = 0 的節點照常列出到達量和容量與使用率；沒有流量的 class 不列成功率和端到端延遲。
+- 步驟的結果直接取自同一次計算的結果，跟 `nodes` 裡的欄位相同（測試鎖住）；中間值用同一組函式重算。
+
 ---
 
 ## 5. API
@@ -531,7 +572,13 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
       "avgLatencyMs": null,
       "status": null,
       "hotSpot": null,
-      "warnings": []
+      "warnings": [],
+      "explanation": [
+        { "group": "送出", "label": "read", "formula": "{rps} × {readRatio}",
+          "terms": [{ "symbol": "rps", "value": 1000, "unit": "rps", "nodeId": null },
+                    { "symbol": "readRatio", "value": 0.9, "unit": "%", "nodeId": null }],
+          "value": 900, "unit": "rps" }
+      ]
     },
     "svc-1": {
       "arrivalRps": { "read": 900, "write": 100 },
@@ -544,7 +591,14 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
       "avgLatencyMs": 50.0,
       "status": "OK",
       "hotSpot": null,
-      "warnings": []
+      "warnings": [],
+      "explanation": [
+        { "group": "容量與使用率", "label": "使用率 ρ（ρ < 0.7：OK）", "formula": "{λ} ÷ ({c} × {μ})",
+          "terms": [{ "symbol": "λ", "value": 1000, "unit": "rps", "nodeId": null },
+                    { "symbol": "c", "value": 400, "unit": null, "nodeId": null },
+                    { "symbol": "μ", "value": 20, "unit": "rps", "nodeId": null }],
+          "value": 0.125, "unit": null }
+      ]
     }
   },
   "edges": {
@@ -573,6 +627,8 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 **警告**：`warnings` 永遠是陣列，沒有警告時為空；Read Replica 的 `REPLICATION_LAG`（4.2.3）、consumer 的 `BACKLOG`（4.2.4）。邊結果的 `backlogRps` 只有 Message Queue 的下游邊會大於 0（4.2.4）。
 
 **儲存量**：`storage` 以 Database、Object Storage 的 id 為 key（拓撲裡沒有時是 `{}`，例如上面的範例），每筆有 `dailyBytes`、`totalBytes`、`replicas`、`totalWithReplicasBytes`、`replicasLagging`（4.8）、`perInstanceBytes`（bytes）、`daysUntilFull`（可為 `null`）、`fillsDisk`（4.8），以及計算時用的 `retentionDays`、`diskGbPerInstance`（沒有設定時和 Object Storage 為 `null`），畫面依這兩個欄位顯示，不讀目前的拓撲。驗證失敗時也是 `{}`。
+
+**計算說明**：每個節點的 `explanation` 是計算步驟（4.9），上面的範例各只列一步；未連線的節點是 `[]`。
 
 **頻寬**：單位 bytes/s（4.7）。邊結果的 `bandwidth` 只有 Client 的邊有，其他邊為 `null`；`summary.bandwidth` 一定有。
 

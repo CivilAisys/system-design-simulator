@@ -96,7 +96,8 @@ public final class SteadyStateSimulator implements Simulator {
         return new SimulationResult(true, List.of(), inNodeOrder(topology, nodeResults),
                 inEdgeOrder(topology, edgeResults), summarize(topology, graph, nodeResults, endToEnd, bandwidth,
                         Math.min(cdnOffload, bandwidth.egressBytesPerSec())),
-                estimateStorage(topology, graph, nodeResults));
+                estimateStorage(topology, graph, nodeResults),
+                Explanations.of(topology, graph, nodeResults, edgeResults, success, endToEnd));
     }
 
     private static ClassRates process(CapacityParams params, ClassRates arrival, String nodeId,
