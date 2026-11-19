@@ -15,6 +15,7 @@ import { SimNode, type SimFlowNode } from './SimNode'
 import { arrowMarker, edgeColor } from './edgeStyle'
 import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
 import { flowRatio } from './flow'
+import { unconnectedNodeIds } from './graph'
 import { groupErrors } from './validation'
 
 const nodeTypes = { sim: SimNode }
@@ -58,6 +59,8 @@ export function Canvas({
     () => Math.max(0, ...edges.map((e) => result?.edges[e.id]).map((r) => (r ? totalRps(r.rps) : 0))),
     [edges, result],
   )
+  // 未連線看畫布就知道，不必等 Run；Auto-run 關閉或結果有驗證錯誤時也立即畫淡
+  const unconnected = useMemo(() => unconnectedNodeIds(nodes.map((n) => n.data.node), edges), [nodes, edges])
   const shownNodes = useMemo<SimFlowNode[]>(
     () =>
       nodes.map((n) => ({
@@ -67,9 +70,10 @@ export function Canvas({
           result: result?.nodes[n.id],
           errors: errors.nodes.get(n.id),
           stale,
+          unconnected: unconnected.has(n.id),
         },
       })),
-    [nodes, result, errors, stale],
+    [nodes, result, errors, stale, unconnected],
   )
   // 邊的種類看 source 的 type。拖動節點時 nodes 每一幀都在變，只在 id 或 type 變了才重算，邊不用跟著重畫
   const typeKey = JSON.stringify(nodes.map((n) => [n.id, n.data.node.type]))
