@@ -51,7 +51,8 @@ type ExplanationStepsProps = {
 export function ExplanationSteps({ steps, nodeName, onSelectNode }: ExplanationStepsProps) {
   return (
     <div className="grid gap-3">
-      {groupSteps(steps).map(({ group, steps: grouped }, i) => (
+      {/* 目前只顯示公式：只在白話模式顯示的步驟（排隊合併成的那一步）沒有公式 */}
+      {groupSteps(steps.filter((step) => step.view !== 'PLAIN')).map(({ group, steps: grouped }, i) => (
         <section key={i} className="grid gap-2">
           <h4 className="text-xs font-semibold text-muted-foreground">{group}</h4>
           {grouped.map((step, j) => (

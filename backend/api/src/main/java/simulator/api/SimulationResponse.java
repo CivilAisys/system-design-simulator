@@ -14,10 +14,12 @@ import simulator.engine.EdgeResult;
 import simulator.engine.EndToEndLatency;
 import simulator.engine.ExplanationStep;
 import simulator.engine.ExplanationTerm;
+import simulator.engine.ExplanationView;
 import simulator.engine.HotSpot;
 import simulator.engine.InstanceResult;
 import simulator.engine.NodeResult;
 import simulator.engine.NodeWarning;
+import simulator.engine.RequestClass;
 import simulator.engine.SimulationResult;
 import simulator.engine.Status;
 import simulator.engine.StorageEstimate;
@@ -148,18 +150,28 @@ public record SimulationResponse(
 
     @Schema(name = "ExplanationStep", description = "計算說明的一步（spec 4.9）。formula 裡大括號中的符號是代入值，對應 terms 裡同名的項目")
     public record ExplanationStepDto(
-            @Schema(requiredMode = REQUIRED, description = "分組標題，例如「到達量」「最熱那台」；同一組的步驟相鄰") String group,
+            @Schema(requiredMode = REQUIRED, description = "分組標題，例如「進來多少」「最熱那台」；同一組的步驟相鄰") String group,
             @Schema(requiredMode = REQUIRED) String label,
             @Schema(requiredMode = REQUIRED, description = "例如 {λ} ÷ ({c} × {μ})") String formula,
-            @Schema(requiredMode = REQUIRED, description = "代入值，依在 formula 裡出現的順序") List<ExplanationTermDto> terms,
+            @Schema(requiredMode = REQUIRED, description = "代入值，依在 formula 裡出現的順序；只有 plain 用到的接在後面") List<ExplanationTermDto> terms,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "這一步的結果；沒有定義時為 null（例如過載時的延遲）")
             Double value,
-            @Schema(requiredMode = REQUIRED, nullable = true, description = "rps、ms、%（0–1 的比例，顯示成百分比）、bytes、days、GB，沒有單位時為 null")
-            String unit) {
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "rps、ms、%（0–1 的比例，顯示成百分比）、bytes、days，沒有單位時為 null")
+            String unit,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "白話的一句，例如「每秒能處理 {=} = {c} × {μ}」："
+                    + "{符號} 代入 terms 裡的值、{=} 代入這一步的結果、{@符號} 是那個代入值來自的節點名稱；"
+                    + "view 為 FORMULA 時為 null")
+            String plain,
+            @Schema(requiredMode = REQUIRED, description = "BOTH：兩種模式都顯示；PLAIN：只在白話模式；FORMULA：只在看公式時")
+            ExplanationView view,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "read、write 各算一次的步驟是 READ 或 WRITE，"
+                    + "兩者相同時前端合成一行；其他為 null")
+            RequestClass requestClass) {
 
         static ExplanationStepDto from(ExplanationStep step) {
             return new ExplanationStepDto(step.group(), step.label(), step.formula(),
-                    step.terms().stream().map(ExplanationTermDto::from).toList(), step.value(), step.unit());
+                    step.terms().stream().map(ExplanationTermDto::from).toList(), step.value(), step.unit(), step.plain(),
+                    step.view(), step.requestClass());
         }
     }
 

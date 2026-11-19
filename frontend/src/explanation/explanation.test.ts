@@ -13,16 +13,20 @@ import {
 } from './explanation'
 
 const RHO: ExplanationStep = {
-  group: '容量與使用率',
+  group: '能處理多少',
   label: '使用率 ρ（ρ < 0.7：OK）',
   formula: '{λ} ÷ ({c} × {μ})',
   terms: [
     { symbol: 'λ', value: 1000, unit: 'rps', nodeId: null },
     { symbol: 'c', value: 2, unit: null, nodeId: null },
     { symbol: 'μ', value: 1000, unit: 'rps', nodeId: null },
+    { symbol: '容量', value: 2000, unit: 'rps', nodeId: null },
   ],
   value: 0.5,
   unit: null,
+  plain: '使用率 ρ {=} = 每秒進來 {λ} ÷ 每秒能處理 {容量}（低於 0.7，正常）',
+  view: 'BOTH',
+  requestClass: null,
 }
 
 describe('formatNumber', () => {

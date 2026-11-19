@@ -62,7 +62,7 @@ class SimulateEndpointTest {
             // 步驟的內容由 engine 的 ExplanationTest 驗算，這裡只確認 JSON 形狀
             JsonNode step = node.at("/explanation/0");
             assertThat(fieldNames(step)).containsExactlyInAnyOrder("group", "label", "formula", "terms", "value",
-                    "unit");
+                    "unit", "plain", "view", "requestClass");
             assertThat(fieldNames(step.at("/terms/0"))).containsExactlyInAnyOrder("symbol", "value", "unit", "nodeId");
         }
 
@@ -413,7 +413,7 @@ class SimulateEndpointTest {
                 "retentionDays", "diskGbPerInstance", "explanation");
         // 步驟的內容由 engine 的 ExplanationTest 驗算，這裡只確認 JSON 形狀
         assertThat(fieldNames(storage.at("/explanation/0"))).containsExactlyInAnyOrder("group", "label", "formula",
-                "terms", "value", "unit");
+                "terms", "value", "unit", "plain", "view", "requestClass");
         assertThat(storage.get("dailyBytes").asDouble()).isCloseTo(100 * 1_000 * 86_400.0, within(1e-3));
         assertThat(storage.get("totalBytes").asDouble()).isCloseTo(100 * 1_000 * 86_400.0 * 365, within(1.0));
         assertThat(storage.get("daysUntilFull").isNull()).isTrue();

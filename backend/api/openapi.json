@@ -355,7 +355,7 @@
         "properties" : {
           "group" : {
             "type" : "string",
-            "description" : "分組標題，例如「到達量」「最熱那台」；同一組的步驟相鄰"
+            "description" : "分組標題，例如「進來多少」「最熱那台」；同一組的步驟相鄰"
           },
           "label" : {
             "type" : "string"
@@ -366,7 +366,7 @@
           },
           "terms" : {
             "type" : "array",
-            "description" : "代入值，依在 formula 裡出現的順序",
+            "description" : "代入值，依在 formula 裡出現的順序；只有 plain 用到的接在後面",
             "items" : {
               "$ref" : "#/components/schemas/ExplanationTerm"
             }
@@ -378,10 +378,24 @@
           },
           "unit" : {
             "type" : [ "string", "null" ],
-            "description" : "rps、ms、%（0–1 的比例，顯示成百分比）、bytes、days、GB，沒有單位時為 null"
+            "description" : "rps、ms、%（0–1 的比例，顯示成百分比）、bytes、days，沒有單位時為 null"
+          },
+          "plain" : {
+            "type" : [ "string", "null" ],
+            "description" : "白話的一句，例如「每秒能處理 {=} = {c} × {μ}」：{符號} 代入 terms 裡的值、{=} 代入這一步的結果、{@符號} 是那個代入值來自的節點名稱；view 為 FORMULA 時為 null"
+          },
+          "view" : {
+            "type" : "string",
+            "description" : "BOTH：兩種模式都顯示；PLAIN：只在白話模式；FORMULA：只在看公式時",
+            "enum" : [ "BOTH", "PLAIN", "FORMULA" ]
+          },
+          "requestClass" : {
+            "type" : [ "string", "null" ],
+            "description" : "read、write 各算一次的步驟是 READ 或 WRITE，兩者相同時前端合成一行；其他為 null",
+            "enum" : [ "ALL", "READ", "WRITE" ]
           }
         },
-        "required" : [ "formula", "group", "label", "terms", "unit", "value" ]
+        "required" : [ "formula", "group", "label", "plain", "requestClass", "terms", "unit", "value", "view" ]
       },
       "ExplanationTerm" : {
         "type" : "object",
