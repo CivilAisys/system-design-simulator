@@ -109,15 +109,35 @@ class ExplanationTest {
                 return;
             }
             // 有熱點的 Cache，兩邊各自也有「到達量 λ」
-            assertThat(step(inGroup(steps, "到達量"), "到達量 λ").value()).as(id).isEqualTo(node.arrivalRps().total());
+            List<ExplanationStep> arrival = inGroup(steps, "到達量");
+            assertThat(step(arrival, "到達量 λ").value()).as(id).isEqualTo(node.arrivalRps().total());
+            assertThat(step(arrival, "read 到達量").value()).as(id).isEqualTo(node.arrivalRps().read());
+            assertThat(step(arrival, "write 到達量").value()).as(id).isEqualTo(node.arrivalRps().write());
             assertThat(step(steps, "節點延遲 W").value()).as(id).isEqualTo(node.avgLatencyMs());
-            if (node.utilization() != null) {
-                assertThat(step(steps, "使用率 ρ").value()).as(id).isEqualTo(node.utilization());
-            }
-            if (node.rejectedRps() > 0 || node.capacityRps() == null) {
+            if (node.capacityRps() == null) {
+                assertThat(step(steps, "放行量").value()).as(id).isEqualTo(node.throughputRps());
                 assertThat(step(steps, "拒絕量").value()).as(id).isEqualTo(node.rejectedRps());
+                return;
+            }
+            assertThat(step(steps, "使用率 ρ").value()).as(id).isEqualTo(node.utilization());
+            assertThat(step(steps, "容量").value()).as(id).isEqualTo(node.capacityRps());
+            if (node.avgQueueMs() != null) {
+                assertThat(step(steps, "平均排隊時間 Wq").value()).as(id).isEqualTo(node.avgQueueMs());
+            }
+            if (node.droppedRps() > 0) {
+                assertThat(steps).as(id).anyMatch(step -> node.droppedRps() == step.value());
+            }
+            if (node.hotSpot() != null) {
+                assertInstance(inGroup(steps, "最熱那台"), node.hotSpot().hottest());
+                assertInstance(inGroup(steps, "其他 2 台"), node.hotSpot().others());
             }
         });
+    }
+
+    private static void assertInstance(List<ExplanationStep> group, InstanceResult instance) {
+        assertThat(step(group, "到達量 λ").value()).isEqualTo(instance.arrivalRps().total());
+        assertThat(step(group, "使用率 ρ").value()).isEqualTo(instance.utilization());
+        assertThat(step(group, "節點延遲 W").value()).isEqualTo(instance.avgLatencyMs());
     }
 
     @Test
@@ -141,7 +161,7 @@ class ExplanationTest {
                 .filter(term -> term.nodeId() != null)
                 .forEach(term -> {
                     // 到達量和 backlog 指到上游，成功率和端到端延遲指到下游
-                    boolean upstream = step.group().equals("到達量") || step.group().equals("Message Queue 積壓");
+                    boolean upstream = List.of("到達量", "複製", "Message Queue 積壓").contains(step.group());
                     Set<String> neighbours = EVERY_COMPONENT_EDGES.stream()
                             .filter(edge -> (upstream ? edge.target() : edge.source()).equals(id))
                             .map(edge -> upstream ? edge.source() : edge.target())
@@ -151,14 +171,26 @@ class ExplanationTest {
     }
 
     @Test
+    void termsFollowTheEdgeOrder() {
+        SimulationResult result = everyComponent();
+        // DB 的上游依邊的輸入順序：Cache（e7）、API（e8）、Worker（e14）
+        assertThat(step(result.explanations().get("db"), "write 到達量").terms())
+                .extracting(ExplanationTerm::nodeId).containsExactly("cache", null, "api", null, "worker", null);
+        // API 平行呼叫的下游依出邊順序
+        assertThat(step(result.explanations().get("api"), "read 端到端延遲").terms())
+                .extracting(ExplanationTerm::nodeId).filteredOn(nodeId -> nodeId != null)
+                .containsExactly("cache", "replica", "pay", "mq");
+    }
+
+    @Test
     void mm1StepsAreLockedIn() {
         // spec 4.6：λ = 80、c = 1、μ = 100 → ρ = 0.8、Wq = 40 ms、W = 50 ms
         List<ExplanationStep> steps = clientServiceDb(80, new CapacityParams(1, 1, 10)).explanations().get("svc");
 
         assertThat(steps).extracting(ExplanationStep::group, ExplanationStep::label, ExplanationStep::formula)
                 .containsExactly(
-                        tuple("到達量", "read 到達量 λ_read", "{λ₁}"),
-                        tuple("到達量", "write 到達量 λ_write", "{λ₁}"),
+                        tuple("到達量", "read 到達量 λ_read（上游處理完的 × visits）", "{x₁} × {v₁}"),
+                        tuple("到達量", "write 到達量 λ_write（上游處理完的 × visits）", "{x₁} × {v₁}"),
                         tuple("到達量", "到達量 λ", "{λ_read} + {λ_write}"),
                         tuple("容量與使用率", "worker 數 c", "{instances} × {concurrency}"),
                         tuple("容量與使用率", "每個 worker 的服務率 μ", "1000 ÷ {serviceTimeMs}"),
@@ -174,12 +206,20 @@ class ExplanationTest {
                         tuple("成功率", "write 成功率 S（從這裡開始到完整成功）", "{pass} × {S₁}^{k₁}"),
                         tuple("端到端延遲", "read 端到端延遲 L（從這裡開始）", "{W} + {v₁} × ({d₁} + {L₁})"),
                         tuple("端到端延遲", "write 端到端延遲 L（從這裡開始）", "{W} + {v₁} × ({d₁} + {L₁})"));
-        assertThat(step(steps, "read 到達量").terms()).containsExactly(new ExplanationTerm("λ₁", 72.0, "rps", "client"));
-        assertThat(step(steps, "使用率 ρ").value()).isCloseTo(0.8, within(EPS));
-        assertThat(step(steps, "等待機率 P_wait").value()).isCloseTo(0.8, within(EPS));
-        assertThat(step(steps, "平均排隊時間 Wq").value()).isCloseTo(40, within(EPS));
-        assertThat(step(steps, "節點延遲 W").value()).isCloseTo(50, within(EPS));
-        assertThat(term(step(steps, "read 端到端延遲"), "L₁").nodeId()).isEqualTo("db");
+        // DB 的延遲是 1 ms 加上極小的排隊時間
+        double db = 1 + 1e-6;
+        List<Double> expected = List.of(72.0, 8.0, 80.0, 1.0, 100.0, 100.0, 0.8, 0.8, 0.8, 40.0, 50.0, 1.0, 1.0, 1.0,
+                1.0, 50 + 1 + db, 50 + 1 + db);
+        assertThat(steps).extracting(ExplanationStep::value).hasSameSizeAs(expected);
+        for (int i = 0; i < expected.size(); i++) {
+            assertThat(steps.get(i).value()).as(steps.get(i).label()).isCloseTo(expected.get(i), within(1e-3));
+        }
+        assertThat(step(steps, "read 到達量").terms()).containsExactly(new ExplanationTerm("x₁", 72.0, "rps", "client"),
+                new ExplanationTerm("v₁", 1.0, "%", null));
+        assertThat(step(steps, "使用率 ρ").terms()).containsExactly(new ExplanationTerm("λ", 80.0, "rps", null),
+                new ExplanationTerm("c", 1.0, null, null), new ExplanationTerm("μ", 100.0, "rps", null));
+        assertThat(step(steps, "read 端到端延遲").terms()).extracting(ExplanationTerm::symbol, ExplanationTerm::nodeId)
+                .containsExactly(tuple("W", null), tuple("v₁", null), tuple("d₁", null), tuple("L₁", "db"));
     }
 
     @Test
@@ -218,6 +258,8 @@ class ExplanationTest {
         assertThat(term(service, "S₁")).extracting(ExplanationTerm::nodeId).isEqualTo("a");
         assertThat(term(service, "S₁").value()).isCloseTo(0.9, within(EPS));
         assertThat(term(service, "k₁").value()).isEqualTo(2.0);
+        assertThat(term(service, "S₂").nodeId()).isEqualTo("b");
+        assertThat(term(service, "k₂").value()).isEqualTo(1.0);
         assertThat(step(client, "read 成功率").formula()).isEqualTo("{p₁} × {S₁}");
         assertThat(step(client, "每秒完整成功").value()).isCloseTo(810, within(EPS));
     }
@@ -250,6 +292,7 @@ class ExplanationTest {
         assertThat(step(inGroup(steps, "最熱那台"), "到達量 λ").value())
                 .isEqualTo(cache.hotSpot().hottest().arrivalRps().total());
         assertThat(step(steps, "使用率 ρ（取較高的一邊").value()).isEqualTo(cache.utilization());
+        assertThat(step(steps, "容量（全部 3 台）").value()).isEqualTo(cache.capacityRps());
         assertThat(step(steps, "處理量").value()).isEqualTo(cache.throughputRps());
     }
 
@@ -272,7 +315,9 @@ class ExplanationTest {
 
         assertThat(step(steps, "每秒留在 Queue 的訊息").value())
                 .isEqualTo(result.edges().get("consume").backlogRps());
-        assertThat(step(steps, "超過容量、丟棄").value()).isCloseTo(400, within(EPS));
+        // 留在 queue 的不算丟棄，所以這一步不叫「丟棄」
+        assertThat(step(steps, "超過容量").label()).isEqualTo("超過容量");
+        assertThat(step(steps, "超過容量").value()).isCloseTo(400, within(EPS));
         assertThat(step(steps, "丟棄量（留在 queue 的不算）").value()).isEqualTo(result.nodes().get("worker").droppedRps());
         assertThat(step(result.explanations().get("mq"), "write 成功率").formula())
                 .isEqualTo("{pass}（訊息進到 queue 就算成功，consumer 的處理是非同步的）");
@@ -296,11 +341,14 @@ class ExplanationTest {
                         new Edge("repl", "db", "replica", 1, 1, 50))));
         NodeResult replica = result.nodes().get("replica");
 
-        assertThat(step(result.explanations().get("rl"), "拒絕量").label()).isEqualTo("拒絕量（λ > limitRps：LIMITING）");
+        assertThat(step(result.explanations().get("rl"), "拒絕量").label()).isEqualTo("拒絕量（λ > limitRps：限流中）");
         assertThat(step(result.explanations().get("rl"), "拒絕量").value()).isEqualTo(result.nodes().get("rl").rejectedRps());
         assertThat(step(result.explanations().get("replica"), "丟掉的複製寫入").value())
                 .isCloseTo(replica.droppedRps() * replica.arrivalRps().write() / replica.arrivalRps().total(),
                         within(EPS));
+        assertThat(step(result.explanations().get("replica"), "複製寫入").terms())
+                .containsExactly(new ExplanationTerm("primary 的 write", result.edges().get("repl").rps().write(), "rps",
+                        "db"));
         // 複製是非同步的，不在 primary 的路徑上
         assertThat(step(result.explanations().get("db"), "write 端到端延遲").formula())
                 .isEqualTo("{W}（非同步的下游不在路徑上）");

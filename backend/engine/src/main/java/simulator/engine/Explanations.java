@@ -18,6 +18,10 @@ final class Explanations {
     private static final String MS = "ms";
     // 0–1 的比例，前端顯示成百分比
     private static final String PERCENT = "%";
+    // read、write 兩個 request class
+    private static final boolean[] CLASSES = {true, false};
+    // 1 − Σ visits 的浮點誤差（例如 7 條同權重的邊），小於它就當成沒有命中
+    private static final double TOLERANCE = 1e-9;
 
     private static final String SENT = "送出";
     private static final String ARRIVAL = "到達量";
@@ -91,7 +95,7 @@ final class Explanations {
             case StorageNode storage -> queue(storage.capacityParams(), result, steps);
             case ReadReplicaNode replica -> {
                 queue(replica.capacityParams(), result, steps);
-                lag(result, steps);
+                replication(replica, result, steps);
             }
             case MessageQueueNode queue -> queue(queue.capacityParams(), result, steps);
             case RateLimiterNode limiter -> {
@@ -107,7 +111,7 @@ final class Explanations {
         if (result.warnings().contains(NodeWarning.BACKLOG)) {
             backlog(node, result, steps);
         }
-        for (boolean read : new boolean[] {true, false}) {
+        for (boolean read : CLASSES) {
             if (result.arrivalRps().of(read) > 0) {
                 success(node, read, steps);
             }
@@ -115,7 +119,7 @@ final class Explanations {
         if (node instanceof ClientNode) {
             successRps(node, result, steps);
         }
-        for (boolean read : new boolean[] {true, false}) {
+        for (boolean read : CLASSES) {
             if (result.arrivalRps().of(read) > 0) {
                 latency(node, read, steps);
             }
@@ -134,35 +138,43 @@ final class Explanations {
     /** 各上游送來的量加總（spec 3.3、3.4）；每條邊的量是上游處理完的流量 × visits。 */
     private void arrival(Node node, NodeResult result, List<ExplanationStep> steps) {
         List<Edge> in = incoming.getOrDefault(node.id(), List.of());
-        for (boolean read : new boolean[] {true, false}) {
+        for (boolean read : CLASSES) {
             List<ExplanationTerm> terms = new ArrayList<>();
+            List<String> parts = new ArrayList<>();
             for (int i = 0; i < in.size(); i++) {
                 Edge edge = in.get(i);
-                terms.add(term("λ" + subscript(i + 1), edges.get(edge.id()).rps().of(read), RPS, edge.source()));
+                Node source = graph.node(edge.source());
+                String x = "x" + subscript(i + 1);
+                String v = "v" + subscript(i + 1);
+                parts.add("{" + x + "} × {" + v + "}");
+                terms.add(term(x, processed(nodes.get(source.id()), read), RPS, source.id()));
+                terms.add(term(v, graph.visits(edge, read), visitsUnit(source)));
             }
-            steps.add(step(ARRIVAL, className(read) + " 到達量 λ_" + className(read), sum(terms),
-                    result.arrivalRps().of(read), RPS, terms));
+            steps.add(step(ARRIVAL, className(read) + " 到達量 λ_" + className(read) + "（上游處理完的 × visits）",
+                    parts.isEmpty() ? "0" : String.join(" + ", parts), result.arrivalRps().of(read), RPS, terms));
         }
         steps.add(step(ARRIVAL, "到達量 λ", "{λ_read} + {λ_write}", result.arrivalRps().total(), RPS,
                 term("λ_read", result.arrivalRps().read(), RPS), term("λ_write", result.arrivalRps().write(), RPS)));
     }
 
-    /** 整個節點是一個 M/M/c（spec 4.2）。 */
+    /**
+     * 整個節點是一個 M/M/c（spec 4.2）。consumer 有 backlog 時，超過容量的部分有一部分留在 queue 裡，
+     * 不全是丟棄（見 {@link #backlog}）。
+     */
     private static void queue(CapacityParams params, NodeResult result, List<ExplanationStep> steps) {
-        double lambda = result.arrivalRps().total();
-        queue(CAPACITY, result.utilization() < 1 ? LATENCY : OVERLOAD, params, lambda, result.utilization(),
-                result.status(), result.avgQueueMs(), result.avgLatencyMs(),
-                lambda - result.throughputRps() - result.rejectedRps(), steps);
+        String excessLabel = result.warnings().contains(NodeWarning.BACKLOG) ? "超過容量" : "超過容量、丟棄";
+        queue(CAPACITY, result.utilization() < 1 ? LATENCY : OVERLOAD, params, InstanceResult.of(result),
+                result.avgQueueMs(), excessLabel, steps);
     }
 
     /**
      * 一個 M/M/c 的步驟：c、μ、容量、ρ 放在 {@code capacityGroup}；{@code latencyGroup} 在 ρ < 1 時是 Erlang C 和延遲，
-     * 過載時是處理量和超過容量的部分。
-     * {@code excess} 是超過容量的量（λ − c × μ）；有 backlog 時和節點的丟棄量不同，見 {@link #backlog}。
+     * 過載時是處理量和超過容量的部分（λ − c × μ）。
      */
-    private static void queue(String capacityGroup, String latencyGroup, CapacityParams params, double lambda,
-            double utilization, Status status, Double queueMs, Double latencyMs, double excess,
-            List<ExplanationStep> steps) {
+    private static void queue(String capacityGroup, String latencyGroup, CapacityParams params, InstanceResult outcome,
+            Double queueMs, String excessLabel, List<ExplanationStep> steps) {
+        double lambda = outcome.arrivalRps().total();
+        double utilization = outcome.utilization();
         double c = params.workers();
         double mu = params.serviceRate();
         steps.add(step(capacityGroup, "worker 數 c", "{instances} × {concurrency}", c, null,
@@ -172,7 +184,7 @@ final class Explanations {
                 term("serviceTimeMs", params.serviceTimeMs(), MS)));
         steps.add(step(capacityGroup, "容量", "{c} × {μ}", params.capacityRps(), RPS,
                 term("c", c, null), term("μ", mu, RPS)));
-        steps.add(step(capacityGroup, "使用率 ρ（" + threshold(status) + "）", "{λ} ÷ ({c} × {μ})", utilization, null,
+        steps.add(step(capacityGroup, "使用率 ρ（" + threshold(outcome.status()) + "）", "{λ} ÷ ({c} × {μ})", utilization, null,
                 term("λ", lambda, RPS), term("c", c, null), term("μ", mu, RPS)));
         if (utilization < 1) {
             double load = lambda / mu;
@@ -183,12 +195,13 @@ final class Explanations {
             steps.add(step(latencyGroup, "平均排隊時間 Wq", "{P_wait} ÷ ({c} × {μ} − {λ}) × 1000", queueMs, MS,
                     term("P_wait", waiting, PERCENT), term("c", c, null), term("μ", mu, RPS),
                     term("λ", lambda, RPS)));
-            steps.add(step(latencyGroup, "節點延遲 W", "{Wq} + {1/μ}", latencyMs, MS,
+            steps.add(step(latencyGroup, "節點延遲 W", "{Wq} + {1/μ}", outcome.avgLatencyMs(), MS,
                     term("Wq", queueMs, MS), term("1/μ", params.serviceTimeMs(), MS)));
         } else {
             steps.add(step(latencyGroup, "處理量", "{c} × {μ}", params.capacityRps(), RPS,
                     term("c", c, null), term("μ", mu, RPS)));
-            steps.add(step(latencyGroup, "超過容量、丟棄", "{λ} − {容量}", excess, RPS,
+            steps.add(step(latencyGroup, excessLabel, "{λ} − {容量}", overCapacity(outcome.arrivalRps(),
+                    outcome.throughputRps()), RPS,
                     term("λ", lambda, RPS), term("容量", params.capacityRps(), RPS)));
             steps.add(step(latencyGroup, "節點延遲 W", "ρ ≥ 1 時佇列會無限成長，穩態下沒有定義", null, MS));
         }
@@ -205,6 +218,8 @@ final class Explanations {
         instance(HOTTEST, "{λ} × {hotShare}", params.withInstances(1), lambda, share, hot, steps);
         instance(othersGroup, "{λ} × (1 − {hotShare})", params.withInstances(params.instances() - 1), lambda, share,
                 others, steps);
+        steps.add(step(WHOLE_NODE, "容量（全部 " + params.instances() + " 台）", "{c} × {μ}", result.capacityRps(), RPS,
+                term("c", (double) params.workers(), null), term("μ", params.serviceRate(), RPS)));
         steps.add(step(WHOLE_NODE, "使用率 ρ（取較高的一邊，" + threshold(result.status()) + "）",
                 "max({ρ_最熱}, {ρ_其他})", result.utilization(), null,
                 term("ρ_最熱", hot.utilization(), null), term("ρ_其他", others.utilization(), null)));
@@ -214,27 +229,42 @@ final class Explanations {
             steps.add(step(WHOLE_NODE, "丟棄量", "{最熱} + {其他}", result.droppedRps(), RPS,
                     term("最熱", hot.droppedRps(), RPS), term("其他", others.droppedRps(), RPS)));
         }
-        if (result.avgLatencyMs() == null) {
-            steps.add(step(WHOLE_NODE, "節點延遲 W", "有流量的一邊過載，穩態下沒有定義", null, MS));
+        weighted("平均排隊時間 Wq", "Wq", queueMs(params.withInstances(1), hot), hot,
+                queueMs(params.withInstances(params.instances() - 1), others), others, lambda, result.avgQueueMs(),
+                steps);
+        weighted("節點延遲 W", "W", hot.avgLatencyMs(), hot, others.avgLatencyMs(), others, lambda,
+                result.avgLatencyMs(), steps);
+    }
+
+    /** 整個節點的延遲依流量加權平均（spec 4.2.2）；有流量的一邊過載時沒有定義。 */
+    private static void weighted(String label, String symbol, Double hotValue, InstanceResult hot, Double otherValue,
+            InstanceResult others, double lambda, Double value, List<ExplanationStep> steps) {
+        String hotSymbol = symbol + "_最熱";
+        if (value == null) {
+            steps.add(step(WHOLE_NODE, label, "有流量的一邊過載，穩態下沒有定義", null, MS));
         } else if (lambda <= 0) {
-            steps.add(step(WHOLE_NODE, "節點延遲 W", "沒有流量時用最熱那台的值 {W_最熱}", result.avgLatencyMs(), MS,
-                    term("W_最熱", hot.avgLatencyMs(), MS)));
+            steps.add(step(WHOLE_NODE, label, "沒有流量時用最熱那台的值 {" + hotSymbol + "}", value, MS,
+                    term(hotSymbol, hotValue, MS)));
         } else {
-            steps.add(step(WHOLE_NODE, "節點延遲 W（依流量加權平均）", "({W_最熱} × {λ_最熱} + {W_其他} × {λ_其他}) ÷ {λ}",
-                    result.avgLatencyMs(), MS, term("W_最熱", hot.avgLatencyMs(), MS),
-                    term("λ_最熱", hot.arrivalRps().total(), RPS), term("W_其他", others.avgLatencyMs(), MS),
-                    term("λ_其他", others.arrivalRps().total(), RPS), term("λ", lambda, RPS)));
+            String otherSymbol = symbol + "_其他";
+            steps.add(step(WHOLE_NODE, label + "（依流量加權平均）",
+                    "({" + hotSymbol + "} × {λ_最熱} + {" + otherSymbol + "} × {λ_其他}) ÷ {λ}", value, MS,
+                    term(hotSymbol, hotValue, MS), term("λ_最熱", hot.arrivalRps().total(), RPS),
+                    term(otherSymbol, otherValue, MS), term("λ_其他", others.arrivalRps().total(), RPS),
+                    term("λ", lambda, RPS)));
         }
+    }
+
+    /** 一部分機器的平均排隊時間；過載時沒有定義。 */
+    private static Double queueMs(CapacityParams params, InstanceResult instance) {
+        return instance.utilization() < 1 ? MmcQueue.queueMs(params, instance.arrivalRps().total()) : null;
     }
 
     private static void instance(String group, String arrivalFormula, CapacityParams params, double lambda,
             double share, InstanceResult instance, List<ExplanationStep> steps) {
-        double own = instance.arrivalRps().total();
-        steps.add(step(group, "到達量 λ", arrivalFormula, own, RPS,
+        steps.add(step(group, "到達量 λ", arrivalFormula, instance.arrivalRps().total(), RPS,
                 term("λ", lambda, RPS), term("hotShare", share, PERCENT)));
-        Double queueMs = instance.utilization() < 1 ? MmcQueue.queueMs(params, own) : null;
-        queue(group, group, params, own, instance.utilization(), instance.status(), queueMs,
-                instance.avgLatencyMs(), instance.droppedRps(), steps);
+        queue(group, group, params, instance, queueMs(params, instance), "超過容量、丟棄", steps);
     }
 
     /** Cache、CDN 只有沒命中的 read 往下送，write 全部往下送（spec 3.3）。 */
@@ -255,12 +285,21 @@ final class Explanations {
         String comparison = lambda > limit ? "λ > " + limitName : "λ ≤ " + limitName;
         steps.add(step(group, "放行量", "min({λ}, {" + limitName + "})", result.throughputRps(), RPS,
                 term("λ", lambda, RPS), term(limitName, limit, RPS)));
-        steps.add(step(group, "拒絕量（" + comparison + "：" + result.status() + "）", "{λ} − {放行量}",
+        steps.add(step(group, "拒絕量（" + comparison + "：" + admitLabel(result.status()) + "）", "{λ} − {放行量}",
                 result.rejectedRps(), RPS, term("λ", lambda, RPS), term("放行量", result.throughputRps(), RPS)));
     }
 
-    /** Read Replica 過載時，丟棄量依比例落在複製寫入上（spec 4.2.3）。 */
-    private static void lag(NodeResult result, List<ExplanationStep> steps) {
+    /**
+     * Read Replica（spec 4.2.3）：primary 處理完的 write 全部複製過來；過載時丟棄量依比例落在複製寫入上。
+     */
+    private void replication(ReadReplicaNode replica, NodeResult result, List<ExplanationStep> steps) {
+        for (Edge edge : incoming.getOrDefault(replica.id(), List.of())) {
+            if (graph.isAsync(edge)) {
+                double replicated = edges.get(edge.id()).rps().write();
+                steps.add(step(REPLICATION, "複製寫入（primary 處理完的 write）", "{primary 的 write}", replicated, RPS,
+                        term("primary 的 write", replicated, RPS, edge.source())));
+            }
+        }
         if (!result.warnings().contains(NodeWarning.REPLICATION_LAG)) {
             return;
         }
@@ -277,7 +316,7 @@ final class Explanations {
      */
     private void backlog(Node node, NodeResult result, List<ExplanationStep> steps) {
         double lambda = result.arrivalRps().total();
-        double excess = lambda - result.throughputRps() - result.rejectedRps();
+        double excess = overCapacity(result.arrivalRps(), result.throughputRps());
         double excessShare = lambda > 0 ? excess / lambda : 0;
         double failedRead = success.failedDownstreamShare(node.id(), true);
         double failedWrite = success.failedDownstreamShare(node.id(), false);
@@ -325,7 +364,7 @@ final class Explanations {
                 case ReadReplicaNode replica -> "（沒有下游）";
                 case MessageQueueNode queue -> "（訊息進到 queue 就算成功，consumer 的處理是非同步的）";
                 case ExternalApiNode api -> "（沒有下游）";
-                case ClientNode client -> throw new IllegalStateException();
+                case ClientNode client -> throw new IllegalStateException("Client has no pass rate");
             };
         }
         steps.add(step(SUCCESS, cls + " 成功率 S（從這裡開始到完整成功）", formula, success.of(node.id(), read), PERCENT,
@@ -336,7 +375,7 @@ final class Explanations {
     private void successRps(Node client, NodeResult result, List<ExplanationStep> steps) {
         List<ExplanationTerm> terms = new ArrayList<>();
         List<String> parts = new ArrayList<>();
-        for (boolean read : new boolean[] {true, false}) {
+        for (boolean read : CLASSES) {
             double sent = result.arrivalRps().of(read);
             if (sent > 0) {
                 String cls = className(read);
@@ -439,7 +478,7 @@ final class Explanations {
     /** Cache、CDN：命中的部分直接成功，沒命中的部分要靠下游。 */
     private String cached(Node node, boolean read, List<ExplanationTerm> terms) {
         double hit = 1 - graph.outgoing(node.id()).stream().mapToDouble(edge -> graph.visits(edge, read)).sum();
-        if (hit <= 0) {
+        if (hit < TOLERANCE) {
             return weightedSum(node, read, terms);
         }
         terms.add(term("命中", hit, PERCENT));
@@ -458,19 +497,40 @@ final class Explanations {
         return total > 0 ? result.arrivalRps().of(read) * result.throughputRps() / total : 0;
     }
 
+    /** 依 ρ 分級的門檻（spec 4.4）。 */
     private static String threshold(Status status) {
+        String warn = number(Status.WARN_AT);
+        String critical = number(Status.CRITICAL_AT);
+        String overloaded = number(Status.OVERLOADED_AT);
         return switch (status) {
-            case OK -> "ρ < 0.7：OK";
-            case WARN -> "0.7 ≤ ρ < 0.9：WARN";
-            case CRITICAL -> "0.9 ≤ ρ < 1：CRITICAL";
-            case OVERLOADED -> "ρ ≥ 1：OVERLOADED";
-            default -> throw new IllegalArgumentException("Not a utilization status: " + status);
+            case OK -> "ρ < " + warn + "：OK";
+            case WARN -> warn + " ≤ ρ < " + critical + "：WARN";
+            case CRITICAL -> critical + " ≤ ρ < " + overloaded + "：CRITICAL";
+            case OVERLOADED -> "ρ ≥ " + overloaded + "：OVERLOADED";
+            case LIMITING, NOT_LIMITING, OVER_QUOTA, WITHIN_QUOTA ->
+                    throw new IllegalArgumentException("Not a utilization status: " + status);
         };
     }
 
-    private static String sum(List<ExplanationTerm> terms) {
-        return terms.isEmpty() ? "0"
-                : String.join(" + ", terms.stream().map(term -> "{" + term.symbol() + "}").toList());
+    /** Rate Limiter、External API 的狀態，用畫面上的名稱。 */
+    private static String admitLabel(Status status) {
+        return switch (status) {
+            case LIMITING -> "限流中";
+            case NOT_LIMITING -> "未觸發";
+            case OVER_QUOTA -> "超過配額";
+            case WITHIN_QUOTA -> "配額內";
+            case OK, WARN, CRITICAL, OVERLOADED -> throw new IllegalArgumentException("Not an admit status: " + status);
+        };
+    }
+
+    /** 超過容量的量 λ − 處理量（Message Queue 的 consumer 只會是 Service，沒有拒絕量）。 */
+    private static double overCapacity(ClassRates arrival, double throughput) {
+        return arrival.total() - throughput;
+    }
+
+    /** 門檻寫成 0.7、1，不寫 1.0。 */
+    private static String number(double value) {
+        return value == Math.rint(value) ? Long.toString((long) value) : Double.toString(value);
     }
 
     private static String className(boolean read) {

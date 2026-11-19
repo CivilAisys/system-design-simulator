@@ -161,7 +161,7 @@ system-design-simulator/
 **新增一種 Node type**：
 
 - 後端 api：`NodeType` 加一個值；`NodeParamsDto` 加該類型的參數（`description` 寫上用到它的 type）；`NodeDto.toNode` 建出 engine 的節點。改完跑 `./gradlew :api:generateOpenApi` 更新 `openapi.json`，前端的型別跟著重新產生。
-- 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`。
+- 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則、`Explanations` 的計算步驟和成功率說明），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`、`Explanations`。新元件的計算步驟要補進 4.9 的涵蓋範圍。
 - 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。只換名稱、圖示和部分預設值、type 不變的元件（例如 Redis Cluster）不是新的 type，加在同一個檔案的 `PRESETS`，元件面板讀的是由兩者組成的 `PALETTE`。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、類別（流量／運算／資料／非同步，元件面板依它分組、圖示方塊依它上色；`NODE_TYPES` 要把同類別的排在一起）、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類、節點上顯示的指標，元件面板、畫布、屬性面板和讀入存檔都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
 - 計算和既有 type 完全相同、只差預設值和名稱的新 type（例如 CDN 之於 Cache、Object Storage 之於 Database）：engine 讓兩者實作同一個 sealed 子介面（`CachingNode`、`StorageNode`），`switch` 對子介面寫一個分支，計算和驗證共用；前端 `NODE_KINDS` 仍各寫一筆。
 - 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。只能連到特定 type 時寫在 `outputTargets`（例如 Database 只能連到 Read Replica）。
@@ -504,15 +504,15 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 | 分組 | 步驟 |
 |---|---|
 | 送出（Client） | read = rps × readRatio、write = rps − read |
-| 到達量 | read、write 各是每條上游邊送來的量加總（上游處理完的流量 × visits，3.3、3.4），再加成 λ |
+| 到達量 | read、write 各是每條上游邊送來的量加總：上游處理完的流量 × visits（3.3、3.4），再加成 λ |
 | 容量與使用率 | c = instances × concurrency、μ = 1000 ÷ serviceTimeMs、容量 c × μ、ρ = λ ÷ (c × μ)；ρ 的名稱後面寫判斷狀態的門檻（4.4） |
 | 節點延遲（ρ < 1） | a = λ ÷ μ、P_wait = ErlangC(c, a)、Wq = P_wait ÷ (c × μ − λ)、W = Wq + 1/μ（4.2，Erlang C 只列結果，不列遞迴過程） |
 | 過載（ρ ≥ 1） | 處理量 = c × μ、超過容量的部分 = λ − c × μ、W 沒有定義 |
-| 最熱那台、其他 N 台、整個節點（有 hotShare 的 Cache） | 兩邊各自的到達量和上面兩組；整個節點的 ρ 取較高的一邊、處理量和丟棄量加總、延遲依流量加權平均（4.2.2） |
+| 最熱那台、其他 N 台、整個節點（有 hotShare 的 Cache） | 兩邊各自的到達量和上面兩組；整個節點的容量、ρ 取較高的一邊、處理量和丟棄量加總、Wq 和 W 依流量加權平均（4.2.2） |
 | 往下游（Cache、CDN） | 沒命中、往下游送的 read = 處理的 read × (1 − hitRatio) |
-| 限流、配額（Rate Limiter、External API） | 放行量 = min(λ, 上限)、拒絕量 = λ − 放行量（名稱寫狀態）、固定的節點延遲（4.2.1） |
-| 複製（Read Replica） | 有 `REPLICATION_LAG` 時，丟掉的複製寫入 = 丟棄量 × λ_write ÷ λ（4.2.3） |
-| Message Queue 積壓（consumer） | 有 `BACKLOG` 時，每條 Message Queue 送來的邊每秒留在 queue 的訊息，以及扣掉留在 queue 的部分之後的丟棄量（4.2.4） |
+| 限流、配額（Rate Limiter、External API） | 放行量 = min(λ, 上限)、拒絕量 = λ − 放行量（名稱寫畫面上的狀態，例如「限流中」）、固定的節點延遲（4.2.1） |
+| 複製（Read Replica） | 複製寫入 = primary 處理完的 write；有 `REPLICATION_LAG` 時，丟掉的複製寫入 = 丟棄量 × λ_write ÷ λ（4.2.3） |
+| Message Queue 積壓（consumer） | 有 `BACKLOG` 時，每條 Message Queue 送來的邊每秒留在 queue 的訊息，以及扣掉留在 queue 的部分之後的丟棄量（4.2.4）；這時「過載」那組的 λ − c × μ 只叫「超過容量」，不叫丟棄 |
 | 成功率 | 每個有流量的 class：通過率 pass = 處理量 ÷ λ，以及從這個節點開始的 S（4.3.1），下游的 S 當作代入值；Client 再加上每秒完整成功的請求數 |
 | 端到端延遲 | 每個有流量的 class：從這個節點開始的 L = W + Σ visits × (邊的延遲 + 下游的 L)，平行呼叫取最大值；非同步的下游不在路徑上（4.3） |
 

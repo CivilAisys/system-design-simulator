@@ -14,14 +14,19 @@ public enum Status {
     OVER_QUOTA,
     WITHIN_QUOTA;
 
+    // 分級門檻（spec 4.4），計算說明也用同一組
+    static final double WARN_AT = 0.7;
+    static final double CRITICAL_AT = 0.9;
+    static final double OVERLOADED_AT = 1.0;
+
     public static Status of(double utilization) {
-        if (utilization >= 1.0) {
+        if (utilization >= OVERLOADED_AT) {
             return OVERLOADED;
         }
-        if (utilization >= 0.9) {
+        if (utilization >= CRITICAL_AT) {
             return CRITICAL;
         }
-        if (utilization >= 0.7) {
+        if (utilization >= WARN_AT) {
             return WARN;
         }
         return OK;
