@@ -8,9 +8,18 @@ import { STALE_RESULT_NOTE } from '@/canvas/format'
 import { cn } from '@/lib/utils'
 import { MAX_MULTIPLIERS, parseMaxMultiplier, useStoredMaxMultiplier } from './loadCurve'
 import { useLoadSweep } from './useLoadSweep'
+import { PrototypeSwitcher, useVariant } from '@/components/PrototypeSwitcher'
 
 // ECharts 很大，切到這個分頁才載入（同 Sankey）
-const LoadCurveChart = lazy(() => import('./LoadCurveChart').then((module) => ({ default: module.LoadCurveChart })))
+const LoadCurvePrototype = lazy(() =>
+  import('./LoadCurvePrototype').then((module) => ({ default: module.LoadCurvePrototype })),
+)
+// PROTOTYPE：變體清單也放在這裡，切換列不必等圖表載入
+const VARIANTS = [
+  { key: 'A', name: '兩張圖＋全高色帶，延遲軸封頂' },
+  { key: 'B', name: '重點卡＋流量尺，延遲軸貼合資料' },
+  { key: 'C', name: '對數延遲軸＋底部色條＋條列結論' },
+] as const
 
 type LoadCurvePanelProps = {
   // 畫面上的拓撲，用來找節點名稱
@@ -26,6 +35,7 @@ type LoadCurvePanelProps = {
 export function LoadCurvePanel({ topology, result, resultTopology, stale, theme }: LoadCurvePanelProps) {
   const [maxMultiplier, setMaxMultiplier] = useStoredMaxMultiplier()
   const sweep = useLoadSweep(result.valid ? resultTopology : null, maxMultiplier)
+  const variant = useVariant(VARIANTS)
   // 只在名稱改了時才換函式：拖動節點時 topology 也會換，圖表不能因此重畫
   const namesKey = JSON.stringify(topology.nodes.map((node) => [node.id, node.name]))
   const nodeName = useMemo(() => {
@@ -55,7 +65,15 @@ export function LoadCurvePanel({ topology, result, resultTopology, stale, theme 
     body = (
       <div className={cn('h-full min-h-40', (stale || sweep.loading) && 'opacity-50')}>
         <Suspense>
-          <LoadCurveChart sweep={sweep.data} nodeName={nodeName} theme={theme} />
+          {resultTopology && (
+            <LoadCurvePrototype
+              sweep={sweep.data}
+              topology={resultTopology}
+              nodeName={nodeName}
+              theme={theme}
+              variant={variant}
+            />
+          )}
         </Suspense>
       </div>
     )
@@ -80,6 +98,7 @@ export function LoadCurvePanel({ topology, result, resultTopology, stale, theme 
         {stale && <span className="text-xs text-muted-foreground">{STALE_RESULT_NOTE}</span>}
       </div>
       <div className="min-h-0 flex-1">{body}</div>
+      <PrototypeSwitcher variants={VARIANTS} />
     </div>
   )
 }
