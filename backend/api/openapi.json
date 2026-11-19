@@ -35,6 +35,34 @@
           }
         }
       }
+    },
+    "/api/v1/simulate/sweep" : {
+      "post" : {
+        "tags" : [ "simulate-controller" ],
+        "operationId" : "sweep",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SweepRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SweepResult"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components" : {
@@ -664,6 +692,150 @@
           }
         },
         "required" : [ "code", "edgeId", "message", "nodeId" ]
+      },
+      "SweepRequest" : {
+        "type" : "object",
+        "properties" : {
+          "topology" : {
+            "$ref" : "#/components/schemas/Topology"
+          },
+          "maxMultiplier" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "所有 Client 的 rps 最多放大幾倍，> 0 且 ≤ 10；前端只送 2、5、10",
+            "example" : 2
+          }
+        },
+        "required" : [ "maxMultiplier", "topology" ]
+      },
+      "BusiestNode" : {
+        "type" : "object",
+        "properties" : {
+          "nodeId" : {
+            "type" : "string"
+          },
+          "utilization" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        },
+        "required" : [ "nodeId", "utilization" ]
+      },
+      "SweepLatency" : {
+        "type" : "object",
+        "description" : "null：任一 Client 的路徑上有節點過載（沒有定義），或沒有這個 class 的請求",
+        "properties" : {
+          "read" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "write" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          }
+        },
+        "required" : [ "read", "write" ]
+      },
+      "SweepPoint" : {
+        "type" : "object",
+        "properties" : {
+          "multiplier" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "totalRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "endToEndMs" : {
+            "$ref" : "#/components/schemas/SweepLatency",
+            "description" : "所有 Client 依請求數加權的端到端延遲"
+          },
+          "successRate" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "完整成功的請求 ÷ 送出的請求，0–1；沒有流量時為 1"
+          },
+          "busiest" : {
+            "description" : "ρ 最高的節點；沒有候選節點時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/BusiestNode"
+            }, {
+              "type" : "null"
+            } ]
+          }
+        },
+        "required" : [ "busiest", "endToEndMs", "multiplier", "successRate", "totalRps" ]
+      },
+      "SweepResult" : {
+        "type" : "object",
+        "properties" : {
+          "valid" : {
+            "type" : "boolean"
+          },
+          "errors" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ValidationError"
+            }
+          },
+          "currentRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "目前所有 Client 的 rps 加總（倍率 1）；驗證失敗時為 0"
+          },
+          "points" : {
+            "type" : "array",
+            "description" : "依倍率排序：從 0 到上限均分 40 點，加上門檻那幾點；放大後超出參數範圍的點略過",
+            "items" : {
+              "$ref" : "#/components/schemas/SweepPoint"
+            }
+          },
+          "thresholds" : {
+            "$ref" : "#/components/schemas/SweepThresholds"
+          }
+        },
+        "required" : [ "currentRps", "errors", "points", "thresholds", "valid" ]
+      },
+      "SweepThreshold" : {
+        "type" : "object",
+        "properties" : {
+          "multiplier" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "totalRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "nodeId" : {
+            "type" : "string",
+            "description" : "第一個到達門檻的節點"
+          }
+        },
+        "required" : [ "multiplier", "nodeId", "totalRps" ]
+      },
+      "SweepThresholds" : {
+        "type" : "object",
+        "properties" : {
+          "warn" : {
+            "description" : "第一個節點 ρ 到 0.7 的位置；範圍內沒有到時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/SweepThreshold"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "overload" : {
+            "description" : "第一個節點過載（ρ 到 1）的位置；範圍內沒有到時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/SweepThreshold"
+            }, {
+              "type" : "null"
+            } ]
+          }
+        },
+        "required" : [ "overload", "warn" ]
       }
     }
   }
