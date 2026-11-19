@@ -293,6 +293,7 @@ function Simulator() {
           theme={theme}
           canFocusError={(e) => errorNodeIds(e).length > 0}
           onFocusError={focusError}
+          onSelectNode={focusNode}
         />
       </section>
     </div>

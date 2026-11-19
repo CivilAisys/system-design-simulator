@@ -18,6 +18,9 @@ final class Explanations {
     private static final String MS = "ms";
     // 0–1 的比例，前端顯示成百分比
     private static final String PERCENT = "%";
+    private static final String BYTES = "bytes";
+    private static final String DAYS = "days";
+    private static final String GB = "GB";
     // read、write 兩個 request class
     private static final boolean[] CLASSES = {true, false};
     // 1 − Σ visits 的浮點誤差（例如 7 條同權重的邊），小於它就當成沒有命中
@@ -37,6 +40,10 @@ final class Explanations {
     private static final String BACKLOG = "Message Queue 積壓";
     private static final String SUCCESS = "成功率";
     private static final String END_TO_END = "端到端延遲";
+    private static final String STORAGE_DAILY = "每日增量";
+    private static final String STORAGE_TOTAL = "總量";
+    private static final String STORAGE_INSTANCE = "每台";
+    private static final String STORAGE_DISK = "磁碟";
 
     private final TopologyGraph graph;
     private final Map<String, NodeResult> nodes;
@@ -69,6 +76,54 @@ final class Explanations {
             all.put(node.id(), graph.isUnconnected(node.id()) ? List.of() : explanations.explain(node));
         }
         return all;
+    }
+
+    /**
+     * 儲存量估算的步驟（spec 4.8）。Object Storage 沒有副本、機器數和磁碟，只有增量和總量；
+     * 沒有設定磁碟容量或沒有寫入（不會滿）時不列磁碟那幾步。{@code writes} 是處理完的 write。
+     */
+    static List<ExplanationStep> storage(StorageNode node, NodeResult result, double writes, List<Node> replicas,
+            StorageEstimate estimate) {
+        var steps = new ArrayList<ExplanationStep>();
+        ClassRates arrival = result.arrivalRps();
+        StorageSizing sizing = node.sizing();
+        if (arrival.total() > 0) {
+            steps.add(step(STORAGE_DAILY, "處理完的 write（丟棄依 read／write 比例）", "{λ_write} × {處理量} ÷ {λ}", writes,
+                    RPS, term("λ_write", arrival.write(), RPS, node.id()), term("處理量", result.throughputRps(), RPS),
+                    term("λ", arrival.total(), RPS)));
+        } else {
+            steps.add(step(STORAGE_DAILY, "處理完的 write", "{λ_write}（沒有流量）", writes, RPS,
+                    term("λ_write", arrival.write(), RPS, node.id())));
+        }
+        steps.add(step(STORAGE_DAILY, "每日增量", "{處理完的 write} × {bytesPerWrite} × 86,400", estimate.dailyBytes(),
+                BYTES, term("處理完的 write", writes, RPS), term("bytesPerWrite", sizing.bytesPerWrite(), BYTES)));
+        steps.add(step(STORAGE_TOTAL, "總量", "{每日增量} × {retentionDays}", estimate.totalBytes(), BYTES,
+                term("每日增量", estimate.dailyBytes(), BYTES), term("retentionDays", sizing.retentionDays(), DAYS)));
+        if (!(node instanceof DatabaseNode database)) {
+            return steps;
+        }
+        String names = String.join("、", replicas.stream().map(Node::name).toList());
+        String replicaNote = replicas.isEmpty() ? "（沒有 Read Replica）" : "（Read Replica：" + names + "）";
+        if (estimate.replicasLagging()) {
+            replicaNote += "，副本複製跟不上，實際副本量會比這少";
+        }
+        steps.add(step(STORAGE_TOTAL, "含副本" + replicaNote, "{總量} × (1 + {Read Replica 數})",
+                estimate.totalWithReplicasBytes(), BYTES, term("總量", estimate.totalBytes(), BYTES),
+                term("Read Replica 數", (double) estimate.replicas(), null)));
+        int instances = database.capacityParams().instances();
+        steps.add(step(STORAGE_INSTANCE, "每台（資料平均分布）", "{總量} ÷ {instances}", estimate.perInstanceBytes(), BYTES,
+                term("總量", estimate.totalBytes(), BYTES), term("instances", (double) instances, null)));
+        if (estimate.daysUntilFull() == null) {
+            return steps;
+        }
+        double dailyPerInstance = estimate.dailyBytes() / instances;
+        steps.add(step(STORAGE_DISK, "每台每日增量", "{每日增量} ÷ {instances}", dailyPerInstance, BYTES,
+                term("每日增量", estimate.dailyBytes(), BYTES), term("instances", (double) instances, null)));
+        String comparison = estimate.fillsDisk() ? "< retentionDays：保留期內就會滿" : "≥ retentionDays：保留期內不會滿";
+        steps.add(step(STORAGE_DISK, "磁碟幾天後會滿（" + comparison + "）", "{diskGbPerInstance} × 10⁹ ÷ {每台每日增量}",
+                estimate.daysUntilFull(), DAYS, term("diskGbPerInstance", sizing.diskGbPerInstance(), GB),
+                term("每台每日增量", dailyPerInstance, BYTES)));
+        return steps;
     }
 
     private List<ExplanationStep> explain(Node node) {

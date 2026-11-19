@@ -350,7 +350,7 @@
           },
           "unit" : {
             "type" : [ "string", "null" ],
-            "description" : "rps、ms、%（0–1 的比例，顯示成百分比），沒有單位時為 null"
+            "description" : "rps、ms、%（0–1 的比例，顯示成百分比）、bytes、days、GB，沒有單位時為 null"
           }
         },
         "required" : [ "formula", "group", "label", "terms", "unit", "value" ]
@@ -596,9 +596,16 @@
             "type" : [ "number", "null" ],
             "format" : "double",
             "description" : "計算時用的 diskGbPerInstance，沒有設定時和 OBJECT_STORAGE 為 null"
+          },
+          "explanation" : {
+            "type" : "array",
+            "description" : "計算步驟（spec 4.9），格式同 NodeResult.explanation；未連線的節點為空陣列",
+            "items" : {
+              "$ref" : "#/components/schemas/ExplanationStep"
+            }
           }
         },
-        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerInstance", "fillsDisk", "perInstanceBytes", "replicas", "replicasLagging", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
+        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerInstance", "explanation", "fillsDisk", "perInstanceBytes", "replicas", "replicasLagging", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
       },
       "Summary" : {
         "type" : "object",

@@ -154,7 +154,7 @@ public record SimulationResponse(
             @Schema(requiredMode = REQUIRED, description = "代入值，依在 formula 裡出現的順序") List<ExplanationTermDto> terms,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "這一步的結果；沒有定義時為 null（例如過載時的延遲）")
             Double value,
-            @Schema(requiredMode = REQUIRED, nullable = true, description = "rps、ms、%（0–1 的比例，顯示成百分比），沒有單位時為 null")
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "rps、ms、%（0–1 的比例，顯示成百分比）、bytes、days、GB，沒有單位時為 null")
             String unit) {
 
         static ExplanationStepDto from(ExplanationStep step) {
@@ -244,12 +244,15 @@ public record SimulationResponse(
             boolean fillsDisk,
             @Schema(requiredMode = REQUIRED, description = "計算時用的 retentionDays") double retentionDays,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "計算時用的 diskGbPerInstance，沒有設定時和 OBJECT_STORAGE 為 null")
-            Double diskGbPerInstance) {
+            Double diskGbPerInstance,
+            @Schema(requiredMode = REQUIRED, description = "計算步驟（spec 4.9），格式同 NodeResult.explanation；未連線的節點為空陣列")
+            List<ExplanationStepDto> explanation) {
 
         static StorageEstimateDto from(StorageEstimate estimate) {
             return new StorageEstimateDto(estimate.dailyBytes(), estimate.totalBytes(), estimate.replicas(),
                     estimate.totalWithReplicasBytes(), estimate.replicasLagging(), estimate.perInstanceBytes(), estimate.daysUntilFull(),
-                    estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerInstance());
+                    estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerInstance(),
+                    estimate.explanation().stream().map(ExplanationStepDto::from).toList());
         }
     }
 

@@ -64,6 +64,12 @@ describe('formatTerm', () => {
     expect(formatTerm({ value: 0.01, unit: 'ms' })).toBe('0.010')
     expect(formatTerm({ value: null, unit: 'ms' })).toBe(DASH)
   })
+
+  it('儲存量：bytes 換單位並帶著單位，天數和 GB 只有數字', () => {
+    expect(formatTerm({ value: 2000, unit: 'bytes' })).toBe('2.00 KB')
+    expect(formatTerm({ value: 30, unit: 'days' })).toBe('30')
+    expect(formatTerm({ value: 1000, unit: 'GB' })).toBe('1,000')
+  })
 })
 
 describe('formatResult', () => {
@@ -72,6 +78,8 @@ describe('formatResult', () => {
     expect(formatResult({ value: 22.857, unit: 'ms' })).toBe('22.9 ms')
     expect(formatResult({ value: 0.81, unit: '%' })).toBe('81.0%')
     expect(formatResult({ value: 0.5, unit: null })).toBe('0.50')
+    expect(formatResult({ value: 17.28e9, unit: 'bytes' })).toBe('17.3 GB')
+    expect(formatResult({ value: 231.48, unit: 'days' })).toBe('約 231 天')
   })
 
   it('null 是沒有定義，不是 0', () => {
