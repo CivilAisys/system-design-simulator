@@ -43,7 +43,7 @@ function Simulator() {
   const [restored] = useState(() => restoreTopology(initialTopology))
   const editor = useTopologyEditor(restored.topology)
   const { topology } = editor
-  const { screenToFlowPosition, fitView } = useReactFlow()
+  const { screenToFlowPosition, fitView, getNode, getZoom, setCenter } = useReactFlow()
   const canvasRef = useRef<HTMLElement>(null)
   const bottleneck = useBottleneckToast()
   const { result, running, error, stale, autoRun, setAutoRun, run, reset } = useSimulation(editor.model, {
@@ -59,6 +59,8 @@ function Simulator() {
   // 通知和畫布右緣的距離：浮出的面板蓋住畫布右側時，通知移到它的左邊
   const toastRight = TOAST_GAP + (propertiesFloating ? FLOATING_PANEL_INSET : 0)
   const pinButton = useRefocusAfterToggle(propertiesPinned)
+  // 屬性面板的「怎麼算的」預設收起，展開後換節點仍保持展開；重新整理後回到收起
+  const [explanationOpen, setExplanationOpen] = useState(false)
   useEditShortcuts({ undo, redo, copy: editor.copy, paste: editor.paste })
   useAutosave(topology, restored)
   // 換了拓撲之後把整張圖放進畫面。fitView 要等新節點量好尺寸，React Flow 會自己排隊，
@@ -138,6 +140,17 @@ function Simulator() {
     }
     editor.select({ nodeId: error.nodeId, edgeId: error.nodeId == null ? error.edgeId : null })
     void fitView({ nodes: ids.map((id) => ({ id })), duration: 300, maxZoom: 1.5 })
+  }
+
+  // 計算說明裡點節點名稱：選取它（屬性面板換成它的算式），畫布平移到它，縮放不變
+  function focusNode(id: string) {
+    editor.select({ nodeId: id, edgeId: null })
+    const node = getNode(id)
+    if (node) {
+      const x = node.position.x + (node.measured?.width ?? 0) / 2
+      const y = node.position.y + (node.measured?.height ?? 0) / 2
+      void setCenter(x, y, { zoom: getZoom(), duration: 300 })
+    }
   }
 
   const invalidCount = result && !result.valid ? result.errors.length : 0
@@ -253,7 +266,11 @@ function Simulator() {
             nodeResults={result?.nodes}
             edgeResults={result?.edges}
             stale={stale}
+            invalid={result != null && !result.valid}
             onUpdateNode={editor.updateNode}
+            onSelectNode={focusNode}
+            explanationOpen={explanationOpen}
+            onToggleExplanation={() => setExplanationOpen((open) => !open)}
             onUpdateEdge={editor.updateEdge}
             pinned={propertiesPinned}
             onTogglePin={pinButton.wrap(togglePropertiesPinned)}

@@ -104,7 +104,7 @@ final class Explanations {
             }
             case ExternalApiNode api -> {
                 admit(QUOTA, "quotaRps", api.quotaRps(), result, steps);
-                steps.add(step(QUOTA, "節點延遲 W", "固定是 {latencyMs}", result.avgLatencyMs(), MS,
+                steps.add(step(QUOTA, "節點延遲 W", "{latencyMs}（固定）", result.avgLatencyMs(), MS,
                         term("latencyMs", api.latencyMs(), MS)));
             }
         }
@@ -243,7 +243,7 @@ final class Explanations {
         if (value == null) {
             steps.add(step(WHOLE_NODE, label, "有流量的一邊過載，穩態下沒有定義", null, MS));
         } else if (lambda <= 0) {
-            steps.add(step(WHOLE_NODE, label, "沒有流量時用最熱那台的值 {" + hotSymbol + "}", value, MS,
+            steps.add(step(WHOLE_NODE, label, "{" + hotSymbol + "}（沒有流量時用最熱那台的值）", value, MS,
                     term(hotSymbol, hotValue, MS)));
         } else {
             String otherSymbol = symbol + "_其他";

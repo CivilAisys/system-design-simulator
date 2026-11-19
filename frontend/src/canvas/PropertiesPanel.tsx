@@ -1,16 +1,18 @@
 import { Fragment, useId, type ReactNode, type Ref } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { PanelRightOpen, Pin, PinOff, Trash2 } from 'lucide-react'
+import { ChevronDown, PanelRightOpen, Pin, PinOff, Trash2 } from 'lucide-react'
 import { totalRps, type EdgeResult, type NodeResult } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ExplanationSteps } from '@/explanation/ExplanationSteps'
+import { explanationState, type ExplanationStep } from '@/explanation/explanation'
 import { cn } from '@/lib/utils'
 import { NEW_DISK_GB, NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
-import { formatClassRates, formatRps, formatUtilization } from './format'
+import { formatClassRates, formatRps, formatUtilization, STALE_RESULT_NOTE } from './format'
 import { unconnectedNodeIds } from './graph'
 import { hotShareHint, replicasHint, workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
@@ -39,7 +41,14 @@ type PropertiesPanelProps = {
   edgeResults: Record<string, EdgeResult> | undefined
   // 拓撲在上次 Run 之後改過，結果可能不準
   stale: boolean
+  // 上次 Run 驗證失敗，沒有計算結果
+  invalid: boolean
   onUpdateNode: (id: string, patch: NodePatch) => void
+  // 點計算說明裡的節點名稱：選取它並移到畫面上
+  onSelectNode: (id: string) => void
+  // 「怎麼算的」有沒有展開。放在 App：沒釘住時面板會隨選取消失再出現，換節點後仍要保持展開
+  explanationOpen: boolean
+  onToggleExplanation: () => void
   onUpdateEdge: (id: string, patch: EdgePatch) => void
   // 釘住時固定在畫布右側；沒釘住時浮在畫布上（App 只在剛好選了一個時放出來）
   pinned: boolean
@@ -54,7 +63,11 @@ export function PropertiesPanel({
   nodeResults,
   edgeResults,
   stale,
+  invalid,
   onUpdateNode,
+  onSelectNode,
+  explanationOpen,
+  onToggleExplanation,
   onUpdateEdge,
   pinned,
   onTogglePin,
@@ -66,14 +79,27 @@ export function PropertiesPanel({
   let content
   if (selectedNodes.length === 1 && selectedEdges.length === 0) {
     const node = selectedNodes[0]
+    const unconnected = unconnectedNodeIds([node.data.node], edges).has(node.id)
     // key：換選取時重建，輸入框裡打到一半的字不會帶到別的節點
     content = (
       <NodeProperties
         key={node.id}
         node={node}
         result={nodeResults?.[node.id]}
-        unconnected={unconnectedNodeIds([node.data.node], edges).has(node.id)}
+        unconnected={unconnected}
         onUpdate={onUpdateNode}
+        explanation={
+          <ExplanationSection
+            steps={nodeResults?.[node.id]?.explanation}
+            unconnected={unconnected}
+            invalid={invalid}
+            stale={stale}
+            open={explanationOpen}
+            onToggle={onToggleExplanation}
+            nodeName={(id) => nodes.find((n) => n.id === id)?.data.node.name}
+            onSelectNode={onSelectNode}
+          />
+        }
       />
     )
   } else if (selectedEdges.length === 1 && selectedNodes.length === 0) {
@@ -152,9 +178,11 @@ type NodePropertiesProps = {
   // 沒有任何邊，和畫布一樣不列 ρ（見 unconnectedNodeIds）
   unconnected: boolean
   onUpdate: (id: string, patch: NodePatch) => void
+  // 「怎麼算的」區塊，放在指標下面
+  explanation: ReactNode
 }
 
-function NodeProperties({ node: flowNode, result, unconnected, onUpdate }: NodePropertiesProps) {
+function NodeProperties({ node: flowNode, result, unconnected, onUpdate, explanation }: NodePropertiesProps) {
   const nameId = useId()
   const node = flowNode.data.node
   const { label, icon, category, numberParams, choiceParams, hasHotShare, hasDisk } = NODE_KINDS[node.type]
@@ -296,6 +324,73 @@ function NodeProperties({ node: flowNode, result, unconnected, onUpdate }: NodeP
             aria-label="使用率"
             indicatorClassName={status ? STATUS_FILL[status] : undefined}
           />
+        </div>
+      )}
+      {explanation}
+    </div>
+  )
+}
+
+type ExplanationSectionProps = {
+  steps: ExplanationStep[] | undefined
+  unconnected: boolean
+  invalid: boolean
+  stale: boolean
+  open: boolean
+  onToggle: () => void
+  nodeName: (id: string) => string | undefined
+  onSelectNode: (id: string) => void
+}
+
+// 每個數字怎麼算出來的（spec 4.9），預設收起
+function ExplanationSection({
+  steps,
+  unconnected,
+  invalid,
+  stale,
+  open,
+  onToggle,
+  nodeName,
+  onSelectNode,
+}: ExplanationSectionProps) {
+  const contentId = useId()
+  const state = explanationState({ steps, unconnected, invalid })
+  if (state === 'hidden') {
+    return null
+  }
+
+  let content
+  if (state === 'unconnected') {
+    content = <p className="text-xs text-muted-foreground">未連線，沒有計算</p>
+  } else if (state === 'pending' || !steps) {
+    content = <p className="text-xs text-muted-foreground">Run 之後顯示</p>
+  } else {
+    content = (
+      <>
+        {stale && <p className="text-xs text-muted-foreground">{STALE_RESULT_NOTE}</p>}
+        <div className={cn(stale && 'opacity-50')}>
+          <ExplanationSteps steps={steps} nodeName={nodeName} onSelectNode={onSelectNode} />
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <div className="grid gap-2 border-t pt-3">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-auto justify-between px-1 py-1 text-sm font-medium"
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={onToggle}
+      >
+        怎麼算的
+        <ChevronDown className={cn('transition-transform', open && 'rotate-180')} />
+      </Button>
+      {open && (
+        <div id={contentId} className="grid gap-2">
+          {content}
         </div>
       )}
     </div>
