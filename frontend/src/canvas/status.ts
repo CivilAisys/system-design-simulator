@@ -116,10 +116,11 @@ export const SANKEY_COLORS = {
 
 export type SankeyColors = (typeof SANKEY_COLORS)[Theme]
 
-// 負載曲線的三條線（spec 第 6 節）；成功率用 OK 的綠色，參考線用 SANKEY_COLORS 的狀態色
-export const CURVE_COLORS: Record<Theme, { read: string; write: string; success: string }> = {
-  dark: { read: '#60a5fa', write: '#c084fc', success: SANKEY_COLORS.dark.ok },
-  light: { read: '#2563eb', write: '#9333ea', success: SANKEY_COLORS.light.ok },
+// 負載曲線的線和格線（spec 第 6 節）；成功率用 OK 的綠色，色帶和「目前」用 SANKEY_COLORS 的狀態色。
+// 格線、軸線要自己給：ECharts 預設的格線在深色主題太亮
+export const CURVE_COLORS: Record<Theme, { read: string; write: string; success: string; grid: string }> = {
+  dark: { read: '#60a5fa', write: '#c084fc', success: SANKEY_COLORS.dark.ok, grid: '#26324f' },
+  light: { read: '#2563eb', write: '#9333ea', success: SANKEY_COLORS.light.ok, grid: '#e4e6ef' },
 }
 
 // Sankey 節點依狀態取 SANKEY_COLORS 裡的哪個顏色
