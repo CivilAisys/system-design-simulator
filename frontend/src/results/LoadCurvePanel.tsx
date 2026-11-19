@@ -6,7 +6,7 @@ import type { SimulationResult, Topology } from '@/api/client'
 import type { Theme } from '@/theme'
 import { STALE_RESULT_NOTE } from '@/canvas/format'
 import { cn } from '@/lib/utils'
-import { MAX_MULTIPLIERS, parseMaxMultiplier, useStoredMaxMultiplier } from './loadCurve'
+import { curveHeadline, latencyLines, MAX_MULTIPLIERS, parseMaxMultiplier, useStoredMaxMultiplier } from './loadCurve'
 import { useLoadSweep } from './useLoadSweep'
 
 // ECharts 很大，切到這個分頁才載入（同 Sankey）
@@ -32,6 +32,7 @@ export function LoadCurvePanel({ topology, result, resultTopology, stale, theme 
     const names = new Map<string, string>(JSON.parse(namesKey))
     return (id: string) => names.get(id) ?? id
   }, [namesKey])
+  const lines = useMemo(() => (sweep.data ? latencyLines(sweep.data.points) : []), [sweep.data])
 
   let body
   if (!result.valid) {
@@ -53,10 +54,13 @@ export function LoadCurvePanel({ topology, result, resultTopology, stale, theme 
     body = <Message>Client 的 rps 都是 0，沒有可以放大的流量</Message>
   } else {
     body = (
-      <div className={cn('h-full min-h-40', (stale || sweep.loading) && 'opacity-50')}>
-        <Suspense>
-          <LoadCurveChart sweep={sweep.data} nodeName={nodeName} theme={theme} />
-        </Suspense>
+      <div className={cn('flex h-full flex-col gap-1', (stale || sweep.loading) && 'opacity-50')}>
+        <p className="shrink-0 text-sm font-medium">{curveHeadline(sweep.data, lines, nodeName)}</p>
+        <div className="min-h-56 flex-1">
+          <Suspense>
+            <LoadCurveChart sweep={sweep.data} lines={lines} nodeName={nodeName} theme={theme} />
+          </Suspense>
+        </div>
       </div>
     )
   }

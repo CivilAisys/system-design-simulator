@@ -1,74 +1,170 @@
 import { useEffect } from 'react'
 import { LineChart, type LineSeriesOption } from 'echarts/charts'
 import {
+  AxisPointerComponent,
   GridComponent,
   LegendComponent,
+  MarkAreaComponent,
   MarkLineComponent,
+  MarkPointComponent,
   TooltipComponent,
+  type AxisPointerComponentOption,
   type GridComponentOption,
   type LegendComponentOption,
+  type MarkAreaComponentOption,
   type MarkLineComponentOption,
+  type MarkPointComponentOption,
   type TooltipComponentOption,
 } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { SweepResult } from '@/api/client'
 import type { Theme } from '@/theme'
-import { formatRpsNumber } from '@/canvas/format'
+import { formatMs, formatRps, formatRpsNumber } from '@/canvas/format'
 import { CURVE_COLORS, SANKEY_COLORS } from '@/canvas/status'
-import { curveSeries, pointTooltip, referenceLines, type ReferenceLine } from './loadCurve'
+import { curveBands, latencyAxis, pointTooltip, successSeries, type LatencyLine } from './loadCurve'
 import { useECharts } from './useECharts'
 
 // 只載入用到的部分，避免把整個 ECharts 打包進來
-echarts.use([LineChart, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
+echarts.use([
+  LineChart,
+  AxisPointerComponent,
+  GridComponent,
+  LegendComponent,
+  MarkAreaComponent,
+  MarkLineComponent,
+  MarkPointComponent,
+  TooltipComponent,
+  CanvasRenderer,
+])
 
 type CurveOption = echarts.ComposeOption<
-  LineSeriesOption | GridComponentOption | LegendComponentOption | MarkLineComponentOption | TooltipComponentOption
+  | LineSeriesOption
+  | AxisPointerComponentOption
+  | GridComponentOption
+  | LegendComponentOption
+  | MarkAreaComponentOption
+  | MarkLineComponentOption
+  | MarkPointComponentOption
+  | TooltipComponentOption
 >
 
 type LoadCurveChartProps = {
   sweep: SweepResult
+  lines: LatencyLine[]
   nodeName: (id: string) => string
   theme: Theme
 }
 
-export function LoadCurveChart({ sweep, nodeName, theme }: LoadCurveChartProps) {
+export function LoadCurveChart({ sweep, lines, nodeName, theme }: LoadCurveChartProps) {
   const { containerRef, chartRef } = useECharts()
 
   useEffect(() => {
-    // notMerge：門檻線消失時（例如加了 Rate Limiter）舊的線不能留著。
+    // notMerge：色帶消失時（例如加了 Rate Limiter）舊的不能留著。
     // nodeName 只在名稱改了時才換（見 LoadCurvePanel），拖動節點不會重畫、不會重置 legend
-    chartRef.current?.setOption(curveOption(sweep, nodeName, theme), { notMerge: true })
-  }, [chartRef, sweep, nodeName, theme])
+    chartRef.current?.setOption(curveOption(sweep, lines, nodeName, theme), { notMerge: true })
+  }, [chartRef, sweep, lines, nodeName, theme])
 
   return <div ref={containerRef} className="size-full" />
 }
 
-function curveOption(sweep: SweepResult, nodeName: (id: string) => string, theme: Theme): CurveOption {
+// 色帶的透明度：淡淡一層，不蓋過線
+const BAND_ALPHA = 0.14
+// 上下兩張圖的左右邊界要一樣，X 軸才對得齊
+const GRID_SIDES = { left: 56, right: 48 }
+
+function curveOption(
+  sweep: SweepResult,
+  lines: LatencyLine[],
+  nodeName: (id: string) => string,
+  theme: Theme,
+): CurveOption {
   const colors = SANKEY_COLORS[theme]
-  const lineColors = CURVE_COLORS[theme]
-  const series = curveSeries(sweep.points)
-  const referenceColor: Record<ReferenceLine['kind'], string> = {
-    current: colors.neutral,
-    warn: colors.warn,
-    overload: colors.over,
-  }
-  const markLine: MarkLineComponentOption = {
+  const curve = CURVE_COLORS[theme]
+  const bands = curveBands(sweep, nodeName)
+  const axis = latencyAxis(sweep.points, lines)
+  const bandColor = { warn: colors.warn, overload: colors.over }
+
+  // 色帶畫滿兩張圖的高度；標籤只在上面那張寫
+  const markArea = (withLabels: boolean): MarkAreaComponentOption => ({
+    silent: true,
+    data: bands.map((band) => [
+      {
+        xAxis: band.from,
+        itemStyle: { color: withAlpha(bandColor[band.kind], BAND_ALPHA) },
+        // 用函式：字串的 formatter 會把名稱裡的 {a} 之類當成樣板
+        label: withLabels
+          ? { position: 'insideTopLeft', color: bandColor[band.kind], fontSize: 11, formatter: () => band.label }
+          : { show: false },
+      },
+      { xAxis: band.to },
+    ]),
+  })
+  const current = (withLabel: boolean): MarkLineComponentOption => ({
     symbol: 'none',
     silent: true,
-    data: referenceLines(sweep, nodeName).map((line) => ({
-      xAxis: line.totalRps,
-      // 用函式：字串的 formatter 會把名稱裡的 {a} 之類當成樣板
-      label: { formatter: () => line.label, color: referenceColor[line.kind], position: 'insideEndTop' },
-      lineStyle: { color: referenceColor[line.kind], type: line.kind === 'current' ? 'dashed' : 'solid' },
-    })),
+    data: [
+      {
+        xAxis: sweep.currentRps,
+        lineStyle: { color: colors.neutral, type: 'dashed', width: 1 },
+        label: withLabel
+          ? { position: 'end', color: colors.neutral, fontSize: 11, formatter: () => `目前 ${formatRps(sweep.currentRps)}` }
+          : { show: false },
+      },
+    ],
+  })
+  // 延遲超過軸的上限時，在開始超出的地方標出最高值
+  const { max: latencyMax, overflow } = axis
+  const overflowMark: MarkPointComponentOption | undefined =
+    overflow && latencyMax != null
+      ? {
+          symbolSize: 0,
+          silent: true,
+          data: [
+            {
+              name: 'overflow',
+              coord: [overflow.totalRps, latencyMax],
+              label: {
+                // 往下讓開色帶的標籤
+                position: 'bottom',
+                distance: 22,
+                color: colors.text,
+                fontSize: 11,
+                formatter: () => `↑ 之後超出圖外（最高 ${formatMs(overflow.peakMs)}）`,
+              },
+            },
+          ],
+        }
+      : undefined
+
+  const xAxis = (gridIndex: number, showLabels: boolean) => ({
+    type: 'value' as const,
+    gridIndex,
+    min: 0,
+    max: sweep.points.at(-1)?.totalRps,
+    name: showLabels ? '總 rps' : '',
+    nameTextStyle: { color: colors.text },
+    axisLabel: { show: showLabels, color: colors.text, formatter: (value: number) => formatRpsNumber(value) },
+    axisLine: { lineStyle: { color: curve.grid } },
+    axisTick: { show: showLabels, lineStyle: { color: curve.grid } },
+    splitLine: { lineStyle: { color: curve.grid } },
+  })
+  const yStyle = {
+    nameTextStyle: { color: colors.text, align: 'left' as const },
+    axisLabel: { color: colors.text },
+    splitLine: { lineStyle: { color: curve.grid } },
   }
-  const axisStyle = { axisLabel: { color: colors.text }, nameTextStyle: { color: colors.text } }
 
   return {
-    // 只列三條線；放參考線的那個系列不進 legend
-    legend: { top: 0, data: ['read 延遲', 'write 延遲', '成功率'], textStyle: { color: colors.text } },
-    grid: { left: 56, right: 56, top: 40, bottom: 32 },
+    // 只列線；放色帶和「目前」的系列不進 legend
+    legend: { top: 0, data: [...lines.map((line) => line.name), '成功率'], textStyle: { color: colors.text } },
+    // 滑過其中一張圖時，兩張圖的指示線一起動
+    axisPointer: { link: [{ xAxisIndex: 'all' }] },
+    // ECharts 6 預設會依軸名稱縮放 grid（outerBoundsMode: 'auto'），上下兩張就對不齊
+    grid: [
+      { ...GRID_SIDES, outerBoundsMode: 'none', top: 48, bottom: '42%' },
+      { ...GRID_SIDES, outerBoundsMode: 'none', top: '70%', bottom: 28 },
+    ],
     tooltip: {
       trigger: 'axis',
       // ECharts 預設白底，深色主題要自己給
@@ -79,41 +175,57 @@ function curveOption(sweep: SweepResult, nodeName: (id: string) => string, theme
         const first = Array.isArray(params) ? params[0] : params
         const point = first ? sweep.points[first.dataIndex] : undefined
         // 提示是 HTML，節點名稱是使用者輸入的，要跳脫
-        return point ? pointTooltip(point, nodeName).map(echarts.format.encodeHTML).join('<br/>') : ''
+        return point ? pointTooltip(point, lines, nodeName).map(echarts.format.encodeHTML).join('<br/>') : ''
       },
     },
-    xAxis: {
-      type: 'value',
-      name: '總 rps',
-      min: 0,
-      max: sweep.points.at(-1)?.totalRps,
-      nameTextStyle: { color: colors.text },
-      axisLabel: { color: colors.text, formatter: (value: number) => formatRpsNumber(value) },
-    },
+    xAxis: [xAxis(0, false), xAxis(1, true)],
     yAxis: [
-      { type: 'value', name: '延遲 ms', min: 0, ...axisStyle },
-      { type: 'value', name: '成功率 %', min: 0, max: 100, ...axisStyle, splitLine: { show: false } },
+      { type: 'value', gridIndex: 0, name: '延遲 ms', min: 0, max: latencyMax, ...yStyle },
+      { type: 'value', gridIndex: 1, name: '成功率 %', min: 0, max: 100, interval: 50, ...yStyle },
     ],
     series: [
-      { name: 'read 延遲', type: 'line', data: series.read, yAxisIndex: 0, showSymbol: false, color: lineColors.read },
-      {
-        name: 'write 延遲',
+      ...lines.map((line): LineSeriesOption => ({
+        name: line.name,
         type: 'line',
-        data: series.write,
-        yAxisIndex: 0,
+        data: line.data,
         showSymbol: false,
-        color: lineColors.write,
-      },
+        color: curve[line.color],
+      })),
       {
         name: '成功率',
         type: 'line',
-        data: series.success,
+        data: successSeries(sweep.points),
+        xAxisIndex: 1,
         yAxisIndex: 1,
         showSymbol: false,
-        color: lineColors.success,
+        color: curve.success,
       },
-      // 參考線放在一個沒有資料的系列上：在 legend 關掉 read 延遲時，參考線不會跟著消失
-      { name: 'reference', type: 'line', data: [], yAxisIndex: 0, markLine, tooltip: { show: false } },
+      // 色帶、「目前」、超出圖外的標註放在沒有資料的系列上：在 legend 關掉某條線時，它們不會跟著消失
+      {
+        name: 'reference',
+        type: 'line',
+        data: [],
+        tooltip: { show: false },
+        markArea: markArea(true),
+        markLine: current(true),
+        markPoint: overflowMark,
+      },
+      {
+        name: 'reference-success',
+        type: 'line',
+        data: [],
+        tooltip: { show: false },
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        markArea: markArea(false),
+        markLine: current(false),
+      },
     ],
   }
+}
+
+// #rrggbb 加上透明度
+function withAlpha(hex: string, alpha: number) {
+  const value = parseInt(hex.slice(1), 16)
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`
 }
