@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canConnect, createsCycle } from './graph'
+import { canConnect, connectedFirst, createsCycle, unconnectedNodeIds } from './graph'
 
 const edge = (source: string, target: string) => ({ source, target })
 
@@ -56,5 +56,38 @@ describe('canConnect', () => {
   it('其他連線可以', () => {
     expect(canConnect(edges, 'a', 'c')).toBe(true)
     expect(canConnect(edges, 'c', 'd')).toBe(true)
+  })
+})
+
+describe('unconnectedNodeIds', () => {
+  const nodes = [
+    { id: 'c', type: 'CLIENT' as const },
+    { id: 'svc', type: 'SERVICE' as const },
+    { id: 'db', type: 'DATABASE' as const },
+    { id: 'cache', type: 'CACHE' as const },
+    { id: 'tail', type: 'CACHE' as const },
+  ]
+
+  it('沒有任何邊的節點是未連線', () => {
+    expect(unconnectedNodeIds(nodes, [edge('c', 'svc'), edge('svc', 'db'), edge('svc', 'tail')])).toEqual(
+      new Set(['cache']),
+    )
+  })
+
+  it('只有入邊或只有出邊都算有連線', () => {
+    expect(unconnectedNodeIds(nodes, [edge('c', 'svc'), edge('cache', 'db'), edge('svc', 'tail')])).toEqual(
+      new Set(),
+    )
+  })
+
+  it('沒連線的 Client 不算，它照驗證錯誤顯示', () => {
+    expect(unconnectedNodeIds(nodes, [])).toEqual(new Set(['svc', 'db', 'cache', 'tail']))
+  })
+})
+
+describe('connectedFirst', () => {
+  it('未連線的節點移到最後，其他照原本的順序', () => {
+    const nodes = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]
+    expect(connectedFirst(nodes, new Set(['a', 'c'])).map((n) => n.id)).toEqual(['b', 'd', 'a', 'c'])
   })
 })

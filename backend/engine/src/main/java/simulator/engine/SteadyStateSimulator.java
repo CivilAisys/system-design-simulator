@@ -94,7 +94,7 @@ public final class SteadyStateSimulator implements Simulator {
                 NodeResult.client(sent, success.client(id, sent), endToEnd.client(id, sent))));
 
         return new SimulationResult(true, List.of(), inNodeOrder(topology, nodeResults),
-                inEdgeOrder(topology, edgeResults), summarize(topology, nodeResults, endToEnd, bandwidth,
+                inEdgeOrder(topology, edgeResults), summarize(topology, graph, nodeResults, endToEnd, bandwidth,
                         Math.min(cdnOffload, bandwidth.egressBytesPerSec())),
                 estimateStorage(topology, graph, nodeResults));
     }
@@ -165,8 +165,12 @@ public final class SteadyStateSimulator implements Simulator {
      */
     private static ClassRates replicate(ReadReplicaNode replica, DatabaseNode primary, ClassRates arrival,
             Map<String, NodeResult> nodeResults) {
-        NodeResult primaryResult = nodeResults.get(primary.id());
-        double replicated = processedWrites(primaryResult.arrivalRps(), primaryResult.throughputRps());
+        // 未連線的 replica 沒有 primary（spec 4.5），沒有複製寫入
+        double replicated = 0;
+        if (primary != null) {
+            NodeResult primaryResult = nodeResults.get(primary.id());
+            replicated = processedWrites(primaryResult.arrivalRps(), primaryResult.throughputRps());
+        }
         MmcQueue.Outcome outcome = MmcQueue.solve(replica.capacityParams(), arrival);
         NodeResult result = outcome.result();
         boolean lagging = replicated > 0 && result.droppedRps() > 0;
@@ -183,8 +187,10 @@ public final class SteadyStateSimulator implements Simulator {
         Map<String, Integer> replicas = new HashMap<>();
         Set<String> lagging = new HashSet<>();
         for (Node node : topology.nodes()) {
-            if (node instanceof ReadReplicaNode) {
-                String primary = graph.primaryOf(node.id()).id();
+            // 未連線的 replica 沒有 primary，不算進任何 Database 的副本
+            DatabaseNode primaryNode = node instanceof ReadReplicaNode ? graph.primaryOf(node.id()) : null;
+            if (primaryNode != null) {
+                String primary = primaryNode.id();
                 replicas.merge(primary, 1, Integer::sum);
                 if (nodeResults.get(node.id()).warnings().contains(NodeWarning.REPLICATION_LAG)) {
                     lagging.add(primary);
@@ -225,7 +231,7 @@ public final class SteadyStateSimulator implements Simulator {
         return total > 0 ? arrival.write() * throughput / total : 0;
     }
 
-    private static Summary summarize(Topology topology, Map<String, NodeResult> nodeResults,
+    private static Summary summarize(Topology topology, TopologyGraph graph, Map<String, NodeResult> nodeResults,
             EndToEndLatencies endToEnd, Bandwidth bandwidth, double cdnOffload) {
         double offered = 0;
         double succeeded = 0;
@@ -242,7 +248,8 @@ public final class SteadyStateSimulator implements Simulator {
             }
             rejected += nodeResults.get(node.id()).rejectedRps();
             Double utilization = nodeResults.get(node.id()).utilization();
-            if (utilization != null && utilization > highest) {
+            // 未連線的節點不在拓撲裡，不當瓶頸（spec 4.4）
+            if (utilization != null && utilization > highest && !graph.isUnconnected(node.id())) {
                 highest = utilization;
                 bottleneck = node.id();
             }

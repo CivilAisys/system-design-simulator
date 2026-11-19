@@ -3,7 +3,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { totalRps, type ComputedResult, type Topology } from '@/api/client'
 import { DASH, formatClassRates, formatMs, formatOptionalRps, formatRps, formatUtilization } from '@/canvas/format'
-import { STATUS_BADGE, STATUS_FILL, STATUS_LABEL, WARNING_LABEL, WARNING_TITLE } from '@/canvas/status'
+import { connectedFirst, unconnectedNodeIds } from '@/canvas/graph'
+import { displayStatus, STATUS_BADGE, STATUS_FILL, STATUS_LABEL, WARNING_LABEL, WARNING_TITLE } from '@/canvas/status'
+import { describeBottleneck } from './bottleneck'
 import { EndToEndLatencyText } from './EndToEndLatencyText'
 
 type MetricsTableProps = {
@@ -12,7 +14,10 @@ type MetricsTableProps = {
 }
 
 export function MetricsTable({ topology, result }: MetricsTableProps) {
-  const bottleneckId = result.summary.bottleneckNodeId
+  // ρ 最高的節點達到門檻才標「瓶頸」，和瓶頸卡片一致（spec 4.4）
+  const bottleneckId =
+    describeBottleneck(topology, result).kind === 'bottleneck' ? result.summary.bottleneckNodeId : null
+  const unconnected = unconnectedNodeIds(topology.nodes, topology.edges)
 
   return (
     <Table>
@@ -40,17 +45,21 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {/* 依拓撲的節點順序列出，和畫布一致 */}
-        {topology.nodes.map((node) => {
+        {/* 依拓撲的節點順序列出，和畫布一致；未連線的節點不在拓撲裡，移到最後並畫淡 */}
+        {connectedFirst(topology.nodes, unconnected).map((node) => {
           const metrics = result.nodes[node.id]
           if (!metrics) return null
           const { arrivalRps, status } = metrics
+          const shownStatus = displayStatus(metrics, unconnected.has(node.id))
           // 伺服器類節點過載時延遲是「無定義」，要附原因；Client 的 null 是「不適用」
           const latencyReason =
             metrics.avgLatencyMs == null && status === 'OVERLOADED' ? '過載，穩態延遲無定義' : undefined
 
           return (
-            <TableRow key={node.id} className={cn(status === 'OVERLOADED' && 'bg-over-row')}>
+            <TableRow
+              key={node.id}
+              className={cn(status === 'OVERLOADED' && 'bg-over-row', unconnected.has(node.id) && 'opacity-50')}
+            >
               <TableCell className="font-semibold text-foreground">
                 {node.name}
                 {/* 有熱點的 Cache：ρ 和狀態是最熱的那台，容量是所有機器的加總 */}
@@ -87,10 +96,10 @@ export function MetricsTable({ topology, result }: MetricsTableProps) {
               <TableCell className="text-right tabular-nums">{formatRps(metrics.rejectedRps)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatOptionalRps(metrics.successRps)}</TableCell>
               <TableCell>
-                {status ? (
-                  <Badge className={STATUS_BADGE[status]}>
-                    <span aria-hidden className={cn('size-1.5 rounded-full', STATUS_FILL[status])} />
-                    {STATUS_LABEL[status]}
+                {shownStatus ? (
+                  <Badge className={STATUS_BADGE[shownStatus]}>
+                    <span aria-hidden className={cn('size-1.5 rounded-full', STATUS_FILL[shownStatus])} />
+                    {STATUS_LABEL[shownStatus]}
                   </Badge>
                 ) : (
                   DASH

@@ -2,6 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import type { ComputedResult, Topology } from '@/api/client'
 import { NODE_KINDS } from '@/canvas/catalog'
+import { connectedFirst, unconnectedNodeIds } from '@/canvas/graph'
 import { DASH, formatBytes, formatDays } from '@/canvas/format'
 
 type StorageTableProps = {
@@ -12,7 +13,12 @@ type StorageTableProps = {
 // 容量估算（spec 4.8）：每個 Database、Object Storage 一列。磁碟會滿是另一種瓶頸，和 ρ 的瓶頸分開標示。
 // Object Storage 的容量由供應商負責，只列增量和總量；沒有 Database 時不顯示磁碟那一欄
 export function StorageTable({ topology, result }: StorageTableProps) {
-  const rows = topology.nodes.filter((node) => result.storage[node.id])
+  // 未連線的節點不在拓撲裡，和指標表一樣移到最後並畫淡
+  const unconnected = unconnectedNodeIds(topology.nodes, topology.edges)
+  const rows = connectedFirst(
+    topology.nodes.filter((node) => result.storage[node.id]),
+    unconnected,
+  )
   if (rows.length === 0) {
     return <p className="p-4 text-sm text-muted-foreground">拓撲裡沒有 Database 或 Object Storage</p>
   }
@@ -53,9 +59,11 @@ export function StorageTable({ topology, result }: StorageTableProps) {
           // Object Storage 沒有副本、機器數和磁碟由供應商負責
           const { hasDisk } = NODE_KINDS[node.type]
           return (
-            <TableRow key={node.id}>
+            <TableRow key={node.id} className={cn(unconnected.has(node.id) && 'opacity-50')}>
               <TableCell className="font-semibold text-foreground">
                 {node.name}
+                {/* 這張表沒有狀態欄，未連線寫在名稱旁 */}
+                {unconnected.has(node.id) && <span className="ml-2 text-xs text-muted-foreground">未連線</span>}
                 {overloaded && (
                   <span
                     className="ml-2 text-xs text-destructive"
