@@ -15,6 +15,17 @@
 
 Run the same commands locally before opening a PR. If the sync check fails, run `./gradlew :api:generateOpenApi` and commit the updated `openapi.json`.
 
+## Working conventions
+
+These rules used to live only in one machine's agent memory; keep them here so every device and session follows them.
+
+- **Language**: reply to the user in Traditional Chinese (繁體中文). Issues, PR titles and bodies, and the docs (`docs/v1-spec.md`, `ROADMAP.md`, `GLOSSARY.md`) are Traditional Chinese too; commit messages are English. Identifiers, paths and commands stay as written.
+- **Planning**: each version starts with a grilling session with the user. Its decisions go into the version's milestone issues, each with acceptance criteria that list the browser-test items. A UI question gets a throwaway prototype on a `prototype/<name>` branch, left unmerged and linked from the issue.
+- **Ticket loop**, in the agreed order: implement → run the CI commands above → review your own diff against the issue → fix → open the PR, saying what was not browser-tested → once CI is green, merge and start the next ticket. Merging needs the user's go-ahead for that milestone in the current conversation; without it, stop at a green PR and ask.
+- **Ask the user first** before a release PR, before starting the next milestone, on a product decision and on a merge conflict. Release testing follows the 瀏覽器測試 section of `ROADMAP.md`.
+- **Package names**: Java packages and the Gradle `group` live under `simulator.*` (`simulator.engine`, `simulator.api`); name new packages after the domain, never after the repo host, the GitHub org or a person.
+- **Formatting**: `frontend/.prettierrc` records the frontend style (no semicolons, single quotes, print width 120). Prettier is not a dependency or a CI check: format new files with `npx prettier@3 --write <file>` in `frontend/`, and edit existing files in their current layout, because about two dozen predate the config and a full reformat would bury the real change in the diff.
+
 ## Agent skills
 
 ### Issue tracker
