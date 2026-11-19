@@ -521,6 +521,23 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - **未連線的節點**（4.5）沒有步驟，`explanation` 是空陣列。有連線但 λ = 0 的節點照常列出到達量和容量與使用率；沒有流量的 class 不列成功率和端到端延遲。
 - 步驟的結果直接取自同一次計算的結果，跟 `nodes` 裡的欄位相同（測試鎖住）；中間值用同一組函式重算。
 
+### 4.10 負載掃描
+
+看出流量變大時哪裡先撐不住、延遲怎麼隨 ρ 接近 1 急遽上升。所有 Client 的 rps 一起乘上倍率 k，拓撲的其他參數都不動，每一個 k 都照 4.1 完整算一次。只掃其中一個 Client 時，有多個 Client 會搞不清楚在掃哪一個，所以不做。
+
+- **範圍和點數**：k 從 0 到上限 `maxMultiplier`（> 0 且 ≤ 10，前端只用 2、5、10）均分 40 點，含兩端。拓撲本身有驗證錯誤時不掃描；放大後超出參數範圍（例如 rps 超過 4.5 的上限）的點略過。
+- **每一點**：
+  - 總 rps = 目前的總 rps × k。
+  - read、write 的端到端延遲：所有 Client 依該 class 的請求數加權平均，就是 summary 的 `avgEndToEndMs`（4.3）。任一 Client 的路徑上有節點過載時沒有定義（`null`），沒有這個 class 的請求時也是 `null`。
+  - 成功率 = 1 − `dropRate`（4.3.1），沒有流量時是 1。
+  - ρ 最高的節點和它的 ρ：候選和 `bottleneckNodeId` 相同（未連線的不算），沒有候選時為 `null`。
+- **門檻**：第一個節點的 ρ 到 0.7（WARN，4.4）和到 1（過載）的倍率，以及是哪個節點。
+  - 用二分搜尋在 (0, 上限] 找，30 次，誤差是上限的 2⁻³⁰，不從 40 點內插。門檻那一點也加進曲線，曲線的轉折才會準。
+  - 每次都看所有候選節點的最大 ρ，因為最先撐不住的不一定是目前的瓶頸：Rate Limiter 會開始拒絕，上游過載後下游的流量也不再跟 k 成正比。
+  - 每個節點的 λ 隨 k 不會減少，所以最大 ρ 也不會減少，二分搜尋成立（測試鎖住）。
+  - 上限時都還沒到門檻就是 `null`。所有 Client 的 rps 都是 0 時，每一點都沒有流量，兩個門檻都是 `null`。
+- 掃描寫在 engine 模組（`LoadSweep`），呼叫 `Simulator`，不依賴 Spring。
+
 ---
 
 ## 5. API
@@ -646,6 +663,38 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - `null` 有兩種意思：**不適用**（Client 的 `utilization`、`status` 等）和**無定義**（過載時的延遲，見 4.2、4.3）。
 - 前端把 `null` 顯示為「—」，不能當成 0。「無定義」的情況要附上原因；`status: null` 的節點不變色、不發光。
 - 流量類欄位（`arrivalRps`、`throughputRps`、`droppedRps`、`rejectedRps`）永遠是數字，不會是 `null`。`rejectedRps` 只有 Rate Limiter 和 External API 會大於 0（4.2.1），`summary.rejectedRps` 是它們的總和。`successRps` 只有 Client 有：Client 一律是數字，其他節點是 `null`（不適用，fan-out 後下游的子呼叫數不是使用者請求數）。
+
+### `POST /api/v1/simulate/sweep`
+
+負載掃描（4.10）。
+
+**Request**：`topology` 的格式同 `/simulate`。
+
+```json
+{ "topology": { "version": 1, "nodes": [ … ], "edges": [ … ] }, "maxMultiplier": 2 }
+```
+
+**Response 200**
+
+```json
+{
+  "valid": true,
+  "errors": [],
+  "currentRps": 1000,
+  "points": [
+    { "multiplier": 0, "totalRps": 0, "endToEndMs": { "read": null, "write": null }, "successRate": 1,
+      "busiest": { "nodeId": "svc-1", "utilization": 0 } },
+    { "multiplier": 1.4, "totalRps": 1400, "endToEndMs": { "read": 64.2, "write": 64.2 }, "successRate": 1,
+      "busiest": { "nodeId": "svc-1", "utilization": 0.7 } }
+  ],
+  "warn": { "multiplier": 1.4, "totalRps": 1400, "nodeId": "svc-1" },
+  "overload": { "multiplier": 2.0, "totalRps": 2000, "nodeId": "svc-1" }
+}
+```
+
+- `points` 依倍率排序，是均分的 40 點加上門檻那幾點；`warn`、`overload` 範圍內沒有到時為 `null`。
+- 拓撲有驗證錯誤時一樣回 200：`valid: false`、`errors` 為錯誤清單，`currentRps` 為 0，`points` 為 `[]`，兩個門檻為 `null`。
+- `maxMultiplier` 缺漏或不在 (0, 10] 之內、`topology` 缺漏或格式錯誤時回 400，和 `/simulate` 一樣用 ProblemDetail。
 
 ---
 

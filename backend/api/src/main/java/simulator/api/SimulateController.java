@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import simulator.engine.LoadSweep;
 import simulator.engine.Simulator;
 import simulator.engine.TopologyFormatException;
 
@@ -25,14 +26,23 @@ import simulator.engine.TopologyFormatException;
 class SimulateController {
 
     private final Simulator simulator;
+    private final LoadSweep sweep;
 
     SimulateController(Simulator simulator) {
         this.simulator = simulator;
+        this.sweep = new LoadSweep(simulator);
     }
 
     @PostMapping("/simulate")
     SimulationResponse simulate(@RequestBody TopologyDto topology) {
         return SimulationResponse.from(simulator.simulate(topology.toTopology()));
+    }
+
+    /** 負載掃描（spec 4.10）：所有 Client 的 rps 乘上 0 到 {@code maxMultiplier} 倍。 */
+    @PostMapping("/simulate/sweep")
+    SweepResponse sweep(@RequestBody SweepRequestDto request) {
+        double maxMultiplier = request.checkedMaxMultiplier();
+        return SweepResponse.from(sweep.sweep(Required.of(request.topology(), "topology").toTopology(), maxMultiplier));
     }
 
     @ExceptionHandler(TopologyFormatException.class)
