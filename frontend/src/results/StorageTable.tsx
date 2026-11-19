@@ -62,6 +62,8 @@ export function StorageTable({ topology, result }: StorageTableProps) {
             <TableRow key={node.id} className={cn(unconnected.has(node.id) && 'opacity-50')}>
               <TableCell className="font-semibold text-foreground">
                 {node.name}
+                {/* 這張表沒有狀態欄，未連線寫在名稱旁 */}
+                {unconnected.has(node.id) && <span className="ml-2 text-xs text-muted-foreground">未連線</span>}
                 {overloaded && (
                   <span
                     className="ml-2 text-xs text-destructive"

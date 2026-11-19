@@ -21,7 +21,7 @@ final class TopologyGraph {
     private final Map<String, Node> nodes = new LinkedHashMap<>();
     private final Map<String, List<Edge>> outgoing = new HashMap<>();
     private final Map<String, Integer> inDegree = new HashMap<>();
-    // Read Replica → 它的 primary（從 Database 連過來的邊）；驗證保證剛好一個
+    // Read Replica → 它的 primary（從 Database 連過來的邊）；驗證保證剛好一個，未連線的 replica 沒有
     private final Map<String, DatabaseNode> primaries = new HashMap<>();
 
     private TopologyGraph() {
@@ -65,9 +65,14 @@ final class TopologyGraph {
         return outgoing.get(nodeId);
     }
 
-    /** Read Replica 的 primary；只在通過驗證的拓撲上呼叫。 */
+    /** Read Replica 的 primary；通過驗證的拓撲上只有未連線的 replica 會是 null（spec 4.5）。 */
     DatabaseNode primaryOf(String replicaId) {
         return primaries.get(replicaId);
+    }
+
+    /** 沒有任何入邊和出邊：不在拓撲裡（spec 4.5），也不列入瓶頸候選（spec 4.4）。 */
+    boolean isUnconnected(String nodeId) {
+        return outgoing.get(nodeId).isEmpty() && inDegree.get(nodeId) == 0;
     }
 
     /**

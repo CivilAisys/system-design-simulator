@@ -37,6 +37,8 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
   const { icon, category, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
   const status = displayStatus(result, unconnected ?? false)
+  // 沒有流量時熱點的數字都是 0，不分顏色也不提示
+  const hotSpot = isIdle(status) ? undefined : result?.hotSpot
   const rack = instanceRack(node)
   const replicas = replicaLabel(node)
   const errorText = errors && errorsTitle(errors, stale)
@@ -50,9 +52,10 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         hasInput ? 'shadow-(--node-shadow)' : 'border-dashed',
         // 選取用強調色的外圈，和狀態色的外框、光暈分開
         selected && 'outline-2 outline-offset-6 outline-primary',
-        // 未連線的節點不在拓撲裡：整個畫淡、灰色虛線外框，選取或滑過時恢復，方便編輯
+        // 未連線的節點不在拓撲裡：整個畫淡、灰色虛線外框，選取或滑過時恢復，方便編輯。
+        // 有驗證錯誤（例如參數超出範圍）時不畫淡，紅框才看得清楚
         unconnected && 'border-dashed border-muted-foreground/60 transition-opacity',
-        unconnected && !selected && 'opacity-40 hover:opacity-100',
+        unconnected && !selected && !errors && 'opacity-40 hover:opacity-100',
       )}
     >
       {/* 外框和光暈單獨一層，過載脈動時只有光暈閃，文字不跟著閃。
@@ -99,8 +102,8 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         </div>
         {rack && (
           <Rack
-            slots={rackSlotStatuses(rack, status, isIdle(status) ? undefined : result?.hotSpot)}
-            title={hotSpotTitle(rack, result?.hotSpot, stale)}
+            slots={rackSlotStatuses(rack, status, hotSpot)}
+            title={hotSpotTitle(rack, hotSpot, stale)}
             stale={stale}
           />
         )}

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { NEW_DISK_GB, NODE_KINDS } from './catalog'
 import { CategoryIcon } from './CategoryIcon'
 import { formatClassRates, formatRps, formatUtilization } from './format'
+import { unconnectedNodeIds } from './graph'
 import { hotShareHint, replicasHint, workersHint } from './instanceRack'
 import { NumberField } from './NumberField'
 import { edgeParamGuide, nodeParamGuide, type ParamGuide } from './paramGuide'
@@ -67,7 +68,13 @@ export function PropertiesPanel({
     const node = selectedNodes[0]
     // key：換選取時重建，輸入框裡打到一半的字不會帶到別的節點
     content = (
-      <NodeProperties key={node.id} node={node} result={nodeResults?.[node.id]} onUpdate={onUpdateNode} />
+      <NodeProperties
+        key={node.id}
+        node={node}
+        result={nodeResults?.[node.id]}
+        unconnected={unconnectedNodeIds([node.data.node], edges).has(node.id)}
+        onUpdate={onUpdateNode}
+      />
     )
   } else if (selectedEdges.length === 1 && selectedNodes.length === 0) {
     const edge = selectedEdges[0]
@@ -142,15 +149,17 @@ function newHotShare(instances: number): number {
 type NodePropertiesProps = {
   node: SimFlowNode
   result: NodeResult | undefined
+  // 沒有任何邊，和畫布一樣不列 ρ（見 unconnectedNodeIds）
+  unconnected: boolean
   onUpdate: (id: string, patch: NodePatch) => void
 }
 
-function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProps) {
+function NodeProperties({ node: flowNode, result, unconnected, onUpdate }: NodePropertiesProps) {
   const nameId = useId()
   const node = flowNode.data.node
   const { label, icon, category, numberParams, choiceParams, hasHotShare, hasDisk } = NODE_KINDS[node.type]
-  const utilization = result?.utilization ?? null
-  // 沒有流量（包含未連線）時 ρ 是 0，底色和進度條用灰色，不用 OK 的綠色
+  // 未連線時沒有流量可看，不列 ρ；有連線但沒流量時 ρ 是 0，底色和進度條用灰色，不用 OK 的綠色
+  const utilization = unconnected ? null : (result?.utilization ?? null)
   const status = displayStatus(result, false)
 
   const replicas = replicasHint(node)
@@ -272,7 +281,7 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
           onChange={(value) => onUpdate(node.id, { params: { [param]: value } })}
         />
       ))}
-      {/* Client 沒有容量，ρ 不適用；Run 之前也還沒有值 */}
+      {/* Client 沒有容量，ρ 不適用；Run 之前也還沒有值；未連線時不列 */}
       {utilization !== null && (
         // 底色跟著狀態（STATUS_BADGE 的淡底和深色文字）
         <div className={cn('grid gap-2.5 rounded-xl bg-muted p-3.5', status && STATUS_BADGE[status])}>

@@ -12,8 +12,6 @@ class UnconnectedNodeTest {
 
     private static final CapacityParams CAPACITY = new CapacityParams(1, 100, 10);
 
-    private final Simulator simulator = new SteadyStateSimulator();
-
     // 一條連好的路徑，加上未連線的節點後結果不能變
     private static final List<Node> CONNECTED = List.of(
             new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9),
@@ -35,10 +33,13 @@ class UnconnectedNodeTest {
             new RateLimiterNode("rl", "Limiter", NodeHealth.HEALTHY, 1000),
             new ExternalApiNode("pay", "Payments", NodeHealth.HEALTHY, 100, 1000));
 
+    private final Simulator simulator = new SteadyStateSimulator();
+
     private SimulationResult run(List<Node> nodes, List<Edge> edges) {
         return simulator.simulate(new Topology(nodes, edges));
     }
 
+    /** 連好的路徑再加上幾個節點。 */
     private static List<Node> plus(List<Node> base, List<Node> extra) {
         var nodes = new ArrayList<>(base);
         nodes.addAll(extra);
@@ -75,6 +76,25 @@ class UnconnectedNodeTest {
             assertThat(withUnconnected.nodes().get(node.id())).as(node.id()).isEqualTo(alone.nodes().get(node.id()));
         }
         assertThat(withUnconnected.summary()).isEqualTo(alone.summary());
+    }
+
+    @Test
+    void unconnectedNodeIsNeverTheBottleneck() {
+        // 連好的節點都沒有流量（Client 0 rps）時 ρ 都是 0，同分取拓撲順序的第一個；未連線的排在最前面也不能被選中
+        List<Node> nodes = plus(UNCONNECTED, List.of(new ClientNode("c", "Users", NodeHealth.HEALTHY, 0, 0.9),
+                CONNECTED.get(1), CONNECTED.get(2)));
+
+        assertThat(run(nodes, EDGES).summary().bottleneckNodeId()).isEqualTo("s");
+    }
+
+    @Test
+    void unconnectedNodeAloneGivesNoBottleneck() {
+        // 只有 Client 和 External API 時沒有瓶頸候選，加一個未連線的 Service 也一樣
+        List<Node> nodes = List.of(new ClientNode("c", "Users", NodeHealth.HEALTHY, 100, 0.9),
+                new ExternalApiNode("pay", "Payments", NodeHealth.HEALTHY, 100, 1000),
+                new ServiceNode("svc", "Service", NodeHealth.HEALTHY, CAPACITY, CallMode.SEQUENTIAL));
+
+        assertThat(run(nodes, List.of(new Edge("e1", "c", "pay", 1, 1, 1))).summary().bottleneckNodeId()).isNull();
     }
 
     @Test
