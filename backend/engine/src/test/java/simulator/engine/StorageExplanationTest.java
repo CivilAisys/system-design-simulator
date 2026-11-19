@@ -4,14 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 /** 儲存量估算的計算說明（spec 4.8、4.9）：步驟的結果和 StorageEstimate 的欄位相同，沒有的數字不列。 */
 class StorageExplanationTest {
 
-    private static final Pattern PLACEHOLDER = Pattern.compile("\\{([^}]+)}");
     private static final CapacityParams AMPLE = new CapacityParams(4, 10_000, 1);
 
     private final Simulator simulator = new SteadyStateSimulator();
@@ -66,11 +63,47 @@ class StorageExplanationTest {
     }
 
     @Test
+    void plainLinesUseThePanelNames() {
+        SimulationResult result = run(0.9, db(AMPLE, 1000.0),
+                new ReadReplicaNode("r1", "Replica A", NodeHealth.HEALTHY, AMPLE));
+        List<ExplanationStep> steps = result.storage().get("db").explanation();
+
+        assertThat(steps).extracting(ExplanationStep::plain).containsExactly(
+                "每秒寫進來 {=}（被丟掉的不算）",
+                "每天增加 {=} = 每秒 {處理完的 write} 筆 × 每次寫入大小 {bytesPerWrite} × 一天 86,400 秒",
+                "總共 {=} = 每天 {每日增量} × 保留天數 {retentionDays}",
+                "含副本 {=} = {總量} × (1 ＋ {Read Replica 數} 個 Read Replica)（Read Replica：Replica A）",
+                "每台 {=} = {總量} ÷ 機器數 {instances}（資料平均分布）",
+                "每台每天增加 {=} = 每天 {每日增量} ÷ 機器數 {instances}",
+                "磁碟{=}後會滿 = 每台磁碟 {每台磁碟} ÷ 每台每天 {每台每日增量}（保留期 30 天內不會滿）");
+        assertPlaceholdersMatchTerms(steps);
+    }
+
+    @Test
+    void diskStepComparesBytesWithBytes() {
+        // 原本寫成「{diskGbPerInstance} × 10⁹ ÷ {每台每日增量}」，GB 和 bytes 混在一起
+        ExplanationStep disk = step(run(0.9, db(AMPLE, 1000.0)).storage().get("db").explanation(), "磁碟幾天後會滿");
+
+        assertThat(disk.formula()).isEqualTo("{每台磁碟} ÷ {每台每日增量}");
+        assertThat(disk.terms()).extracting(ExplanationTerm::unit).containsOnly("bytes");
+        assertThat(disk.terms().getFirst().value()).isEqualTo(1000e9);
+    }
+
+    @Test
+    void nodeNamesCannotBecomePlaceholders() {
+        var braces = new ReadReplicaNode("r1", "{x}", NodeHealth.HEALTHY, AMPLE);
+
+        assertThat(step(run(0.9, db(AMPLE, null), braces).storage().get("db").explanation(), "含副本").plain())
+                .endsWith("（Read Replica：｛x｝）");
+    }
+
+    @Test
     void diskThatFillsWithinRetentionSaysSo() {
         // 每台 10 GB、每日 4.32 GB：約 2.3 天就滿
         List<ExplanationStep> steps = run(0.9, db(AMPLE, 10.0)).storage().get("db").explanation();
 
         assertThat(step(steps, "磁碟幾天後會滿").label()).isEqualTo("磁碟幾天後會滿（< 保留期 30 天：保留期內就會滿）");
+        assertThat(step(steps, "磁碟幾天後會滿").plain()).endsWith("（比保留期 30 天短，保留期內就會滿）");
         assertThat(step(steps, "含副本").label()).isEqualTo("含副本（沒有 Read Replica）");
     }
 
@@ -107,14 +140,6 @@ class StorageExplanationTest {
     }
 
     private static void assertPlaceholdersMatchTerms(List<ExplanationStep> steps) {
-        for (ExplanationStep step : steps) {
-            List<String> symbols = new ArrayList<>();
-            Matcher matcher = PLACEHOLDER.matcher(step.formula());
-            while (matcher.find()) {
-                symbols.add(matcher.group(1));
-            }
-            assertThat(symbols).as(step.label())
-                    .containsExactlyElementsOf(step.terms().stream().map(ExplanationTerm::symbol).toList());
-        }
+        steps.forEach(step -> PlainText.assertConsistent("db", step));
     }
 }
