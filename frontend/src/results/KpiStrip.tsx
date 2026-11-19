@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import type { ComputedResult, Topology } from '@/api/client'
 import { DASH, formatMs, formatRps, formatRpsNumber, formatSuccessRate, formatUtilization } from '@/canvas/format'
-import { isAlerting } from '@/canvas/status'
 import { cn } from '@/lib/utils'
+import { describeBottleneck } from './bottleneck'
 import { APPROXIMATE_TITLE, REQUEST_CLASSES, undefinedReasonText, type ClassLatencies } from './latency'
 
 type KpiStripProps = {
@@ -122,34 +122,40 @@ function LatencyValue({ latencies, topology }: { latencies: ClassLatencies; topo
 }
 
 function BottleneckCard({ topology, result }: KpiStripProps) {
-  const id = result.summary.bottleneckNodeId
-  const metrics = id == null ? undefined : result.nodes[id]
-  // 沒有伺服器類節點（例如只有 Client 和 External API）時後端不挑瓶頸
-  if (id == null || !metrics) {
-    return (
-      <KpiCard label="瓶頸">
-        <KpiValue>{DASH}</KpiValue>
-        <KpiNote>沒有可計算 ρ 的節點</KpiNote>
-      </KpiCard>
-    )
+  const view = describeBottleneck(topology, result)
+  switch (view.kind) {
+    case 'none':
+      return (
+        <KpiCard label="瓶頸">
+          <KpiValue>{DASH}</KpiValue>
+          <KpiNote>沒有可計算 ρ 的節點</KpiNote>
+        </KpiCard>
+      )
+    case 'idle':
+      return (
+        <KpiCard label="瓶頸">
+          <KpiValue>無瓶頸</KpiValue>
+        </KpiCard>
+      )
+    case 'calm':
+      return (
+        <KpiCard label="瓶頸">
+          <KpiValue>無瓶頸</KpiValue>
+          <KpiNote className="truncate" title={view.name}>
+            最忙：{view.name} ρ {formatUtilization(view.utilization)}
+          </KpiNote>
+        </KpiCard>
+      )
+    case 'bottleneck':
+      return (
+        <KpiCard label="瓶頸" className="border-strong-bg bg-strong-bg" labelClassName="text-strong-muted">
+          <KpiValue className="flex items-baseline text-strong-ink">
+            <span className="truncate" title={view.name}>
+              {view.name}
+            </span>
+            <KpiUnit className="ml-2 shrink-0 text-strong-accent">ρ {formatUtilization(view.utilization)}</KpiUnit>
+          </KpiValue>
+        </KpiCard>
+      )
   }
-  // 結果可能比目前畫布舊一點（Auto-run 還在 debounce），節點被刪掉時退回顯示 id
-  const name = topology.nodes.find((node) => node.id === id)?.name ?? id
-  const alerting = isAlerting(metrics.status)
-  return (
-    <KpiCard
-      label="瓶頸"
-      className={cn(alerting && 'border-strong-bg bg-strong-bg')}
-      labelClassName={cn(alerting && 'text-strong-muted')}
-    >
-      <KpiValue className={cn('flex items-baseline', alerting && 'text-strong-ink')}>
-        <span className="truncate" title={name}>
-          {name}
-        </span>
-        <KpiUnit className={cn('ml-2 shrink-0', alerting && 'text-strong-accent')}>
-          ρ {formatUtilization(metrics.utilization)}
-        </KpiUnit>
-      </KpiValue>
-    </KpiCard>
-  )
 }
