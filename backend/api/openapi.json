@@ -749,7 +749,7 @@
           },
           "endToEndMs" : {
             "$ref" : "#/components/schemas/SweepLatency",
-            "description" : "所有 Client 依請求數加權的端到端延遲"
+            "description" : "所有 Client 依請求數加權的端到端延遲；倍率 0 那一點是沒有排隊時的延遲"
           },
           "successRate" : {
             "type" : "number",
@@ -786,7 +786,7 @@
           },
           "points" : {
             "type" : "array",
-            "description" : "依倍率排序：從 0 到上限均分 40 點，加上門檻那幾點；放大後超出參數範圍的點略過",
+            "description" : "依倍率排序：從 0 到上限均分 40 點，加上門檻那幾點和過載前加密的 6 點；放大後超出參數範圍的點略過",
             "items" : {
               "$ref" : "#/components/schemas/SweepPoint"
             }

@@ -16,7 +16,7 @@ public record SweepResponse(
         @Schema(requiredMode = REQUIRED) boolean valid,
         @Schema(requiredMode = REQUIRED) List<ValidationErrorDto> errors,
         @Schema(requiredMode = REQUIRED, description = "目前所有 Client 的 rps 加總（倍率 1）；驗證失敗時為 0") double currentRps,
-        @Schema(requiredMode = REQUIRED, description = "依倍率排序：從 0 到上限均分 40 點，加上門檻那幾點；放大後超出參數範圍的點略過")
+        @Schema(requiredMode = REQUIRED, description = "依倍率排序：從 0 到上限均分 40 點，加上門檻那幾點和過載前加密的 6 點；放大後超出參數範圍的點略過")
         List<SweepPointDto> points,
         @Schema(requiredMode = REQUIRED) SweepThresholdsDto thresholds) {
 
@@ -38,7 +38,7 @@ public record SweepResponse(
     public record SweepPointDto(
             @Schema(requiredMode = REQUIRED) double multiplier,
             @Schema(requiredMode = REQUIRED) double totalRps,
-            @Schema(requiredMode = REQUIRED, description = "所有 Client 依請求數加權的端到端延遲") SweepLatencyDto endToEndMs,
+            @Schema(requiredMode = REQUIRED, description = "所有 Client 依請求數加權的端到端延遲；倍率 0 那一點是沒有排隊時的延遲") SweepLatencyDto endToEndMs,
             @Schema(requiredMode = REQUIRED, description = "完整成功的請求 ÷ 送出的請求，0–1；沒有流量時為 1")
             double successRate,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "ρ 最高的節點；沒有候選節點時為 null")
