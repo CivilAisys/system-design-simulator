@@ -530,10 +530,12 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - **每一點**：
   - 總 rps = 目前的總 rps × k。
   - read、write 的端到端延遲：所有 Client 依該 class 的請求數加權平均，就是 summary 的 `avgEndToEndMs`（4.3）。任一 Client 的路徑上有節點過載時沒有定義（`null`），沒有這個 class 的請求時也是 `null`。
+  - k = 0 沒有流量，延遲改用 k → 0 的極限：每個節點都不用排隊，只花處理時間，加上連線延遲；各 Client 的權重照目前 rps 的比例。做法是在最大 ρ 不超過 1e-9 的小倍率算一次（排隊時間只剩處理時間的十億分之一左右），這樣曲線開頭不會斷一截。所有 Client 的 rps 都是 0 時照舊是 `null`。
   - 成功率 = 1 − `dropRate`（4.3.1），沒有流量時是 1。
   - ρ 最高的節點和它的 ρ：候選和 `bottleneckNodeId` 相同（未連線的不算），沒有候選時為 `null`。
 - **門檻**：第一個節點的 ρ 到 0.7（WARN，4.4）和到 1（過載）的倍率，以及是哪個節點。
   - 先在 40 點裡找出跨過門檻的那一段，再在那一段裡二分搜尋，直到區間寬度小於右端的 0.01%（相對誤差遠小於 0.1%，門檻很小時也一樣），不從 40 點內插。門檻那一點也加進曲線，曲線的轉折才會準。
+  - 有過載門檻時，在它的倍率 × 0.9、0.95、0.98、0.99、0.995、0.999 各加一點（已經有同樣倍率的點就不重複）。c 很大時（例如 400 個 worker）延遲只在過載前最後 1% 急升，40 個均分點會整段錯過。
   - 每次都看所有候選節點的最大 ρ，因為最先撐不住的不一定是目前的瓶頸：Rate Limiter 會開始拒絕，上游過載後下游的流量也不再跟 k 成正比。
   - 每個節點的 λ 隨 k 不會減少，所以最大 ρ 也不會減少，二分搜尋成立（測試鎖住）。
   - 上限時都還沒到門檻就是 `null`。所有 Client 的 rps 都是 0 時，每一點都沒有流量，兩個門檻都是 `null`。
@@ -695,7 +697,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 }
 ```
 
-- `points` 依倍率排序，是均分的 40 點加上門檻那幾點；`thresholds.warn`、`thresholds.overload` 範圍內沒有到時為 `null`。
+- `points` 依倍率排序，是均分的 40 點加上門檻那幾點和過載前加密的 6 點；倍率 0 那一點的延遲是沒有排隊時的延遲；`thresholds.warn`、`thresholds.overload` 範圍內沒有到時為 `null`。
 - 拓撲有驗證錯誤時一樣回 200：`valid: false`、`errors` 為錯誤清單，`currentRps` 為 0，`points` 為 `[]`，`thresholds` 的兩個門檻為 `null`。
 - `maxMultiplier` 缺漏或不在 (0, 10] 之內、`topology` 缺漏或格式錯誤時回 400，和 `/simulate` 一樣用 ProblemDetail。
 

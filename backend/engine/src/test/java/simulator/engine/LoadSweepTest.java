@@ -51,7 +51,8 @@ class LoadSweepTest {
     void pointsAreEvenlySpacedPlusTheThresholds() {
         SweepResult result = sweep.sweep(clientServiceDb(workers(20), AMPLE), 5);
 
-        assertThat(result.points()).hasSize(LoadSweep.POINTS + 2);
+        // 40 個均分點、兩個門檻、過載前加密的 6 點
+        assertThat(result.points()).hasSize(LoadSweep.POINTS + 2 + LoadSweep.BEFORE_OVERLOAD.length);
         assertThat(result.points().getFirst().multiplier()).isZero();
         assertThat(result.points().getLast().multiplier()).isEqualTo(5);
         assertThat(result.points()).extracting(SweepPoint::multiplier).isSorted()
@@ -85,6 +86,8 @@ class LoadSweepTest {
         assertThat(result.warn().nodeId()).isEqualTo("svc");
         assertThat(result.warn().multiplier()).isCloseTo(1.4, within(1.4 * RELATIVE));
         assertThat(result.overload()).isNull();
+        // 沒有過載就不加密取樣：均分點加上 ρ 0.7 那一點
+        assertThat(result.points()).hasSize(LoadSweep.POINTS + 1);
         // 被拒絕的請求算失敗：k = 10 時只有 1500 ÷ 10000 成功
         assertThat(result.points().getLast().successRate()).isCloseTo(0.15, within(1e-9));
     }
@@ -164,7 +167,7 @@ class LoadSweepTest {
         double overload = result.overload().multiplier();
 
         for (SweepPoint point : result.points()) {
-            if (point.multiplier() > 0 && point.multiplier() < overload) {
+            if (point.multiplier() < overload) {
                 assertThat(point.readMs()).as("k = %s", point.multiplier()).isNotNull();
                 assertThat(point.successRate()).isEqualTo(1);
             } else if (point.multiplier() >= overload) {
@@ -197,6 +200,69 @@ class LoadSweepTest {
     }
 
     @Test
+    void zeroRpsUsesTheLatencyWithoutQueueing() {
+        // 沒有排隊時：連線 1 ＋ Service 10 ＋ 連線 1 ＋ DB 1
+        SweepPoint zero = sweep.sweep(clientServiceDb(workers(20), AMPLE), 5).points().getFirst();
+
+        assertThat(zero.multiplier()).isZero();
+        assertThat(zero.totalRps()).isZero();
+        assertThat(zero.successRate()).isEqualTo(1);
+        assertThat(zero.readMs()).isCloseTo(13, within(1e-6));
+        assertThat(zero.writeMs()).isCloseTo(13, within(1e-6));
+    }
+
+    @Test
+    void zeroRpsLatencyIsFoundEvenWhenTinyTrafficAlreadyQueues() {
+        // 1e9 rps 打到容量 100 的 Service：放大 1e-9 倍時 ρ 還有 0.01，要再縮小才是沒有排隊
+        Topology topology = new Topology(
+                List.of(
+                        new ClientNode("c", "Users", NodeHealth.HEALTHY, 1e9, 0.9),
+                        new ServiceNode("svc", "API", NodeHealth.HEALTHY, workers(1), CallMode.SEQUENTIAL)),
+                List.of(new Edge("e1", "c", "svc", 1, 1, 1)));
+        SweepPoint zero = sweep.sweep(topology, 10).points().getFirst();
+
+        assertThat(zero.readMs()).isCloseTo(11, within(1e-6));
+    }
+
+    @Test
+    void zeroRpsLatencyIsWeightedByEachClientsRequests() {
+        // A 100 read/s 走 10 ms、B 300 read/s 走 50 ms，權重照目前 rps 的比例：(100 × 10 + 300 × 50) ÷ 400 = 40
+        Topology topology = new Topology(
+                List.of(
+                        new ClientNode("a", "A", NodeHealth.HEALTHY, 100, 1),
+                        new ClientNode("b", "B", NodeHealth.HEALTHY, 300, 1),
+                        new ServiceNode("fast", "Fast", NodeHealth.HEALTHY, new CapacityParams(1, 1, 10),
+                                CallMode.SEQUENTIAL),
+                        new ServiceNode("slow", "Slow", NodeHealth.HEALTHY, new CapacityParams(1, 100, 50),
+                                CallMode.SEQUENTIAL)),
+                List.of(new Edge("e1", "a", "fast", 1, 1, 0), new Edge("e2", "b", "slow", 1, 1, 0)));
+        SweepPoint zero = sweep.sweep(topology, 2).points().getFirst();
+
+        assertThat(zero.readMs()).isCloseTo(40, within(1e-6));
+        assertThat(zero.writeMs()).isNull();
+    }
+
+    @Test
+    void pointsAreAddedJustBeforeOverload() {
+        SweepResult result = sweep.sweep(clientServiceDb(workers(20), AMPLE), 5);
+        double overload = result.overload().multiplier();
+        List<Double> multipliers = result.points().stream().map(SweepPoint::multiplier).toList();
+
+        for (double fraction : LoadSweep.BEFORE_OVERLOAD) {
+            assertThat(multipliers).contains(overload * fraction);
+        }
+        assertThat(multipliers).isSorted().doesNotHaveDuplicates();
+        // 加密的點看得到延遲在過載前急升
+        SweepPoint first = point(result, overload * 0.9);
+        SweepPoint last = point(result, overload * 0.999);
+        assertThat(last.readMs()).isGreaterThan(first.readMs());
+    }
+
+    private static SweepPoint point(SweepResult result, double multiplier) {
+        return result.points().stream().filter(point -> point.multiplier() == multiplier).findFirst().orElseThrow();
+    }
+
+    @Test
     void zeroTrafficHasNoThresholds() {
         Topology topology = new Topology(
                 List.of(
@@ -208,8 +274,11 @@ class LoadSweepTest {
         assertThat(result.currentRps()).isZero();
         assertThat(result.warn()).isNull();
         assertThat(result.overload()).isNull();
-        assertThat(result.points()).hasSize(LoadSweep.POINTS)
-                .allSatisfy(point -> assertThat(point.successRate()).isEqualTo(1));
+        assertThat(result.points()).hasSize(LoadSweep.POINTS).allSatisfy(point -> {
+            assertThat(point.successRate()).isEqualTo(1);
+            assertThat(point.readMs()).isNull();
+            assertThat(point.writeMs()).isNull();
+        });
     }
 
     @Test
