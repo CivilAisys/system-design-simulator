@@ -96,12 +96,22 @@ final class Explanations {
                     term("λ_write", arrival.write(), RPS, node.id())));
         }
         steps.add(step(STORAGE_DAILY, "每日增量", "{處理完的 write} × {bytesPerWrite} × 86,400", estimate.dailyBytes(),
-                BYTES, term("處理完的 write", writes, RPS), term("bytesPerWrite", sizing.bytesPerWrite(), BYTES)));
+                BYTES, term("處理完的 write", writes, RPS, node.id()), term("bytesPerWrite", sizing.bytesPerWrite(), BYTES)));
         steps.add(step(STORAGE_TOTAL, "總量", "{每日增量} × {retentionDays}", estimate.totalBytes(), BYTES,
                 term("每日增量", estimate.dailyBytes(), BYTES), term("retentionDays", sizing.retentionDays(), DAYS)));
-        if (!(node instanceof DatabaseNode database)) {
-            return steps;
+        switch (node) {
+            // 容量由供應商負責：沒有副本、機器數和磁碟
+            case ObjectStorageNode objectStorage -> {
+            }
+            case DatabaseNode database -> database(database, replicas, estimate, steps);
         }
+        return steps;
+    }
+
+    /** Database 另外有副本、每台和磁碟；沒有設定磁碟容量或沒有寫入（不會滿）時不列磁碟那幾步。 */
+    private static void database(DatabaseNode database, List<Node> replicas, StorageEstimate estimate,
+            List<ExplanationStep> steps) {
+        StorageSizing sizing = database.sizing();
         String names = String.join("、", replicas.stream().map(Node::name).toList());
         String replicaNote = replicas.isEmpty() ? "（沒有 Read Replica）" : "（Read Replica：" + names + "）";
         if (estimate.replicasLagging()) {
@@ -114,16 +124,17 @@ final class Explanations {
         steps.add(step(STORAGE_INSTANCE, "每台（資料平均分布）", "{總量} ÷ {instances}", estimate.perInstanceBytes(), BYTES,
                 term("總量", estimate.totalBytes(), BYTES), term("instances", (double) instances, null)));
         if (estimate.daysUntilFull() == null) {
-            return steps;
+            return;
         }
         double dailyPerInstance = estimate.dailyBytes() / instances;
         steps.add(step(STORAGE_DISK, "每台每日增量", "{每日增量} ÷ {instances}", dailyPerInstance, BYTES,
                 term("每日增量", estimate.dailyBytes(), BYTES), term("instances", (double) instances, null)));
-        String comparison = estimate.fillsDisk() ? "< retentionDays：保留期內就會滿" : "≥ retentionDays：保留期內不會滿";
+        // 保留期的天數寫在名稱裡，和 ρ 的狀態門檻一樣：看得出拿什麼比
+        String retention = "保留期 " + number(sizing.retentionDays()) + " 天";
+        String comparison = estimate.fillsDisk() ? "< " + retention + "：保留期內就會滿" : "≥ " + retention + "：保留期內不會滿";
         steps.add(step(STORAGE_DISK, "磁碟幾天後會滿（" + comparison + "）", "{diskGbPerInstance} × 10⁹ ÷ {每台每日增量}",
                 estimate.daysUntilFull(), DAYS, term("diskGbPerInstance", sizing.diskGbPerInstance(), GB),
                 term("每台每日增量", dailyPerInstance, BYTES)));
-        return steps;
     }
 
     private List<ExplanationStep> explain(Node node) {

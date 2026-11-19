@@ -55,12 +55,13 @@ class StorageExplanationTest {
         assertThat(step(steps, "處理完的 write").value()).isEqualTo(100.0 * 1000 / 1000);
         assertThat(step(steps, "處理完的 write").terms().getFirst().nodeId()).isEqualTo("db");
         assertThat(step(steps, "每日增量").value()).isEqualTo(estimate.dailyBytes());
+        assertThat(step(steps, "每日增量").terms().getFirst().nodeId()).isEqualTo("db");
         assertThat(step(steps, "總量").value()).isEqualTo(estimate.totalBytes());
         assertThat(step(steps, "含副本").value()).isEqualTo(estimate.totalWithReplicasBytes());
         assertThat(step(steps, "含副本").label()).isEqualTo("含副本（Read Replica：Replica A、Replica B）");
         assertThat(step(steps, "每台").value()).isEqualTo(estimate.perInstanceBytes());
         assertThat(step(steps, "磁碟幾天後會滿").value()).isEqualTo(estimate.daysUntilFull());
-        assertThat(step(steps, "磁碟幾天後會滿").label()).contains("保留期內不會滿");
+        assertThat(step(steps, "磁碟幾天後會滿").label()).isEqualTo("磁碟幾天後會滿（≥ 保留期 30 天：保留期內不會滿）");
         assertPlaceholdersMatchTerms(steps);
     }
 
@@ -69,7 +70,7 @@ class StorageExplanationTest {
         // 每台 10 GB、每日 4.32 GB：約 2.3 天就滿
         List<ExplanationStep> steps = run(0.9, db(AMPLE, 10.0)).storage().get("db").explanation();
 
-        assertThat(step(steps, "磁碟幾天後會滿").label()).isEqualTo("磁碟幾天後會滿（< retentionDays：保留期內就會滿）");
+        assertThat(step(steps, "磁碟幾天後會滿").label()).isEqualTo("磁碟幾天後會滿（< 保留期 30 天：保留期內就會滿）");
         assertThat(step(steps, "含副本").label()).isEqualTo("含副本（沒有 Read Replica）");
     }
 

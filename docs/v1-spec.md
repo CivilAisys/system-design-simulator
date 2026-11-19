@@ -478,7 +478,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - GB 是十進位（10⁹ bytes）。Object Storage、沒有設定 `diskGbPerInstance`、沒有寫入（資料不會增加），或寫入量小到天數超出浮點數範圍時，`daysUntilFull` 是 `null`。
 - **副本跟不上**：primary 的 Read Replica 有 `REPLICATION_LAG`（4.2.3）時，「含副本」仍照完整副本計算，數字不改，但回應的 `replicasLagging` 為 true，容量估算分頁在那一列加註「副本複製跟不上，實際副本量會比這少」。
 - **磁碟會滿**（`fillsDisk`）：`daysUntilFull < retentionDays`，也就是保留期內每台的資料會超過磁碟容量。這是另一種瓶頸，和 ρ 分開顯示，不混進「瓶頸 = ρ 最高」的規則（`bottleneckNodeId` 不變）。
-- **計算說明**：每筆估算的 `explanation` 是上面公式的步驟（格式同 4.9），分組是「每日增量」（處理完的 write，代入值指到這個節點自己；每日增量）、「總量」（總量；含副本，名稱列出是哪幾個 Read Replica，副本跟不上時加註）、「每台」、「磁碟」（每台每日增量；磁碟幾天後會滿，名稱寫保留期內會不會滿）。沒有對應數字的步驟不列：Object Storage 只有每日增量和總量；沒有設定 `diskGbPerInstance` 或沒有寫入時不列磁碟那組。未連線的節點是空陣列。
+- **計算說明**：每筆估算的 `explanation` 是上面公式的步驟（格式同 4.9），分組是「每日增量」（處理完的 write，代入值指到這個節點自己；每日增量）、「總量」（總量；含副本，名稱列出是哪幾個 Read Replica，副本跟不上時加註）、「每台」、「磁碟」（每台每日增量；磁碟幾天後會滿，名稱寫和保留期幾天比較、保留期內會不會滿）。沒有對應數字的步驟不列：Object Storage 只有每日增量和總量；沒有設定 `diskGbPerInstance` 或沒有寫入時不列磁碟那組。未連線的節點是空陣列。
 
 ### 4.9 計算說明
 

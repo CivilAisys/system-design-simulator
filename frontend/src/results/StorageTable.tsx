@@ -1,8 +1,7 @@
 import { Fragment, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ExplanationSteps } from '@/explanation/ExplanationSteps'
-import { explanationState, type ExplanationStep } from '@/explanation/explanation'
+import { ExplanationBody } from '@/explanation/ExplanationSteps'
 import { cn } from '@/lib/utils'
 import type { ComputedResult, Topology } from '@/api/client'
 import { NODE_KINDS } from '@/canvas/catalog'
@@ -59,7 +58,7 @@ export function StorageTable({ topology, result, onSelectNode }: StorageTablePro
           {showDisk && (
             <TableHead
               className="text-right"
-              title="diskGbPerInstance ÷ 每台每日增量；沒有設定磁碟容量時不估算，Object Storage 沒有磁碟容量"
+              title="diskGbPerInstance × 10⁹ ÷ 每台每日增量；沒有設定磁碟容量時不估算，Object Storage 沒有磁碟容量"
             >
               磁碟滿
             </TableHead>
@@ -139,14 +138,19 @@ export function StorageTable({ topology, result, onSelectNode }: StorageTablePro
                 )}
               </TableRow>
               {open && (
-                <TableRow className="hover:bg-transparent">
+                <TableRow className={cn('hover:bg-transparent', unconnected.has(node.id) && 'opacity-50')}>
                   <TableCell colSpan={showDisk ? 6 : 5} className="bg-muted/40 whitespace-normal">
-                    <StorageExplanation
-                      steps={estimate.explanation}
-                      unconnected={unconnected.has(node.id)}
-                      nodeName={nodeName}
-                      onSelectNode={onSelectNode}
-                    />
+                    <div className="max-w-2xl">
+                      {/* 這張表只在有計算結果時顯示，所以不會是驗證錯誤的狀態 */}
+                      <ExplanationBody
+                        steps={estimate.explanation}
+                        unconnected={unconnected.has(node.id)}
+                        invalid={false}
+                        stale={false}
+                        nodeName={nodeName}
+                        onSelectNode={onSelectNode}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               )}
@@ -155,25 +159,6 @@ export function StorageTable({ topology, result, onSelectNode }: StorageTablePro
         })}
       </TableBody>
     </Table>
-  )
-}
-
-type StorageExplanationProps = {
-  steps: ExplanationStep[]
-  unconnected: boolean
-  nodeName: (id: string) => string | undefined
-  onSelectNode: (id: string) => void
-}
-
-// 一列的算式；這張表只在有計算結果時顯示，所以不會是驗證錯誤的狀態
-function StorageExplanation({ steps, unconnected, nodeName, onSelectNode }: StorageExplanationProps) {
-  const state = explanationState({ steps, unconnected, invalid: false })
-  if (state === 'unconnected') return <p className="text-xs text-muted-foreground">未連線，沒有計算</p>
-  if (state !== 'ready') return <p className="text-xs text-muted-foreground">Run 之後顯示</p>
-  return (
-    <div className="max-w-2xl">
-      <ExplanationSteps steps={steps} nodeName={nodeName} onSelectNode={onSelectNode} />
-    </div>
   )
 }
 
