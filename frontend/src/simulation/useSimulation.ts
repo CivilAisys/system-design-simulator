@@ -15,6 +15,8 @@ type SimulationOptions = {
 export function useSimulation(topology: Topology, { onResult, onError }: SimulationOptions = {}) {
   const [autoRun, setAutoRun] = useState(true)
   const [result, setResult] = useState<SimulationResult | null>(null)
+  // result 是用哪一份拓撲算出來的；負載掃描（spec 4.10）掃的是這一份，跟著 Run 走
+  const [resultTopology, setResultTopology] = useState<Topology | null>(null)
   // 最新一次送出的 Run 是哪個拓撲（含計算中），用來判斷過期和要不要再送；失敗時清掉，之後可以重試
   const [runKey, setRunKey] = useState<string | null>(null)
   // result 是用哪些節點名稱算出來的。驗證錯誤的訊息由後端用當時的名稱組成，有錯誤時改名也要重新檢查
@@ -56,6 +58,7 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
       inFlight.current = null
       // Run 失敗時畫布不能留著舊的狀態色和 RPS
       setResult(null)
+      setResultTopology(null)
       setRunKey(null)
       setError(e instanceof Error ? e.message : String(e))
       setRunning(false)
@@ -66,6 +69,7 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     if (controller !== inFlight.current) return
     inFlight.current = null
     setResult(next)
+    setResultTopology(target)
     setResultNames(targetNames)
     setRunning(false)
     // 放在 try 外面：通知出錯不能被當成 Run 失敗而清掉結果
@@ -90,6 +94,7 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
     cancelPendingAutoRun()
     abortInFlight()
     setResult(null)
+    setResultTopology(null)
     setRunKey(null)
     setRunning(false)
     setError(null)
@@ -117,7 +122,7 @@ export function useSimulation(topology: Topology, { onResult, onError }: Simulat
   // Auto-run 開啟時，修改後的結果很快會被取代，不標示過期；手動 Run 計算中也不標示
   const stale = !autoRun && result != null && needsRun
 
-  return { result, running, error, stale, autoRun, setAutoRun, run, reset }
+  return { result, resultTopology, running, error, stale, autoRun, setAutoRun, run, reset }
 }
 
 // 名稱和 ui 欄位不影響計算，改了不重算、也不算過期（spec 第 6 節；有驗證錯誤時的名稱見 nodeNamesKey）

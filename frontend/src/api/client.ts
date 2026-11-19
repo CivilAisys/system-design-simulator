@@ -15,6 +15,9 @@ export type NodeWarning = NodeResult['warnings'][number]
 export type SimulationResult = components['schemas']['SimulationResult']
 export type Summary = NonNullable<SimulationResult['summary']>
 export type ValidationError = SimulationResult['errors'][number]
+export type SweepResult = components['schemas']['SweepResult']
+export type SweepPoint = components['schemas']['SweepPoint']
+export type SweepThreshold = NonNullable<SweepResult['thresholds']['warn']>
 // 驗證通過、有計算結果（驗證失敗時 summary 為 null，nodes／edges 是空的）
 export type ComputedResult = SimulationResult & { valid: true; summary: Summary }
 
@@ -49,18 +52,30 @@ const UNREACHABLE_STATUSES = new Set([502, 503])
 
 // signal 取消時丟出 AbortError（DOMException），呼叫端用 isAbortError 辨認，不當成 Run 失敗
 export async function simulate(topology: Topology, signal?: AbortSignal): Promise<SimulationResult> {
-  const { data, error, response } = await client.POST('/api/v1/simulate', { body: topology, signal })
+  return checked(await client.POST('/api/v1/simulate', { body: topology, signal }), 'Run 失敗')
+}
+
+// 負載掃描（spec 4.10）：所有 Client 的 rps 乘上 0 到 maxMultiplier 倍
+export async function sweep(topology: Topology, maxMultiplier: number, signal?: AbortSignal): Promise<SweepResult> {
+  return checked(
+    await client.POST('/api/v1/simulate/sweep', { body: { topology, maxMultiplier }, signal }),
+    '負載掃描失敗',
+  )
+}
+
+// 後端回錯誤時丟出帶說明的 Error；failure 是沒有後端說明時的訊息開頭，例如「Run 失敗」
+function checked<T>({ data, error, response }: { data?: T; error?: unknown; response: Response }, failure: string): T {
   const { ok, status } = response
   if (!ok || error !== undefined) {
     const message = problemMessage(error)
     if (message == null && UNREACHABLE_STATUSES.has(status)) {
       throw new Error(UNREACHABLE_MESSAGE)
     }
-    throw new Error(message ?? `Run 失敗（HTTP ${status}）`)
+    throw new Error(message ?? `${failure}（HTTP ${status}）`)
   }
   // 型別上成功時一定有 data，但 2xx 空 body（例如 204）時 openapi-fetch 會給 undefined
   if (data === undefined) {
-    throw new Error(`Run 失敗：後端沒有回傳結果（HTTP ${status}）`)
+    throw new Error(`${failure}：後端沒有回傳結果（HTTP ${status}）`)
   }
   return data
 }
