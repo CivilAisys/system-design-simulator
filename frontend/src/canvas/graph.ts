@@ -1,4 +1,4 @@
-import type { Edge } from '@/api/client'
+import type { Edge, Node } from '@/api/client'
 
 type EdgeEnds = Pick<Edge, 'source' | 'target'>
 
@@ -33,4 +33,19 @@ export function createsCycle(edges: readonly EdgeEnds[], source: string, target:
     stack.push(...(downstream.get(id) ?? []))
   }
   return false
+}
+
+// 未連線的節點：沒有任何入邊和出邊，不在拓撲裡（spec 4.5）。看畫布就知道，不必等 Run。
+// Client 例外：它沒連線時是驗證錯誤（NO_DOWNSTREAM），照錯誤顯示
+export function unconnectedNodeIds(
+  nodes: readonly Pick<Node, 'id' | 'type'>[],
+  edges: readonly EdgeEnds[],
+): Set<string> {
+  const connected = new Set(edges.flatMap((e) => [e.source, e.target]))
+  return new Set(nodes.filter((n) => n.type !== 'CLIENT' && !connected.has(n.id)).map((n) => n.id))
+}
+
+// 結果表格的列順序：照拓撲的節點順序，未連線的節點移到最後（spec 第 6 節）
+export function connectedFirst<T extends { id: string }>(nodes: readonly T[], unconnected: ReadonlySet<string>): T[] {
+  return [...nodes.filter((n) => !unconnected.has(n.id)), ...nodes.filter((n) => unconnected.has(n.id))]
 }

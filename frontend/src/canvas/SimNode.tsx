@@ -7,7 +7,16 @@ import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
 import { hotSpotTitle, instanceRack, rackSlotStatuses, replicaLabel } from './instanceRack'
 import { Rack } from './Rack'
-import { STATUS_FILL, STATUS_GLOW, STATUS_LABEL, STATUS_TEXT, WARNING_LABEL, WARNING_TITLE } from './status'
+import {
+  displayStatus,
+  isIdle,
+  STATUS_FILL,
+  STATUS_GLOW,
+  STATUS_LABEL,
+  STATUS_TEXT,
+  WARNING_LABEL,
+  WARNING_TITLE,
+} from './status'
 import { errorsTitle } from './validation'
 
 export type SimNodeData = {
@@ -17,15 +26,17 @@ export type SimNodeData = {
   errors?: string[]
   // 拓撲在上次 Run 之後改過，結果和錯誤可能已經不準
   stale?: boolean
+  // 沒有任何邊，不在拓撲裡（見 unconnectedNodeIds）
+  unconnected?: boolean
 }
 
 export type SimFlowNode = FlowNode<SimNodeData, 'sim'>
 
 export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
-  const { node, result, errors, stale } = data
+  const { node, result, errors, stale, unconnected } = data
   const { icon, category, hasInput, hasOutput, nodeMetric } = NODE_KINDS[node.type]
   // status 為 null（Client）時不變色
-  const status = result?.status ?? null
+  const status = displayStatus(result, unconnected ?? false)
   const rack = instanceRack(node)
   const replicas = replicaLabel(node)
   const errorText = errors && errorsTitle(errors, stale)
@@ -39,6 +50,9 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         hasInput ? 'shadow-(--node-shadow)' : 'border-dashed',
         // 選取用強調色的外圈，和狀態色的外框、光暈分開
         selected && 'outline-2 outline-offset-6 outline-primary',
+        // 未連線的節點不在拓撲裡：整個畫淡、灰色虛線外框，選取或滑過時恢復，方便編輯
+        unconnected && 'border-dashed border-muted-foreground/60 transition-opacity',
+        unconnected && !selected && 'opacity-40 hover:opacity-100',
       )}
     >
       {/* 外框和光暈單獨一層，過載脈動時只有光暈閃，文字不跟著閃。
@@ -68,13 +82,16 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
             {node.name}
           </div>
           {replicas && <div className="text-[11px] text-muted-foreground">{replicas}</div>}
-          {result && (
+          {(result || unconnected) && (
             <div className="mt-0.5 flex items-center justify-between gap-3 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground">
                 {status && <span aria-hidden className={cn('size-2 rounded-full', STATUS_FILL[status])} />}
-                {nodeMetric === 'rejected'
-                  ? `拒絕 ${formatRps(result.rejectedRps)}`
-                  : `ρ ${formatUtilization(result.utilization)}`}
+                {/* 未連線沒有流量可看，不列 ρ */}
+                {result &&
+                  !unconnected &&
+                  (nodeMetric === 'rejected'
+                    ? `拒絕 ${formatRps(result.rejectedRps)}`
+                    : `ρ ${formatUtilization(result.utilization)}`)}
               </span>
               {status && <span className={cn('font-semibold', STATUS_TEXT[status])}>{STATUS_LABEL[status]}</span>}
             </div>
@@ -82,7 +99,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         </div>
         {rack && (
           <Rack
-            slots={rackSlotStatuses(rack, status, result?.hotSpot)}
+            slots={rackSlotStatuses(rack, status, isIdle(status) ? undefined : result?.hotSpot)}
             title={hotSpotTitle(rack, result?.hotSpot, stale)}
             stale={stale}
           />

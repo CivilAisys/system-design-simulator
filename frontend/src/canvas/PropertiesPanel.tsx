@@ -27,7 +27,7 @@ import {
   type ChoiceSpec,
 } from './params'
 import type { SimFlowNode } from './SimNode'
-import { STATUS_BADGE, STATUS_FILL, STATUS_TEXT } from './status'
+import { displayStatus, STATUS_BADGE, STATUS_FILL, STATUS_TEXT } from './status'
 import type { RpsFlowEdge } from './RpsEdge'
 import type { EdgePatch, NodePatch } from './useTopologyEditor'
 
@@ -150,7 +150,8 @@ function NodeProperties({ node: flowNode, result, onUpdate }: NodePropertiesProp
   const node = flowNode.data.node
   const { label, icon, category, numberParams, choiceParams, hasHotShare, hasDisk } = NODE_KINDS[node.type]
   const utilization = result?.utilization ?? null
-  const status = result?.status ?? null
+  // 沒有流量（包含未連線）時 ρ 是 0，底色和進度條用灰色，不用 OK 的綠色
+  const status = displayStatus(result, false)
 
   const replicas = replicasHint(node)
   // 多台的 Cache 才有熱點：沒設定時所有機器共用一條佇列。緊接在 instances 後面顯示（spec 4.2.2）

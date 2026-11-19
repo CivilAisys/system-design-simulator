@@ -165,8 +165,10 @@ public final class SteadyStateSimulator implements Simulator {
      */
     private static ClassRates replicate(ReadReplicaNode replica, DatabaseNode primary, ClassRates arrival,
             Map<String, NodeResult> nodeResults) {
-        NodeResult primaryResult = nodeResults.get(primary.id());
-        double replicated = processedWrites(primaryResult.arrivalRps(), primaryResult.throughputRps());
+        // 未連線的 replica 沒有 primary（spec 4.5），沒有複製寫入
+        NodeResult primaryResult = primary == null ? null : nodeResults.get(primary.id());
+        double replicated = primaryResult == null ? 0
+                : processedWrites(primaryResult.arrivalRps(), primaryResult.throughputRps());
         MmcQueue.Outcome outcome = MmcQueue.solve(replica.capacityParams(), arrival);
         NodeResult result = outcome.result();
         boolean lagging = replicated > 0 && result.droppedRps() > 0;
@@ -183,7 +185,8 @@ public final class SteadyStateSimulator implements Simulator {
         Map<String, Integer> replicas = new HashMap<>();
         Set<String> lagging = new HashSet<>();
         for (Node node : topology.nodes()) {
-            if (node instanceof ReadReplicaNode) {
+            // 未連線的 replica 沒有 primary，不算進任何 Database 的副本
+            if (node instanceof ReadReplicaNode && graph.primaryOf(node.id()) != null) {
                 String primary = graph.primaryOf(node.id()).id();
                 replicas.merge(primary, 1, Integer::sum);
                 if (nodeResults.get(node.id()).warnings().contains(NodeWarning.REPLICATION_LAG)) {

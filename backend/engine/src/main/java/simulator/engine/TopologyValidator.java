@@ -118,6 +118,11 @@ final class TopologyValidator {
         checkParams(node);
         String name = name(node.id());
         int downstream = downstreams.getOrDefault(node.id(), 0);
+        // 未連線（沒有任何邊）的節點不在拓撲裡，不檢查跟邊有關的規則，照常計算成沒有流量（spec 4.5）。
+        // Client 例外：它宣告的流量沒有地方送，仍然報 NO_DOWNSTREAM
+        if (!(node instanceof ClientNode) && downstream == 0 && !upstreams.containsKey(node.id())) {
+            return;
+        }
         if (onCycle) {
             nodeError(node, "CYCLE_DETECTED", name + " 在環上，請求會無限循環");
         }

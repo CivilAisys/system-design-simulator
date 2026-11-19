@@ -1,10 +1,9 @@
-import type { Status } from '@/api/client'
 import { cn } from '@/lib/utils'
-import { STATUS_FILL } from './status'
+import { STATUS_FILL, type DisplayStatus } from './status'
 
 type RackProps = {
   // 每條槽的狀態色，見 rackSlotStatuses
-  slots: (Status | null)[]
+  slots: (DisplayStatus | null)[]
   // 有熱點時滑鼠移上去的提示，見 hotSpotTitle
   title?: string
   stale?: boolean

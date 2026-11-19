@@ -58,8 +58,8 @@ final class SuccessRates {
             // 訊息進到 queue 就算成功，consumer 的處理是非同步的
             case MessageQueueNode queue -> 1;
             case ExternalApiNode api -> 1;
-            // 放行的請求只送往唯一的下游；被拒絕的部分由 pass(n) 扣掉
-            case RateLimiterNode limiter -> children.get(edges.getFirst().target());
+            // 放行的請求只送往唯一的下游；被拒絕的部分由 pass(n) 扣掉。未連線時沒有下游（spec 4.5）
+            case RateLimiterNode limiter -> edges.isEmpty() ? 1 : children.get(edges.getFirst().target());
         };
         return pass(node, read) * downstream;
     }

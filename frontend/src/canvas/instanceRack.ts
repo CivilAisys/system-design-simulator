@@ -1,6 +1,7 @@
-import { totalRps, type HotSpot, type InstanceResult, type Node, type Status } from '@/api/client'
+import { totalRps, type HotSpot, type InstanceResult, type Node } from '@/api/client'
 import { NODE_KINDS } from './catalog'
 import { formatMs, formatPercent, formatRps, formatUtilization, STALE_RESULT_NOTE } from './format'
+import type { DisplayStatus } from './status'
 
 // 機櫃最多畫幾條槽，再多台也是這麼多條，實際台數看標籤
 export const MAX_RACK_SLOTS = 5
@@ -25,9 +26,9 @@ export function instanceRack(node: Node): InstanceRack | null {
 // 還沒有結果時是 null（淡灰）
 export function rackSlotStatuses(
   rack: InstanceRack,
-  status: Status | null,
+  status: DisplayStatus | null,
   hotSpot: HotSpot | null | undefined,
-): (Status | null)[] {
+): (DisplayStatus | null)[] {
   return Array.from({ length: rack.slots }, (_, i) =>
     hotSpot ? (i === 0 ? hotSpot.hottest : hotSpot.others).status : status,
   )
