@@ -49,7 +49,9 @@ export function formatMsNumber(ms: number): string {
   if (ms > 0 && ms < TINY) return `< ${TINY}`
   // 小於 0.1 ms（例如 Cache 預設的 0.01 ms）取一位小數會變成 0.0，改用兩位有效數字。
   // 門檻是 0.095：再大一點兩位有效數字會變成「0.10」，和 0.1 以上的「0.1」不一致
-  return ms < 0.095 ? ms.toPrecision(2) : ms.toFixed(1)
+  if (ms < 0.095) return ms.toPrecision(2)
+  // 一位小數，1,000 以上加千分位，和 rps 一致
+  return ms.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 // 頻寬和儲存量用十進位單位（1 MB = 1,000,000 bytes），和網路速率的 Gbps、磁碟容量的 GB 一致
