@@ -110,8 +110,9 @@ export function niceCeil(value: number): number {
   return Number((Math.ceil(value / step) * step).toPrecision(12))
 }
 
-// 背景色帶：第一個到 ρ 0.7 的節點到過載之間是黃色，過載之後是紅色；門檻是 null 時不畫
-export type CurveBand = { kind: 'warn' | 'overload'; from: number; to: number; label: string }
+// 背景色帶：第一個到 ρ 0.7 的節點到過載之間是黃色，過載之後是紅色；門檻是 null 時不畫。
+// row 是標籤在第幾行：兩個都有時過載的放第二行，黃色帶再窄兩個標籤也不會疊在一起
+export type CurveBand = { kind: 'warn' | 'overload'; from: number; to: number; label: string; row: 0 | 1 }
 
 export function curveBands(result: SweepResult, nodeName: (id: string) => string): CurveBand[] {
   const end = result.points.at(-1)?.totalRps ?? 0
@@ -123,11 +124,18 @@ export function curveBands(result: SweepResult, nodeName: (id: string) => string
       from: warn.totalRps,
       to: overload?.totalRps ?? end,
       label: `${nodeName(warn.nodeId)} 接近飽和（ρ ≥ 0.7）`,
+      row: 0,
     })
   }
   // 過載剛好落在最後一點時沒有寬度，不畫（標籤會擠在右邊界上）
   if (overload && overload.totalRps < end) {
-    bands.push({ kind: 'overload', from: overload.totalRps, to: end, label: `${nodeName(overload.nodeId)} 過載` })
+    bands.push({
+      kind: 'overload',
+      from: overload.totalRps,
+      to: end,
+      label: `${nodeName(overload.nodeId)} 過載`,
+      row: bands.length > 0 ? 1 : 0,
+    })
   }
   return bands
 }

@@ -140,13 +140,14 @@ export function StorageTable({ topology, result, onSelectNode }: StorageTablePro
               {open && (
                 <TableRow className={cn('hover:bg-transparent', unconnected.has(node.id) && 'opacity-50')}>
                   <TableCell colSpan={showDisk ? 6 : 5} className="bg-muted/40 whitespace-normal">
-                    <div className="max-w-2xl">
+                    <div className="grid max-w-2xl gap-2">
                       {/* 這張表只在有計算結果時顯示，所以不會是驗證錯誤的狀態 */}
                       <ExplanationBody
                         steps={estimate.explanation}
                         unconnected={unconnected.has(node.id)}
                         invalid={false}
                         stale={false}
+                        heading="怎麼算的"
                         nodeName={nodeName}
                         onSelectNode={onSelectNode}
                       />

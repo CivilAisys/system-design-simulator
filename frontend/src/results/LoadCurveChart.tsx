@@ -70,6 +70,8 @@ export function LoadCurveChart({ sweep, lines, nodeName, theme }: LoadCurveChart
 
 // 色帶的透明度：淡淡一層，不蓋過線
 const BAND_ALPHA = 0.14
+// 色帶標籤一行的高度（字級 11）：第二行的標籤往下移這麼多
+const BAND_LABEL_ROW = 15
 // 上下兩張圖的左右邊界要一樣，X 軸才對得齊
 const GRID_SIDES = { left: 56, right: 48 }
 
@@ -94,7 +96,13 @@ function curveOption(
         itemStyle: { color: withAlpha(bandColor[band.kind], BAND_ALPHA) },
         // 用函式：字串的 formatter 會把名稱裡的 {a} 之類當成樣板
         label: withLabels
-          ? { position: 'insideTopLeft', color: bandColor[band.kind], fontSize: 11, formatter: () => band.label }
+          ? {
+              position: 'insideTopLeft',
+              offset: [0, band.row * BAND_LABEL_ROW],
+              color: bandColor[band.kind],
+              fontSize: 11,
+              formatter: () => band.label,
+            }
           : { show: false },
       },
       { xAxis: band.to },
@@ -125,9 +133,9 @@ function curveOption(
               name: 'overflow',
               coord: [overflow.totalRps, latencyMax],
               label: {
-                // 往下讓開色帶的標籤
+                // 往下讓開兩行色帶標籤
                 position: 'bottom',
-                distance: 22,
+                distance: 22 + BAND_LABEL_ROW,
                 color: colors.text,
                 fontSize: 11,
                 formatter: () => `↑ 之後超出圖外（最高 ${formatMs(overflow.peakMs)}）`,

@@ -115,14 +115,21 @@ describe('latencyAxis', () => {
 describe('curveBands', () => {
   it('ρ 0.7 到過載是黃色帶，過載到最右邊是紅色帶，標籤寫節點名稱', () => {
     expect(curveBands(result({ warn: WARN, overload: { ...OVERLOAD, nodeId: 'db' } }), nodeName)).toEqual([
-      { kind: 'warn', from: 5600, to: 8000, label: 'API 接近飽和（ρ ≥ 0.7）' },
-      { kind: 'overload', from: 8000, to: 10000, label: 'DB 過載' },
+      { kind: 'warn', from: 5600, to: 8000, label: 'API 接近飽和（ρ ≥ 0.7）', row: 0 },
+      // 黃色帶很窄時兩個標籤會疊在一起，所以過載的標籤放第二行
+      { kind: 'overload', from: 8000, to: 10000, label: 'DB 過載', row: 1 },
+    ])
+  })
+
+  it('只有一個色帶時標籤在第一行', () => {
+    expect(curveBands(result({ warn: null, overload: OVERLOAD }), nodeName)).toEqual([
+      { kind: 'overload', from: 8000, to: 10000, label: 'API 過載', row: 0 },
     ])
   })
 
   it('沒有過載時黃色帶畫到最右邊；門檻是 null 時不畫', () => {
     expect(curveBands(result({ warn: WARN, overload: null }), nodeName)).toEqual([
-      { kind: 'warn', from: 5600, to: 10000, label: 'API 接近飽和（ρ ≥ 0.7）' },
+      { kind: 'warn', from: 5600, to: 10000, label: 'API 接近飽和（ρ ≥ 0.7）', row: 0 },
     ])
     expect(curveBands(result({ warn: null, overload: null }), nodeName)).toEqual([])
   })

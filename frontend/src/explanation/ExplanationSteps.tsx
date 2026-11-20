@@ -22,17 +22,27 @@ type ExplanationBodyProps = {
   invalid: boolean
   // 拓撲在上次 Run 之後改過：算式照樣顯示，畫淡並註明
   stale: boolean
+  // 沒有外面的標題時（容量估算表）自己寫一個，開關緊接在它旁邊
+  heading?: string
 } & Omit<ExplanationStepsProps, 'steps'>
 
 // 屬性面板和容量估算表共用：依狀態（explanationState）顯示訊息或算式；驗證錯誤、沒有結果時不顯示
-export function ExplanationBody({ steps, unconnected, invalid, stale, nodeName, onSelectNode }: ExplanationBodyProps) {
+export function ExplanationBody({
+  steps,
+  unconnected,
+  invalid,
+  stale,
+  heading,
+  nodeName,
+  onSelectNode,
+}: ExplanationBodyProps) {
   const state = explanationState({ steps, unconnected, invalid })
   if (state === 'hidden') return null
   if (state === 'unconnected') return <Note>未連線，沒有計算</Note>
   if (state === 'pending' || !steps) return <Note>Run 之後顯示</Note>
   return (
     <>
-      <ShowFormulaSwitch />
+      <ShowFormulaSwitch heading={heading} />
       {stale && <Note>{STALE_RESULT_NOTE}</Note>}
       <div className={cn(stale && 'opacity-50')}>
         <ExplanationSteps steps={steps} nodeName={nodeName} onSelectNode={onSelectNode} />
@@ -41,16 +51,20 @@ export function ExplanationBody({ steps, unconnected, invalid, stale, nodeName, 
   )
 }
 
-// 預設白話；打開後每一行底下多一行灰色的公式。屬性面板和容量估算表共用同一個開關
-function ShowFormulaSwitch() {
+// 預設白話；打開後每一行底下多一行灰色的公式。屬性面板和容量估算表共用同一個開關。
+// 屬性面板的標題在外面（可以收合的按鈕），開關在下一行靠右；有 heading 時開關接在標題後面
+function ShowFormulaSwitch({ heading }: { heading?: string }) {
   const [showFormula, setShowFormula] = useShowFormula()
   const id = useId()
   return (
-    <div className="flex items-center justify-end gap-2">
-      <Switch id={id} size="sm" checked={showFormula} onCheckedChange={setShowFormula} />
-      <Label htmlFor={id} className="text-xs font-normal text-muted-foreground">
-        看公式
-      </Label>
+    <div className={cn('flex items-center gap-2', heading ? 'gap-4' : 'justify-end')}>
+      {heading && <h4 className="text-xs font-semibold">{heading}</h4>}
+      <div className="flex items-center gap-2">
+        <Switch id={id} size="sm" checked={showFormula} onCheckedChange={setShowFormula} />
+        <Label htmlFor={id} className="text-xs font-normal text-muted-foreground">
+          看公式
+        </Label>
+      </div>
     </div>
   )
 }
