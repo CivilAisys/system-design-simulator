@@ -12,10 +12,14 @@ import simulator.engine.ClassLatencies;
 import simulator.engine.ClassRates;
 import simulator.engine.EdgeResult;
 import simulator.engine.EndToEndLatency;
+import simulator.engine.ExplanationStep;
+import simulator.engine.ExplanationTerm;
+import simulator.engine.ExplanationView;
 import simulator.engine.HotSpot;
 import simulator.engine.InstanceResult;
 import simulator.engine.NodeResult;
 import simulator.engine.NodeWarning;
+import simulator.engine.RequestClass;
 import simulator.engine.SimulationResult;
 import simulator.engine.Status;
 import simulator.engine.StorageEstimate;
@@ -42,10 +46,16 @@ public record SimulationResponse(
         return new SimulationResponse(
                 result.valid(),
                 result.errors().stream().map(ValidationErrorDto::from).toList(),
-                mapValues(result.nodes(), NodeResultDto::from),
+                nodes(result),
                 mapValues(result.edges(), EdgeResultDto::from),
                 result.summary() == null ? null : SummaryDto.from(result.summary()),
                 mapValues(result.storage(), StorageEstimateDto::from));
+    }
+
+    private static Map<String, NodeResultDto> nodes(SimulationResult result) {
+        Map<String, NodeResultDto> mapped = new LinkedHashMap<>();
+        result.nodes().forEach((id, node) -> mapped.put(id, NodeResultDto.from(node, result.explanations().get(id))));
+        return mapped;
     }
 
     private static <A, B> Map<String, B> mapValues(Map<String, A> source, Function<A, B> mapper) {
@@ -125,14 +135,57 @@ public record SimulationResponse(
                     description = "只有設定了 hotShare 的 Cache 有：最熱的那台和其他台的結果（spec 4.2.2）")
             HotSpotDto hotSpot,
             @Schema(requiredMode = REQUIRED, description = "沒有警告時為空陣列；REPLICATION_LAG：Read Replica 丟掉了複製寫入（spec 4.2.3）；BACKLOG：consumer 處理不完 Message Queue 的訊息（spec 4.2.4）")
-            List<NodeWarning> warnings) {
+            List<NodeWarning> warnings,
+            @Schema(requiredMode = REQUIRED, description = "計算步驟（spec 4.9），依計算順序；未連線的節點為空陣列")
+            List<ExplanationStepDto> explanation) {
 
-        static NodeResultDto from(NodeResult node) {
+        static NodeResultDto from(NodeResult node, List<ExplanationStep> explanation) {
             return new NodeResultDto(ClassRatesDto.from(node.arrivalRps()), node.throughputRps(),
                     node.droppedRps(), node.rejectedRps(), node.successRps(), ClassLatenciesDto.from(node.endToEndMs()),
                     node.capacityRps(), node.utilization(), node.avgQueueMs(), node.avgLatencyMs(), node.status(),
                     HotSpotDto.from(node.hotSpot()),
-                    node.warnings());
+                    node.warnings(), explanation.stream().map(ExplanationStepDto::from).toList());
+        }
+    }
+
+    @Schema(name = "ExplanationStep", description = "計算說明的一步（spec 4.9）。formula 裡大括號中的符號是代入值，對應 terms 裡同名的項目")
+    public record ExplanationStepDto(
+            @Schema(requiredMode = REQUIRED, description = "分組標題，例如「進來多少」「最熱那台」；同一組的步驟相鄰") String group,
+            @Schema(requiredMode = REQUIRED) String label,
+            @Schema(requiredMode = REQUIRED, description = "例如 {λ} ÷ ({c} × {μ})") String formula,
+            @Schema(requiredMode = REQUIRED, description = "代入值，依在 formula 裡出現的順序；只有 plain 用到的接在後面") List<ExplanationTermDto> terms,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "這一步的結果；沒有定義時為 null（例如過載時的延遲）")
+            Double value,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "rps、ms、%（0–1 的比例，顯示成百分比）、bytes、days，沒有單位時為 null")
+            String unit,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "白話的一句，例如「每秒能處理 {=} = {c} × {μ}」："
+                    + "{符號} 代入 terms 裡的值、{=} 代入這一步的結果、{@符號} 是那個代入值來自的節點名稱；"
+                    + "view 為 FORMULA 時為 null")
+            String plain,
+            @Schema(requiredMode = REQUIRED, description = "BOTH：兩種模式都顯示；PLAIN：只在白話模式；FORMULA：只在看公式時")
+            ExplanationView view,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "read、write 各算一次的步驟是 READ 或 WRITE，"
+                    + "兩者相同時前端合成一行；其他為 null")
+            RequestClass requestClass) {
+
+        static ExplanationStepDto from(ExplanationStep step) {
+            return new ExplanationStepDto(step.group(), step.label(), step.formula(),
+                    step.terms().stream().map(ExplanationTermDto::from).toList(), step.value(), step.unit(), step.plain(),
+                    step.view(), step.requestClass());
+        }
+    }
+
+    @Schema(name = "ExplanationTerm", description = "計算說明裡的一個代入值")
+    public record ExplanationTermDto(
+            @Schema(requiredMode = REQUIRED, description = "formula 裡大括號中的符號") String symbol,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "沒有定義時為 null（例如下游過載時的端到端延遲）")
+            Double value,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "同 ExplanationStep.unit") String unit,
+            @Schema(requiredMode = REQUIRED, nullable = true, description = "這個值來自另一個節點時是那個節點的 id，前端可以點過去")
+            String nodeId) {
+
+        static ExplanationTermDto from(ExplanationTerm term) {
+            return new ExplanationTermDto(term.symbol(), term.value(), term.unit(), term.nodeId());
         }
     }
 
@@ -203,12 +256,15 @@ public record SimulationResponse(
             boolean fillsDisk,
             @Schema(requiredMode = REQUIRED, description = "計算時用的 retentionDays") double retentionDays,
             @Schema(requiredMode = REQUIRED, nullable = true, description = "計算時用的 diskGbPerInstance，沒有設定時和 OBJECT_STORAGE 為 null")
-            Double diskGbPerInstance) {
+            Double diskGbPerInstance,
+            @Schema(requiredMode = REQUIRED, description = "計算步驟（spec 4.9），格式同 NodeResult.explanation；未連線的節點為空陣列")
+            List<ExplanationStepDto> explanation) {
 
         static StorageEstimateDto from(StorageEstimate estimate) {
             return new StorageEstimateDto(estimate.dailyBytes(), estimate.totalBytes(), estimate.replicas(),
                     estimate.totalWithReplicasBytes(), estimate.replicasLagging(), estimate.perInstanceBytes(), estimate.daysUntilFull(),
-                    estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerInstance());
+                    estimate.fillsDisk(), estimate.retentionDays(), estimate.diskGbPerInstance(),
+                    estimate.explanation().stream().map(ExplanationStepDto::from).toList());
         }
     }
 

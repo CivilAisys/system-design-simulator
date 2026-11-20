@@ -10,8 +10,6 @@ final class MmcQueue {
 
     /** 計算節點結果，並回傳實際處理完、要往下游送的流量。 */
     static Outcome solve(CapacityParams params, ClassRates arrival) {
-        long c = params.workers();
-        double mu = params.serviceRate();
         double cap = params.capacityRps();
         double lambda = arrival.total();
         double rho = lambda / cap;
@@ -23,8 +21,7 @@ final class MmcQueue {
             return new Outcome(result, processed);
         }
 
-        double waitSec = erlangC(c, lambda / mu) / (cap - lambda);
-        double queueMs = waitSec * 1000.0;
+        double queueMs = queueMs(params, lambda);
         var result = new NodeResult(arrival, lambda, 0, 0, null, null, cap, rho, queueMs,
                 queueMs + params.serviceTimeMs(), Status.of(rho), null, List.of());
         return new Outcome(result, arrival);
@@ -66,6 +63,12 @@ final class MmcQueue {
         }
         double sum = hotFlow > 0 ? hot * hotFlow : 0;
         return (sum + (otherFlow > 0 ? other * otherFlow : 0)) / total;
+    }
+
+    /** 平均排隊時間 Wq = P_wait / (c × μ − λ)，換成 ms；只在 ρ < 1 時有定義。 */
+    static double queueMs(CapacityParams params, double lambda) {
+        double waitSec = erlangC(params.workers(), lambda / params.serviceRate()) / (params.capacityRps() - lambda);
+        return waitSec * 1000.0;
     }
 
     /**

@@ -65,9 +65,17 @@ describe('formatMs', () => {
     expect(formatMs(0.1)).toBe('0.1 ms')
   })
 
+  it('1,000 以上加千分位，和 rps 一致', () => {
+    expect(formatMs(1010.6)).toBe('1,010.6 ms')
+    expect(formatMs(51990.34)).toBe('51,990.3 ms')
+    expect(formatMs(999.96)).toBe('1,000.0 ms')
+  })
+
   it('小於 0.1 ms 取兩位有效數字，不顯示成 0.0', () => {
     expect(formatMs(0.01)).toBe('0.010 ms')
     expect(formatMs(0.0012)).toBe('0.0012 ms')
+    // 再小的不用科學記號（#189）
+    expect(formatMs(1.9e-212)).toBe('< 0.001 ms')
     expect(formatMs(0.04)).toBe('0.040 ms')
   })
 

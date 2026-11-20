@@ -35,6 +35,34 @@
           }
         }
       }
+    },
+    "/api/v1/simulate/sweep" : {
+      "post" : {
+        "tags" : [ "simulate-controller" ],
+        "operationId" : "sweep",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SweepRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SweepResult"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components" : {
@@ -321,6 +349,78 @@
         },
         "required" : [ "approximate", "ms", "overloadedNodeIds", "undefinedReason" ]
       },
+      "ExplanationStep" : {
+        "type" : "object",
+        "description" : "計算說明的一步（spec 4.9）。formula 裡大括號中的符號是代入值，對應 terms 裡同名的項目",
+        "properties" : {
+          "group" : {
+            "type" : "string",
+            "description" : "分組標題，例如「進來多少」「最熱那台」；同一組的步驟相鄰"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "formula" : {
+            "type" : "string",
+            "description" : "例如 {λ} ÷ ({c} × {μ})"
+          },
+          "terms" : {
+            "type" : "array",
+            "description" : "代入值，依在 formula 裡出現的順序；只有 plain 用到的接在後面",
+            "items" : {
+              "$ref" : "#/components/schemas/ExplanationTerm"
+            }
+          },
+          "value" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "這一步的結果；沒有定義時為 null（例如過載時的延遲）"
+          },
+          "unit" : {
+            "type" : [ "string", "null" ],
+            "description" : "rps、ms、%（0–1 的比例，顯示成百分比）、bytes、days，沒有單位時為 null"
+          },
+          "plain" : {
+            "type" : [ "string", "null" ],
+            "description" : "白話的一句，例如「每秒能處理 {=} = {c} × {μ}」：{符號} 代入 terms 裡的值、{=} 代入這一步的結果、{@符號} 是那個代入值來自的節點名稱；view 為 FORMULA 時為 null"
+          },
+          "view" : {
+            "type" : "string",
+            "description" : "BOTH：兩種模式都顯示；PLAIN：只在白話模式；FORMULA：只在看公式時",
+            "enum" : [ "BOTH", "PLAIN", "FORMULA" ]
+          },
+          "requestClass" : {
+            "type" : [ "string", "null" ],
+            "description" : "read、write 各算一次的步驟是 READ 或 WRITE，兩者相同時前端合成一行；其他為 null",
+            "enum" : [ "ALL", "READ", "WRITE" ]
+          }
+        },
+        "required" : [ "formula", "group", "label", "plain", "requestClass", "terms", "unit", "value", "view" ]
+      },
+      "ExplanationTerm" : {
+        "type" : "object",
+        "description" : "計算說明裡的一個代入值",
+        "properties" : {
+          "symbol" : {
+            "type" : "string",
+            "description" : "formula 裡大括號中的符號"
+          },
+          "value" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "沒有定義時為 null（例如下游過載時的端到端延遲）"
+          },
+          "unit" : {
+            "type" : [ "string", "null" ],
+            "description" : "同 ExplanationStep.unit"
+          },
+          "nodeId" : {
+            "type" : [ "string", "null" ],
+            "description" : "這個值來自另一個節點時是那個節點的 id，前端可以點過去"
+          }
+        },
+        "required" : [ "nodeId", "symbol", "unit", "value" ]
+      },
       "HotSpot" : {
         "type" : "object",
         "properties" : {
@@ -434,9 +534,16 @@
               "type" : "string",
               "enum" : [ "REPLICATION_LAG", "BACKLOG" ]
             }
+          },
+          "explanation" : {
+            "type" : "array",
+            "description" : "計算步驟（spec 4.9），依計算順序；未連線的節點為空陣列",
+            "items" : {
+              "$ref" : "#/components/schemas/ExplanationStep"
+            }
           }
         },
-        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "hotSpot", "rejectedRps", "status", "successRps", "throughputRps", "utilization", "warnings" ]
+        "required" : [ "arrivalRps", "avgLatencyMs", "avgQueueMs", "capacityRps", "droppedRps", "endToEndMs", "explanation", "hotSpot", "rejectedRps", "status", "successRps", "throughputRps", "utilization", "warnings" ]
       },
       "SimulationResult" : {
         "type" : "object",
@@ -531,9 +638,16 @@
             "type" : [ "number", "null" ],
             "format" : "double",
             "description" : "計算時用的 diskGbPerInstance，沒有設定時和 OBJECT_STORAGE 為 null"
+          },
+          "explanation" : {
+            "type" : "array",
+            "description" : "計算步驟（spec 4.9），格式同 NodeResult.explanation；未連線的節點為空陣列",
+            "items" : {
+              "$ref" : "#/components/schemas/ExplanationStep"
+            }
           }
         },
-        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerInstance", "fillsDisk", "perInstanceBytes", "replicas", "replicasLagging", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
+        "required" : [ "dailyBytes", "daysUntilFull", "diskGbPerInstance", "explanation", "fillsDisk", "perInstanceBytes", "replicas", "replicasLagging", "retentionDays", "totalBytes", "totalWithReplicasBytes" ]
       },
       "Summary" : {
         "type" : "object",
@@ -592,6 +706,150 @@
           }
         },
         "required" : [ "code", "edgeId", "message", "nodeId" ]
+      },
+      "SweepRequest" : {
+        "type" : "object",
+        "properties" : {
+          "topology" : {
+            "$ref" : "#/components/schemas/Topology"
+          },
+          "maxMultiplier" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "所有 Client 的 rps 最多放大幾倍，> 0 且 ≤ 10；前端只送 2、5、10",
+            "example" : 2
+          }
+        },
+        "required" : [ "maxMultiplier", "topology" ]
+      },
+      "BusiestNode" : {
+        "type" : "object",
+        "properties" : {
+          "nodeId" : {
+            "type" : "string"
+          },
+          "utilization" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        },
+        "required" : [ "nodeId", "utilization" ]
+      },
+      "SweepLatency" : {
+        "type" : "object",
+        "description" : "null：任一 Client 的路徑上有節點過載（沒有定義），或沒有這個 class 的請求",
+        "properties" : {
+          "read" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "write" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          }
+        },
+        "required" : [ "read", "write" ]
+      },
+      "SweepPoint" : {
+        "type" : "object",
+        "properties" : {
+          "multiplier" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "totalRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "endToEndMs" : {
+            "$ref" : "#/components/schemas/SweepLatency",
+            "description" : "所有 Client 依請求數加權的端到端延遲；倍率 0 那一點是沒有排隊時的延遲"
+          },
+          "successRate" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "完整成功的請求 ÷ 送出的請求，0–1；沒有流量時為 1"
+          },
+          "busiest" : {
+            "description" : "ρ 最高的節點；沒有候選節點時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/BusiestNode"
+            }, {
+              "type" : "null"
+            } ]
+          }
+        },
+        "required" : [ "busiest", "endToEndMs", "multiplier", "successRate", "totalRps" ]
+      },
+      "SweepResult" : {
+        "type" : "object",
+        "properties" : {
+          "valid" : {
+            "type" : "boolean"
+          },
+          "errors" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ValidationError"
+            }
+          },
+          "currentRps" : {
+            "type" : "number",
+            "format" : "double",
+            "description" : "目前所有 Client 的 rps 加總（倍率 1）；驗證失敗時為 0"
+          },
+          "points" : {
+            "type" : "array",
+            "description" : "依倍率排序：從 0 到上限均分 40 點，加上門檻那幾點和過載前加密的 6 點；放大後超出參數範圍的點略過",
+            "items" : {
+              "$ref" : "#/components/schemas/SweepPoint"
+            }
+          },
+          "thresholds" : {
+            "$ref" : "#/components/schemas/SweepThresholds"
+          }
+        },
+        "required" : [ "currentRps", "errors", "points", "thresholds", "valid" ]
+      },
+      "SweepThreshold" : {
+        "type" : "object",
+        "properties" : {
+          "multiplier" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "totalRps" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "nodeId" : {
+            "type" : "string",
+            "description" : "第一個到達門檻的節點"
+          }
+        },
+        "required" : [ "multiplier", "nodeId", "totalRps" ]
+      },
+      "SweepThresholds" : {
+        "type" : "object",
+        "properties" : {
+          "warn" : {
+            "description" : "第一個節點 ρ 到 0.7 的位置；範圍內沒有到時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/SweepThreshold"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "overload" : {
+            "description" : "第一個節點過載（ρ 到 1）的位置；範圍內沒有到時為 null",
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/SweepThreshold"
+            }, {
+              "type" : "null"
+            } ]
+          }
+        },
+        "required" : [ "overload", "warn" ]
       }
     }
   }

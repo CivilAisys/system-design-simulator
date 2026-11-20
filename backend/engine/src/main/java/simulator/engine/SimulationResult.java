@@ -6,7 +6,8 @@ import java.util.Map;
 /**
  * 一次 Run 的完整結果。{@code nodes}、{@code edges} 以 id 為 key，順序與輸入相同。
  * {@code storage} 是 Database、Object Storage 的儲存量估算（spec 4.8），順序與輸入相同。
- * 驗證失敗時不做任何計算：{@code nodes}、{@code edges}、{@code storage} 為空，{@code summary} 為 null。
+ * {@code explanations} 是每個節點的計算步驟（spec 4.9），以節點 id 為 key，順序與輸入相同。
+ * 驗證失敗時不做任何計算：{@code nodes}、{@code edges}、{@code storage}、{@code explanations} 為空，{@code summary} 為 null。
  */
 public record SimulationResult(
         boolean valid,
@@ -14,9 +15,10 @@ public record SimulationResult(
         Map<String, NodeResult> nodes,
         Map<String, EdgeResult> edges,
         Summary summary,
-        Map<String, StorageEstimate> storage) {
+        Map<String, StorageEstimate> storage,
+        Map<String, List<ExplanationStep>> explanations) {
 
     static SimulationResult invalid(List<ValidationError> errors) {
-        return new SimulationResult(false, errors, Map.of(), Map.of(), null, Map.of());
+        return new SimulationResult(false, errors, Map.of(), Map.of(), null, Map.of(), Map.of());
     }
 }

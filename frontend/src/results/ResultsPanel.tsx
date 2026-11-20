@@ -13,6 +13,7 @@ import type { Theme } from '@/theme'
 import { formatBitsPerSec, formatBytesPerSec, formatDays, formatPercent } from '@/canvas/format'
 import { ErrorList } from './ErrorList'
 import { KpiStrip } from './KpiStrip'
+import { LoadCurvePanel } from './LoadCurvePanel'
 import { MetricsTable } from './MetricsTable'
 import { StorageTable } from './StorageTable'
 
@@ -22,13 +23,28 @@ const FlowSankey = lazy(() => import('./FlowSankey').then((module) => ({ default
 type ResultsPanelProps = {
   topology: Topology
   result: SimulationResult | null
+  // 上次 Run 算的那一份拓撲（負載曲線掃這一份），和結果是不是已經過期
+  resultTopology: Topology | null
+  stale: boolean
   running: boolean
   theme: Theme
   canFocusError: (error: ValidationError) => boolean
   onFocusError: (error: ValidationError) => void
+  // 容量估算表的算式裡點節點名稱
+  onSelectNode: (id: string) => void
 }
 
-export function ResultsPanel({ topology, result, running, theme, canFocusError, onFocusError }: ResultsPanelProps) {
+export function ResultsPanel({
+  topology,
+  result,
+  resultTopology,
+  stale,
+  running,
+  theme,
+  canFocusError,
+  onFocusError,
+  onSelectNode,
+}: ResultsPanelProps) {
   // 驗證失敗時不做任何計算，指標表和 Sankey 都沒有東西可畫
   const computed = isComputed(result) ? result : null
   const errorCount = result?.errors.length ?? 0
@@ -42,6 +58,7 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
         <TabsList>
           <TabsTrigger value="metrics">指標表</TabsTrigger>
           <TabsTrigger value="sankey">流量 Sankey</TabsTrigger>
+          <TabsTrigger value="curve">負載曲線</TabsTrigger>
           <TabsTrigger value="storage">容量估算</TabsTrigger>
           <TabsTrigger value="errors">錯誤 ({errorCount})</TabsTrigger>
         </TabsList>
@@ -70,8 +87,22 @@ export function ResultsPanel({ topology, result, running, theme, canFocusError, 
             empty
           )}
         </TabsContent>
+        {/* 分頁關著時 Radix 不掛上內容，所以只有開著時才掃描 */}
+        <TabsContent value="curve" className="min-h-56">
+          {result ? (
+            <LoadCurvePanel
+              topology={topology}
+              result={result}
+              resultTopology={resultTopology}
+              stale={stale}
+              theme={theme}
+            />
+          ) : (
+            empty
+          )}
+        </TabsContent>
         <TabsContent value="storage" className="min-h-40 overflow-auto">
-          {computed ? <StorageTable topology={topology} result={computed} /> : empty}
+          {computed ? <StorageTable topology={topology} result={computed} onSelectNode={onSelectNode} /> : empty}
         </TabsContent>
         <TabsContent value="errors" className="min-h-40 overflow-auto">
           {result ? (

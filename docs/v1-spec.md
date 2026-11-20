@@ -36,7 +36,7 @@
 | 建置    | Gradle（Kotlin DSL）多模組、Gradle Wrapper                             |
 | 前端    | React + Vite + TypeScript、Tailwind CSS v4、Vitest（純邏輯的單元測試）     |
 | UI 元件 | shadcn/ui（元件原始碼複製進專案，可完全客製）                                  |
-| 圖表    | ECharts（Sankey）                                                  |
+| 圖表    | ECharts（Sankey、負載曲線）                                        |
 | 動畫    | SVG 和 CSS（流量粒子、節點發光），不另外用動畫函式庫                                |
 | 畫布    | `@xyflow/react`（React Flow），可搭配官方 React Flow UI（shadcn 版）元件          |
 | 型別同步  | springdoc 產出 OpenAPI → `openapi-typescript` 產生前端型別               |
@@ -61,6 +61,7 @@ system-design-simulator/
    └─ src/
       ├─ canvas/      React Flow 畫布、自訂節點、元件面板、屬性面板、編輯器狀態（復原、複製貼上）
       ├─ results/     結果面板：指標表、Sankey、錯誤清單
+      ├─ explanation/ 計算說明（4.9）的格式和顯示，屬性面板和容量估算共用
       ├─ simulation/  Run、Auto-run、過期判斷
       ├─ io/          拓撲檔的檢查與自動存檔
       ├─ api/         產生的型別與 API client
@@ -161,7 +162,7 @@ system-design-simulator/
 **新增一種 Node type**：
 
 - 後端 api：`NodeType` 加一個值；`NodeParamsDto` 加該類型的參數（`description` 寫上用到它的 type）；`NodeDto.toNode` 建出 engine 的節點。改完跑 `./gradlew :api:generateOpenApi` 更新 `openapi.json`，前端的型別跟著重新產生。
-- 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`。
+- 後端 engine：新增 `Node` 的實作並加進 `Node` 的 `permits`。編譯器會指出所有 `switch (node)` 要補的分支（`SteadyStateSimulator`、`SuccessRates`、`TopologyValidator` 的參數範圍、`TopologyGraph` 的出邊規則、`Explanations` 的計算步驟和成功率說明），`instanceof` 的判斷則要自己逐一確認：`TopologyValidator` 的上下游限制和出邊參數、`TopologyGraph` 哪些 type 依 `weight` 分流、`EndToEndLatencies`、`SuccessRates`、`SteadyStateSimulator`、`Explanations`。新元件的計算步驟要補進 4.9 的涵蓋範圍。
 - 前端：在 `canvas/catalog.ts` 的 `NODE_TYPES`（元件面板的順序）和 `NODE_KINDS` 各加一筆。只換名稱、圖示和部分預設值、type 不變的元件（例如 Redis Cluster）不是新的 type，加在同一個檔案的 `PRESETS`，元件面板讀的是由兩者組成的 `PALETTE`。`NODE_KINDS` 是前端唯一的 type 定義：名稱、圖示、類別（流量／運算／資料／非同步，元件面板依它分組、圖示方塊依它上色；`NODE_TYPES` 要把同類別的排在一起）、id 前綴、預設參數、屬性面板列出的參數、能不能有上游／下游、出邊顯示的欄位、出邊的種類、節點上顯示的指標，元件面板、畫布、屬性面板和讀入存檔都從這裡讀。新的數值參數在 `params.ts` 的 `NODE_PARAM_SPECS` 加範圍（要和後端 4.5 一致），下拉選單參數加在 `NODE_CHOICE_SPECS`。
 - 計算和既有 type 完全相同、只差預設值和名稱的新 type（例如 CDN 之於 Cache、Object Storage 之於 Database）：engine 讓兩者實作同一個 sealed 子介面（`CachingNode`、`StorageNode`），`switch` 對子介面寫一個分支，計算和驗證共用；前端 `NODE_KINDS` 仍各寫一筆。
 - 出邊的種類（`outputEdgeKind`）：`ASYNC` 的邊畫成虛線，給不算進 Client 端到端延遲的邊用（replication、Message Queue 的 consumer）。種類只看 source 的 type。只能連到特定 type 時寫在 `outputTargets`（例如 Database 只能連到 Read Replica）。
@@ -173,7 +174,7 @@ system-design-simulator/
 
 ### 4.0 引擎入口
 
-`engine` 模組對外只公開一個入口：
+`engine` 模組對外公開兩個入口：計算一份拓撲的 `Simulator`，和建在它上面的負載掃描 `LoadSweep`（4.10）。
 
 ```java
 public interface Simulator {
@@ -185,6 +186,7 @@ public interface Simulator {
 - 階段一的實作是 `SteadyStateSimulator`。驗證、流量、延遲、成功率、瓶頸都是它的內部細節，可以拆成多個 class，但不給 API 層直接呼叫。
 - 每次呼叫都是獨立的計算，不保留狀態。前端每次 Run 都送出整份拓撲重算。
 - API 層只負責 JSON ↔ `Topology`／`SimulationResult` 的轉換，不做任何計算。
+- `LoadSweep` 只是放大 Client 的 rps 後反覆呼叫 `Simulator`，自己不做計算。
 - 4.6 的測試案例都透過 `simulate()` 撰寫，測試的是行為而不是內部結構。階段二的 DES 是另一個實作，介面需要擴充時再決定。
 
 ### 4.1 流程
@@ -477,6 +479,94 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - GB 是十進位（10⁹ bytes）。Object Storage、沒有設定 `diskGbPerInstance`、沒有寫入（資料不會增加），或寫入量小到天數超出浮點數範圍時，`daysUntilFull` 是 `null`。
 - **副本跟不上**：primary 的 Read Replica 有 `REPLICATION_LAG`（4.2.3）時，「含副本」仍照完整副本計算，數字不改，但回應的 `replicasLagging` 為 true，容量估算分頁在那一列加註「副本複製跟不上，實際副本量會比這少」。
 - **磁碟會滿**（`fillsDisk`）：`daysUntilFull < retentionDays`，也就是保留期內每台的資料會超過磁碟容量。這是另一種瓶頸，和 ρ 分開顯示，不混進「瓶頸 = ρ 最高」的規則（`bottleneckNodeId` 不變）。
+- **計算說明**：每筆估算的 `explanation` 是上面公式的步驟（格式同 4.9），分組是「每日增量」（處理完的 write，代入值指到這個節點自己；每日增量）、「總量」（總量；含副本，名稱列出是哪幾個 Read Replica，副本跟不上時加註）、「每台」、「磁碟」（每台每日增量；磁碟幾天後會滿，名稱寫和保留期幾天比較、保留期內會不會滿）。沒有對應數字的步驟不列：Object Storage 只有每日增量和總量；沒有設定 `diskGbPerInstance` 或沒有寫入時不列磁碟那組。未連線的節點是空陣列。
+
+### 4.9 計算說明
+
+讓每個數字都能說明是怎麼算出來的：引擎在同一次計算裡替每個節點列出步驟，放在回應的節點結果 `explanation`（第 5 節），前端不重算。
+
+**格式**：一串步驟，依計算順序排列。每一步有：
+
+| 欄位 | 意思 |
+|---|---|
+| `group` | 分組標題，例如「進來多少」「能處理多少」「最熱那台」；同一組的步驟相鄰 |
+| `label` | 這一步算的是什麼，例如「使用率 ρ（0.7 ≤ ρ < 0.9：WARN）」 |
+| `formula` | 公式，用大括號標出代入值，例如 `{λ} ÷ ({c} × {μ})`；沒有大括號的是純文字說明 |
+| `terms` | 代入值 `{ symbol, value, unit, nodeId }`，先是在 `formula` 裡出現的、依出現順序，接著是只有 `plain` 用到的；`symbol` 對應大括號裡的文字 |
+| `value`、`unit` | 這一步的結果 |
+| `plain` | 白話的一句（下面說明）；`view` 是 `FORMULA` 時為 `null` |
+| `view` | `BOTH`：兩種模式都顯示；`PLAIN`：只在白話模式；`FORMULA`：只在看公式時 |
+| `requestClass` | read、write 各算一次的步驟是 `READ` 或 `WRITE`，其他為 `null` |
+
+- `unit` 是 `rps`、`ms`、`%`（0–1 的比例，顯示成百分比）、`bytes`、`days`（儲存量估算用）或 `null`（沒有單位，例如 ρ、c）。磁碟容量換成 bytes 代入，和每台每日增量的單位一致。
+- `value` 為 `null` 表示**沒有定義**（例如過載時的延遲），不是 0；代入值也一樣（例如下游過載時它的端到端延遲）。
+- 代入值來自另一個節點時（上游送來的量、下游的成功率或延遲），`nodeId` 是那個節點，前端可以點過去；其他時候為 `null`。
+- 名稱和公式文字由後端產生（跟驗證錯誤的 `message` 一樣），數字由前端用自己的格式顯示，畫面上是「ρ = λ ÷ (c × μ) = 1,000 ÷ (2 × 1,000) = 0.50」。
+
+**白話**：畫面預設顯示白話，打開「看公式」才看到符號和公式（第 6 節）。
+
+- **每一步一句。** 例如「使用率 ρ 0.13 = 每秒進來 1,000 ÷ 每秒能處理 8,000（低於 0.7，正常）」。
+- **只留 ρ 一個符號。** λ、μ、c、Wq 都改成文字，例如「每秒進來」「每秒能處理」「同時能處理 400 個」。
+- **參數用屬性面板上的中文名稱**，例如每秒請求數、讀取比例、機器數、每台並行數、處理時間、命中率。
+- **模板的寫法。** 中文只在引擎維護一份；`plain` 是模板，數字由前端代入：
+  - `{符號}` 代入 `terms` 裡同名的值；
+  - `{=}` 代入這一步的結果；
+  - `{@符號}` 是那個代入值來自的節點名稱（那個 term 的 `nodeId`，前端可以點過去）。
+- **數字的格式**和代入值一樣：
+  - rps、ms 不帶單位（句子裡寫「每秒」「ms」）；
+  - 比例帶 %；
+  - bytes 換成 KB、GB 等單位；
+  - days（只有「磁碟幾天後會滿」的結果）和容量估算表一樣寫成「約 116 天」「不到 1 天」，句子是「磁碟{=}後會滿」。
+- **名稱裡的大括號。** 句子裡直接寫進名稱時（例如 Read Replica 的名稱），大括號換成全形，不會被當成代入位置。
+- **排隊。** Erlang C 的三步（負載 a、要排隊的機率、平均排隊時間）只在看公式時顯示（`FORMULA`）。白話另外有一步合併的「排隊」（`PLAIN`），寫法依平均排隊時間 Wq：
+  - 幾乎不用排隊是指 Wq < 0.1 ms，而且 Wq 小於處理時間的 1%。只看絕對值的話，處理時間很短的節點（例如 Cache 的 0.01 ms）排隊比處理還久，也會被說成不用排隊。
+  - 幾乎不用排隊、要排隊的機率 < 0.1%：「排隊：幾乎不用排隊（要排隊的機率 < 0.1%）」；
+  - 幾乎不用排隊、要排隊的機率 ≥ 0.1%：「排隊：幾乎不用排隊（N% 的請求要排隊，但平均等的時間不到處理時間的 1%）」；
+  - 其他：「排隊：平均要等 X ms（N% 的請求要排隊）」。
+  - 「在這裡花」那一步在幾乎不用排隊時寫「在這裡花 50.0 ms = 處理 50.0（幾乎不用排隊）」。
+- **read、write 合成一行。** 到達量、通過率、成功率、端到端延遲和 Client 的送出量，read、write 各一步，標上 `requestClass`。同一組裡第 k 個 `READ` 步驟對應第 k 個 `WRITE` 步驟（測試鎖住），前端在代入後兩句相同時合成一行「read、write 都是：…」。
+- **沒有定義的步驟**不用 `{=}`，直接寫原因，例如「在這裡花多久：沒有定義（處理不完，排隊會一直變長）」。
+
+**每個節點只說明自己這一層**：上下游的數字直接當作代入值，不展開它們的算式；要往下追就點那個節點。
+
+**涵蓋範圍**（依順序；沒有的部分不列）：
+
+| 分組 | 步驟 |
+|---|---|
+| 送出多少（Client） | read = rps × readRatio、write = rps − read |
+| 進來多少 | read、write 各是每條上游邊送來的量加總：上游處理完的流量 × visits（3.3、3.4），再加成 λ |
+| 能處理多少 | c = instances × concurrency、μ = 1000 ÷ serviceTimeMs、容量 c × μ、ρ = λ ÷ (c × μ)；ρ 的名稱後面寫判斷狀態的門檻（4.4） |
+| 在這裡花多久（ρ < 1） | a = λ ÷ μ、P_wait = ErlangC(c, a)、Wq = P_wait ÷ (c × μ − λ)、W = Wq + 1/μ（4.2，Erlang C 只列結果，不列遞迴過程）；白話把前三步合成「排隊」 |
+| 過載：處理不完（ρ ≥ 1） | 處理量 = c × μ、超過容量的部分 = λ − c × μ、W 沒有定義 |
+| 最熱那台、其他 N 台、整個節點（有 hotShare 的 Cache） | 兩邊各自的到達量和上面兩組；整個節點的容量、ρ 取較高的一邊、處理量和丟棄量加總、Wq 和 W 依流量加權平均（4.2.2） |
+| 往下游送多少（Cache、CDN） | 沒命中、往下游送的 read = 處理的 read × (1 − hitRatio) |
+| 限流、配額（Rate Limiter、External API） | 放行量 = min(λ, 上限)、拒絕量 = λ − 放行量（名稱寫畫面上的狀態，例如「限流中」）、固定的節點延遲（4.2.1） |
+| 從 primary 複製（Read Replica） | 複製寫入 = primary 處理完的 write；有 `REPLICATION_LAG` 時，丟掉的複製寫入 = 丟棄量 × λ_write ÷ λ（4.2.3） |
+| 留在 queue 的訊息（consumer） | 有 `BACKLOG` 時，每條 Message Queue 送來的邊每秒留在 queue 的訊息，以及扣掉留在 queue 的部分之後的丟棄量（4.2.4）；這時「過載：處理不完」那組的 λ − c × μ 只叫「超過容量」，不叫丟棄 |
+| 成功率 | 每個有流量的 class：通過率 pass = 處理量 ÷ λ，以及從這個節點開始的 S（4.3.1），下游的 S 當作代入值；Client 再加上每秒完整成功的請求數 |
+| 到完成要多久 | 每個有流量的 class：從這個節點開始的 L = W + Σ visits × (邊的延遲 + 下游的 L)，平行呼叫取最大值；非同步的下游不在路徑上（4.3） |
+
+- **未連線的節點**（4.5）沒有步驟，`explanation` 是空陣列。有連線但 λ = 0 的節點照常列出「進來多少」和「能處理多少」；沒有流量的 class 不列「成功率」和「到完成要多久」。
+- 步驟的結果直接取自同一次計算的結果，跟 `nodes` 裡的欄位相同（測試鎖住）；中間值用同一組函式重算。
+
+### 4.10 負載掃描
+
+看出流量變大時哪裡先撐不住、延遲怎麼隨 ρ 接近 1 急遽上升。所有 Client 的 rps 一起乘上倍率 k，拓撲的其他參數都不動，每一個 k 都照 4.1 完整算一次。只掃其中一個 Client 時，有多個 Client 會搞不清楚在掃哪一個，所以不做。
+
+- **範圍和點數**：k 從 0 到上限 `maxMultiplier`（> 0 且 ≤ 10，前端只用 2、5、10）均分 40 點，含兩端。拓撲本身有驗證錯誤時不掃描；放大後超出參數範圍（例如 rps 超過 4.5 的上限）的點略過，門檻也只在算得出來的範圍內找。
+- **每一點**：
+  - 總 rps = 目前的總 rps × k。
+  - read、write 的端到端延遲：所有 Client 依該 class 的請求數加權平均，就是 summary 的 `avgEndToEndMs`（4.3）。任一 Client 的路徑上有節點過載時沒有定義（`null`），沒有這個 class 的請求時也是 `null`。
+  - k = 0 沒有流量，延遲改用 k → 0 的極限：每個節點都不用排隊，只花處理時間，加上連線延遲；各 Client 的權重照目前 rps 的比例。做法是在最大 ρ 不超過 1e-9 的小倍率算一次（排隊時間只剩處理時間的十億分之一左右），這樣曲線開頭不會斷一截。所有 Client 的 rps 都是 0 時照舊是 `null`。
+  - 成功率 = 1 − `dropRate`（4.3.1），沒有流量時是 1。
+  - ρ 最高的節點和它的 ρ：候選和 `bottleneckNodeId` 相同（未連線的不算），沒有候選時為 `null`。
+- **門檻**：第一個節點的 ρ 到 0.7（WARN，4.4）和到 1（過載）的倍率，以及是哪個節點。
+  - 先在 40 點裡找出跨過門檻的那一段，再在那一段裡二分搜尋，直到區間寬度小於右端的 0.01%（相對誤差遠小於 0.1%，門檻很小時也一樣），不從 40 點內插。門檻那一點也加進曲線，曲線的轉折才會準。
+  - 有過載門檻時，在它的倍率 × 0.9、0.95、0.98、0.99、0.995、0.999 各加一點（已經有同樣倍率的點就不重複）。c 很大時（例如 400 個 worker）延遲只在過載前最後 1% 急升，40 個均分點會整段錯過。
+  - 每次都看所有候選節點的最大 ρ，因為最先撐不住的不一定是目前的瓶頸：Rate Limiter 會開始拒絕，上游過載後下游的流量也不再跟 k 成正比。
+  - 每個節點的 λ 隨 k 不會減少，所以最大 ρ 也不會減少，二分搜尋成立（測試鎖住）。
+  - 上限時都還沒到門檻就是 `null`。所有 Client 的 rps 都是 0 時，每一點都沒有流量，兩個門檻都是 `null`。
+- 掃描寫在 engine 模組（`LoadSweep`），呼叫 `Simulator`，不依賴 Spring。
 
 ---
 
@@ -531,7 +621,13 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
       "avgLatencyMs": null,
       "status": null,
       "hotSpot": null,
-      "warnings": []
+      "warnings": [],
+      "explanation": [
+        { "group": "送出", "label": "read", "formula": "{rps} × {readRatio}",
+          "terms": [{ "symbol": "rps", "value": 1000, "unit": "rps", "nodeId": null },
+                    { "symbol": "readRatio", "value": 0.9, "unit": "%", "nodeId": null }],
+          "value": 900, "unit": "rps" }
+      ]
     },
     "svc-1": {
       "arrivalRps": { "read": 900, "write": 100 },
@@ -544,7 +640,17 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
       "avgLatencyMs": 50.0,
       "status": "OK",
       "hotSpot": null,
-      "warnings": []
+      "warnings": [],
+      "explanation": [
+        { "group": "能處理多少", "label": "使用率 ρ（ρ < 0.7：OK）", "formula": "{λ} ÷ ({c} × {μ})",
+          "terms": [{ "symbol": "λ", "value": 1000, "unit": "rps", "nodeId": null },
+                    { "symbol": "c", "value": 400, "unit": null, "nodeId": null },
+                    { "symbol": "μ", "value": 20, "unit": "rps", "nodeId": null },
+                    { "symbol": "容量", "value": 8000, "unit": "rps", "nodeId": null }],
+          "value": 0.125, "unit": null,
+          "plain": "使用率 ρ {=} = 每秒進來 {λ} ÷ 每秒能處理 {容量}（低於 0.7，正常）",
+          "view": "BOTH", "requestClass": null }
+      ]
     }
   },
   "edges": {
@@ -574,6 +680,8 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 
 **儲存量**：`storage` 以 Database、Object Storage 的 id 為 key（拓撲裡沒有時是 `{}`，例如上面的範例），每筆有 `dailyBytes`、`totalBytes`、`replicas`、`totalWithReplicasBytes`、`replicasLagging`（4.8）、`perInstanceBytes`（bytes）、`daysUntilFull`（可為 `null`）、`fillsDisk`（4.8），以及計算時用的 `retentionDays`、`diskGbPerInstance`（沒有設定時和 Object Storage 為 `null`），畫面依這兩個欄位顯示，不讀目前的拓撲。驗證失敗時也是 `{}`。
 
+**計算說明**：每個節點的 `explanation` 是計算步驟（4.9），上面的範例各只列一步；`storage` 的每筆也有 `explanation`（4.8）；未連線的節點是 `[]`。
+
 **頻寬**：單位 bytes/s（4.7）。邊結果的 `bandwidth` 只有 Client 的邊有，其他邊為 `null`；`summary.bandwidth` 一定有。
 
 **熱點**：`hotSpot` 只有設定了 `hotShare` 的 Cache 有，`hottest`、`others` 各有 `arrivalRps`、`throughputRps`、`droppedRps`、`utilization`、`avgLatencyMs`、`status`；其他節點為 `null`（4.2.2）。
@@ -588,6 +696,40 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - `null` 有兩種意思：**不適用**（Client 的 `utilization`、`status` 等）和**無定義**（過載時的延遲，見 4.2、4.3）。
 - 前端把 `null` 顯示為「—」，不能當成 0。「無定義」的情況要附上原因；`status: null` 的節點不變色、不發光。
 - 流量類欄位（`arrivalRps`、`throughputRps`、`droppedRps`、`rejectedRps`）永遠是數字，不會是 `null`。`rejectedRps` 只有 Rate Limiter 和 External API 會大於 0（4.2.1），`summary.rejectedRps` 是它們的總和。`successRps` 只有 Client 有：Client 一律是數字，其他節點是 `null`（不適用，fan-out 後下游的子呼叫數不是使用者請求數）。
+
+### `POST /api/v1/simulate/sweep`
+
+負載掃描（4.10）。
+
+**Request**：`topology` 的格式同 `/simulate`。
+
+```json
+{ "topology": { "version": 1, "nodes": [ … ], "edges": [ … ] }, "maxMultiplier": 2 }
+```
+
+**Response 200**
+
+```json
+{
+  "valid": true,
+  "errors": [],
+  "currentRps": 1000,
+  "points": [
+    { "multiplier": 0, "totalRps": 0, "endToEndMs": { "read": null, "write": null }, "successRate": 1,
+      "busiest": { "nodeId": "svc-1", "utilization": 0 } },
+    { "multiplier": 1.4, "totalRps": 1400, "endToEndMs": { "read": 64.2, "write": 64.2 }, "successRate": 1,
+      "busiest": { "nodeId": "svc-1", "utilization": 0.7 } }
+  ],
+  "thresholds": {
+    "warn": { "multiplier": 1.4, "totalRps": 1400, "nodeId": "svc-1" },
+    "overload": { "multiplier": 2.0, "totalRps": 2000, "nodeId": "svc-1" }
+  }
+}
+```
+
+- `points` 依倍率排序，是均分的 40 點加上門檻那幾點和過載前加密的 6 點；倍率 0 那一點的延遲是沒有排隊時的延遲；`thresholds.warn`、`thresholds.overload` 範圍內沒有到時為 `null`。
+- 拓撲有驗證錯誤時一樣回 200：`valid: false`、`errors` 為錯誤清單，`currentRps` 為 0，`points` 為 `[]`，`thresholds` 的兩個門檻為 `null`。
+- `maxMultiplier` 缺漏或不在 (0, 10] 之內、`topology` 缺漏或格式錯誤時回 400，和 `/simulate` 一樣用 ProblemDetail。
 
 ---
 
@@ -609,7 +751,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 │ ● 非同步  │                                      │               │
 │ ▣ MQ     │                                      │               │
 ├──────────┴─────────────────────────────────────┴───────────────┤
-│ [指標表] [流量 Sankey] [容量估算] [錯誤 (0)]  頻寬 出口 … 入口 …         │
+│ [指標表] [流量 Sankey] [負載曲線] [容量估算] [錯誤 (0)]  頻寬 …          │
 │ ┌成功率──┐ ┌端到端延遲┐ ┌丟棄───┐ ┌瓶頸────────┐              │
 │ │ 99.5% │ │ 52.0 ms │ │ 64 rps│ │ Orders DB ρ 1.03│         │
 │ └───────┘ └─────────┘ └───────┘ └─────────────┘              │
@@ -621,7 +763,7 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 |---|---|
 | 左側元件面板 | shadcn Sidebar，依類別分成流量、運算、資料、非同步四組，每組有類別色（流量藍、運算紫、資料粉、非同步青），元件圖示放在類別色的圓角方塊裡，畫布節點和屬性面板標題用同一個樣式（拖到畫布，放在滑鼠放開的位置；點一下則放在畫面中央，被占了就往外找最近一個不重疊的位置） |
 | 右側屬性面板 | shadcn Input、Slider、Progress（ρ）。參數名稱寫成「中文（英文）」，英文是 API 的欄位名稱、用較淡的顏色，例如「機器數（instances）」「使用率（ρ）」；下拉選項寫成「依序（SEQUENTIAL）」；元件名稱和單位維持英文 |
-| 下方結果 | shadcn Tabs、Table、Badge（狀態）；ECharts Sankey；分頁下方的重點數字卡片 |
+| 下方結果 | shadcn Tabs、Table、Badge（狀態）；ECharts Sankey 和負載曲線；分頁下方的重點數字卡片 |
 | 工具列 | shadcn Button、Switch、DropdownMenu |
 | 通知 | shadcn Sonner（例如「發現瓶頸：DB」），出現在畫布右上角，不蓋住屬性面板和工具列；每則都有 ✕ 可以關閉 |
 
@@ -630,15 +772,45 @@ back-of-envelope 估算的儲存量，每個 Database、Object Storage 各算一
 - 邊上的 label 顯示 RPS，粗細依流量比例。
 - 節點有警告時（Read Replica 的「複製跟不上」、consumer 的「積壓中」）在節點和指標表的狀態旁顯示。Message Queue 的下游邊有積壓時，標籤第二行顯示「積壓 +X rps/s」（不拉長標籤）。邊的標籤畫在節點上面一層，節點靠得近時不會被擋住，也不攔截節點的點擊和拖曳。
 - Rate Limiter、External API 節點沒有 ρ，改顯示拒絕量和狀態（「限流中」／「未觸發」、「超過配額」／「配額內」）。
-- 延遲（指標表、端到端延遲）取一位小數；小於 0.1 ms 時改用兩位有效數字（例如 Cache 預設的 `0.010 ms`），0 顯示 `0 ms`。
+- 延遲（指標表、端到端延遲）取一位小數，1,000 以上加千分位（例如 `1,010.6 ms`）；小於 0.1 ms 時改用兩位有效數字（例如 Cache 預設的 `0.010 ms`），比 0.001 ms 還小時寫 `< 0.001 ms`（不用科學記號），0 顯示 `0 ms`。
 - 指標表的到達率 λ 顯示總和，下面一行小字分開列 read、write（例如 `read 180・write 100`），看得出 Cache 只擋下 read。
 - **參數說明 ⓘ**：屬性面板每個參數（含邊參數、下拉選單、`hotShare`、`diskGbPerInstance`）的名稱後面有 ⓘ，滑過或用鍵盤聚焦時顯示：「常見：a–b 單位」（有實值的參數才有，例如 `serviceTimeMs`）、一句說明、「例：…」。說明依「元件 type × 參數」各寫一筆（Redis Cluster 用 Cache 的），邊參數依起點的 type，連到 External API 的邊另有一筆。看情境的參數（`rps`、`instances` 等）寫怎麼估算，比例或結構的參數（`weight`、`hotShare` 等）只寫用途，都沒有範圍。值落在常見範圍外時（剛好等於兩端不算），欄位下方多一行黃字「⚠ 超出常見範圍（a–b 單位）」，範圍寫法同 tooltip；值不合法時只顯示錯誤，不同時出現黃字。常見範圍只是建議，**不影響驗證和 Run**：不擋輸入、不進錯誤分頁、畫布上的節點也不標記。數字以 `frontend/src/canvas/paramGuide.ts` 為準，不抄進 spec。
+- **怎麼算的**：點節點時，屬性面板最下面有一個「怎麼算的」區塊，預設收起；展開後換到別的節點仍然展開，重新整理後回到收起。內容是節點的計算步驟（4.9），依分組列出，太長時換行，不出現水平捲軸。
+  - **預設是白話**：每一步一句，模板（4.9 的 `plain`）代入數字，例如「使用率 ρ 0.13 = 每秒進來 1,000 ÷ 每秒能處理 8,000（低於 0.7，正常）」。只在看公式顯示的步驟（Erlang C 的中間值）不列。
+  - **「看公式」開關**：在區塊上方（容量估算表展開的列沒有外面的標題，最上面另寫「怎麼算的」，開關緊接在它旁邊），打開時每一行白話底下多一行灰色小字的公式「名稱 = 公式 = 代入值 = 結果」，例如「使用率 ρ = λ ÷ (c × μ) = 1,000 ÷ (8 × 100) = 1.25」。只在看公式顯示的步驟這時才出現，只有公式那一行；只在白話顯示的步驟（排隊合併的那一步）照樣顯示，底下沒有公式。開關存在 localStorage，換節點、重新整理都維持；屬性面板和容量估算表共用同一個開關，切一邊另一邊跟著換。
+  - **read、write 合成一行**：同一組裡第 k 個 read 步驟和第 k 個 write 步驟，代入後的白話完全相同（節點名稱也一樣）時，合成一行「read、write 都是：…」，放在 read 的位置；看公式時底下 read、write 的公式各一行。不同時分兩行，前面標「read：」「write：」。
+  - **數字的格式**和指標表一樣（rps、ms 照指標表，公式的代入值不帶單位、結果帶單位）；沒有單位的數字（ρ、c 等）整數加千分位、其他兩位小數；比例取一位小數的百分比，接近 100% 或 0% 但不是的寫「> 99.9%」「< 0.1%」；極小的數字寫「< 0.001」，不用科學記號；代入值沒有定義寫「—」，結果寫「沒有定義」。純文字的公式（例如過載時延遲沒有定義）寫成「名稱 = 結果（說明）」。
+  - **節點名稱可以點**：白話裡的節點名稱（模板的 `{@符號}`）和公式裡代入值後面的節點名稱都是連結，點了就選取那個節點、畫布平移到它（縮放不變），屬性面板換成它的算式，可以一路從 Client 追到 Database。節點已經刪掉時白話寫「已刪除的節點」。
+  - 未連線的節點寫「未連線，沒有計算」；還沒有結果，或上次 Run 時這個節點還沒連線時寫「Run 之後顯示」；結果過期時算式照樣顯示並畫淡，上方註明結果已過期；拓撲有驗證錯誤、沒有結果時不顯示這個區塊。
 - **多台機器**：能設定 `instances` 的元件（LB、Service、Cache、CDN、Database、Read Replica、Object Storage、Message Queue）在 `instances` > 1 時，節點內容右側畫一個小機櫃：一台一條橫槽、縱向疊放，最多 5 條（超過 5 台仍是 5 條），槽用節點的狀態色；有熱點的 Cache（4.2.2）第一條是最熱的那台、用它自己的狀態色，其他條用其他台的狀態色，滑鼠移到機櫃上列出兩邊的到達率、ρ、延遲、丟棄量（結果過期時先註明）。還沒有結果時是淡灰，結果過期時跟著節點畫淡。右上角用類別色的標籤顯示實際台數（`×2`、`×10`、`×200`，大數字加千分位）。屬性面板的 `instances` 下方顯示 worker 總數，例如「共 2 台 × 180 並行 ＝ 360 個 worker」，有熱點時下一行是「最熱那台分到 50.0%」。
 - **叢集內從節點**：Cache 的 `replicas` > 0 時，節點名稱下面一行小字顯示「3 主 3 從」（主 = `instances`，從 = `instances × replicas`）；屬性面板的 worker 提示下一行是「另有 N 個從節點，共 M 個節點；從節點不分擔流量」。
 - **Preset**：元件面板的「Redis Cluster」是 `instances = 3`、`replicas = 1` 的 Cache，其他沿用 Cache 的預設值；JSON 裡的 type 是 `CACHE`，沒有新的 type。preset 定義在 `catalog.ts` 的 `PRESETS`，放在它的 type 後面。
 - 指標表在有熱點的 Cache 名稱旁標示「熱點」；屬性面板在 Cache 的 `instances` ≥ 2 時，`instances` 下方有「設定熱點」，按下去先填平均的 1.5 倍（`min(1, 1.5/instances)`），之後可以按「沒有熱點」拿掉這個參數。設定了 `hotShare` 時，`instances` 不能減到 1，也不能減到讓 `hotShare` 小於新的平均。
 - **頻寬**（4.7）：Client 的邊在 RPS 下面一行小字顯示「出 X・入 Y」；結果面板上方的 summary 列出出口、入口頻寬，有 CDN 擋掉流量時加上 origin 出口和擋掉的比例。單位自動換算（B/s、KB/s、MB/s、GB/s…，十進位，最大到 PB/s，超過時用科學記號，例如 `1.2e18 B/s`），括號裡附上 bits（Mbps、Gbps…，同樣最大到 Pbps）。
-- **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每台、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB，十進位，超過 PB 時用科學記號）。過載的節點名稱旁標示「過載，偏低」；有 Read Replica 複製跟不上時，含副本那一格加註「副本複製跟不上，實際副本量會比這少」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerInstance`（只有 Database）預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。Object Storage 那一列只有每日增量和總量，其他欄是「—」；沒有 Database 時不顯示磁碟那一欄。
+- **負載曲線**分頁（4.10）：所有 Client 的 rps 一起放大時，延遲和成功率怎麼變，看出 ρ 接近 1 時延遲急遽上升。用 ECharts 畫（和 Sankey 一樣切到分頁才載入）。上下兩張圖共用 X 軸（總 rps），左右邊界對齊：上面是端到端延遲（ms），下面是成功率（%）。
+  - **延遲線**：read、write 各一條；每一點都相同時合成一條「延遲（read、write 相同）」，沒有某個 class 的請求時不畫那條。過載之後延遲沒有定義，線斷在那裡，不畫到 0。
+  - **延遲軸**：從 0 到 0 rps 時延遲（read、write 取較大的）的 3 倍，往上取到最高位數的整數倍（91 ms → 300 ms）。超過的部分不畫，在開始超出的地方標「↑ 之後超出圖外（最高 X ms）」，往下讓開兩行色帶標籤。不封頂的話，延遲衝到幾秒的拓撲前面整段會被壓成一條平線。
+  - **背景色帶**：兩張圖都畫滿高度，標籤橫排在上圖色帶的左上角。兩個色帶都有時，過載的標籤放在第二行，黃色帶再窄兩個標籤也不會疊在一起。
+    - 第一個 ρ 到 0.7 的節點到過載之間是淡黃色，標「{節點名稱} 接近飽和（ρ ≥ 0.7）」。
+    - 過載之後是淡紅色，標「{節點名稱} 過載」。
+    - 門檻是 `null` 時不畫。
+  - **目前的 rps**：細虛線，標「目前 {rps}」。
+  - **結論一行**，在圖的上方：
+    - 有過載時：「流量放大到 {rps}（目前的 N 倍）時 {節點} 過載；在那之前延遲從 a 升到 b。」
+    - 只到 ρ 0.7 時：「放大到 {上限 rps}（目前的 N 倍）都沒有過載；{節點} 從 {rps}（N 倍）起接近飽和，延遲從 a 升到 b。」
+    - 兩個門檻都沒到時：「放大到 {上限 rps}（目前的 N 倍）都沒有過載，延遲從 a 升到 b。」
+    - 「升到」取過載前（沒有過載時是範圍內）最後一個有定義的點。
+    - read、write 分兩條時寫「read 延遲從 a 升到 b、write 從 c 升到 d」。
+    - 顯示出來的值沒有變時寫「維持在 a」。
+    - 目前的流量就已經過載（倍率小於 1）時，把「流量放大到」寫成「流量到」。
+  - **提示**：滑過任一張圖時，兩張圖的指示線一起動。提示顯示：
+    - 該點的總 rps 和「（目前的 N 倍）」；
+    - 各條延遲線的值；
+    - 成功率；
+    - ρ 最高的節點和它的 ρ。
+  - **配色**：格線、軸線的顏色依主題給，因為 ECharts 預設的格線在深色主題太亮。
+  - 分頁上方有「上限」下拉選單（2×、5×、10×，預設 2×），選擇存在瀏覽器裡，重新整理後保留。**只有分頁開著時才掃描**（每次打開分頁都重新掃描一次），掃的是上次 Run 算的那一份拓撲：Auto-run 開著時，改了拓撲就跟著 Run 重新掃描；關著時改了拓撲要按 Run 才掃描，在那之前曲線畫淡並註明結果已過期。換上限時不管 Auto-run 都馬上重新掃描同一份拓撲。重新計算中曲線也先畫淡，不清掉；掃描失敗時也保留上一條曲線。名稱改了時圖表跟著更新，拖動節點不會重畫圖表。在 legend 關掉某條線時，色帶和「目前」照樣顯示。拓撲有驗證錯誤時顯示「先修正錯誤（見「錯誤」分頁）」；所有 Client 的 rps 都是 0 時顯示「Client 的 rps 都是 0，沒有可以放大的流量」；API 失敗時顯示錯誤訊息和「重試」按鈕。不做：點曲線上的點把那個 rps 套回拓撲（0.10.0 的 What-if 再看）。
+- **容量估算**分頁（4.8）：每個 Database、Object Storage 一列：每日增量、總量（附保留天數）、含副本（附 replica 數）、每台、磁碟幾天後會滿。單位自動換算（B、KB、MB、GB、TB、PB，十進位，超過 PB 時用科學記號）。過載的節點名稱旁標示「過載，偏低」；有 Read Replica 複製跟不上時，含副本那一格加註「副本複製跟不上，實際副本量會比這少」。磁碟在保留期內會滿時該格是紅字，summary 也另外列出「磁碟會滿」的節點，和 ρ 的瓶頸分開。屬性面板的 `diskGbPerInstance`（只有 Database）預設不設定，按「設定磁碟容量」才出現（先填 1000 GB），按「不估算」拿掉。Object Storage 那一列只有每日增量和總量，其他欄是「—」；沒有 Database 時不顯示磁碟那一欄。點一列（或名稱前的箭頭按鈕）在那一列下方展開它的算式（4.8 的計算說明，顯示方式同屬性面板的「怎麼算的」），再點一次收起，可以同時展開多列；算式裡的節點名稱一樣可以點；未連線的節點展開後寫「未連線，沒有計算」。
 - **重點數字**：結果面板的分頁下方、內容上方有一排卡片，每個分頁都顯示，數值直接取自 `summary`；有驗證錯誤時不顯示。窄螢幕時自動換行。
   - 成功率：`1 − dropRate`，有丟棄或拒絕時紅字（少到取一位小數會變成 100.0% 時顯示「> 99.9%」），下面一行是成功的 rps。
   - 端到端延遲：read、write 排在同一行；`null` 時顯示「—」，下面一行是原因（和指標表同樣的說明，兩個 class 原因相同時只列一次），近似值加上「近似」。
