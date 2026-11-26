@@ -114,8 +114,8 @@
     --paper: #f6f3ec;
     --paper-grid: rgb(35 38 52 / 0.07);
     --canvas: var(--paper);
+    /* 連線和箭頭；連線當燈管的軌道時由 edgeStyle 畫淡，箭頭不變 */
     --edge: #8b8577;
-    --flow-particle: var(--primary);
     --background: #fbf9f4;
     --foreground: var(--ink);
     --card: #fffefb;
@@ -228,6 +228,70 @@
     .category-icon svg {
         stroke-width: 2.3;
         translate: 0 -1px;
+    }
+}
+
+/* 邊上的霓虹燈管和掃光（EdgeBeam、spec 第 6 節）。--beam 是燈管顏色，依流量級距從青色混到電光紫 */
+@layer components {
+    .beam-halo,
+    .beam-tube,
+    .beam-core,
+    .beam-selected,
+    .beam-sweep {
+        fill: none;
+        stroke-linecap: round;
+    }
+
+    /* 外光暈：燈管寬 × 2.8，模糊、淡 */
+    .beam-halo {
+        stroke: var(--beam);
+        stroke-width: 7px;
+        opacity: 0.16;
+        filter: blur(3px);
+    }
+
+    .beam-tube {
+        stroke: var(--beam);
+        stroke-width: 2.5px;
+        filter: drop-shadow(0 0 2.5px var(--beam));
+    }
+
+    /* 白色燈芯：燈管寬 × 0.35 */
+    .beam-core {
+        stroke: #ffffff;
+        stroke-width: 0.875px;
+        opacity: 0.85;
+    }
+
+    /* 選取：燈管外加一圈主色 */
+    .beam-selected {
+        stroke: var(--primary);
+        stroke-width: 10px;
+        opacity: 0.4;
+    }
+
+    /* 白光：pathLength = 100，dasharray 和 --sweep-period 由 EdgeBeam 依白光數量給 */
+    .beam-sweep {
+        stroke: #ffffff;
+        stroke-width: 3px;
+        filter: drop-shadow(0 0 3px #ffffff) drop-shadow(0 0 8px var(--beam));
+        animation: beam-sweep linear infinite;
+    }
+
+    /* 系統設定減少動態效果：燈管照畫，白光不動 */
+    @media (prefers-reduced-motion: reduce) {
+        .beam-sweep {
+            animation: none;
+        }
+    }
+
+    @keyframes beam-sweep {
+        from {
+            stroke-dashoffset: 0;
+        }
+        to {
+            stroke-dashoffset: calc(var(--sweep-period) * -1px);
+        }
     }
 }
 

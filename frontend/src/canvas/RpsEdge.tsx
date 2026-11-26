@@ -9,8 +9,8 @@ import {
 import { totalRps, type Edge, type EdgeResult } from '@/api/client'
 import { cn } from '@/lib/utils'
 import type { EdgeKind } from './catalog'
+import { EdgeBeam } from './EdgeBeam'
 import { edgeStyle } from './edgeStyle'
-import { particles } from './flow'
 import { classRatesTitle, formatBytesPerSec, formatRps } from './format'
 
 export type RpsEdgeData = {
@@ -20,8 +20,6 @@ export type RpsEdgeData = {
   // 只給 READ／WRITE 其中一個 class 走的邊顯示「R」／「W」，requestClass 沒有作用的邊沒有（Canvas 算）
   classTag?: 'R' | 'W'
   result?: EdgeResult
-  // 這條邊的 RPS / 整張圖最大的邊 RPS（0..1），有計算結果時才有
-  flow?: number
   // 這條邊的驗證錯誤訊息
   errors?: string[]
   // 拓撲在上次 Run 之後改過，結果可能不準
@@ -44,31 +42,20 @@ export function RpsEdge({
   data,
 }: EdgeProps<RpsFlowEdge>) {
   const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
-  const { kind = 'SYNC', classTag, result, flow, errors, stale } = data
-  // 過期的結果不播動畫：流量可能已經不是這樣
-  const moving = flow != null && !stale ? particles(flow) : null
+  const { kind = 'SYNC', classTag, result, errors, stale } = data
   const store = useStoreApi()
 
   return (
     <>
-      <BaseEdge path={path} markerEnd={markerEnd} style={edgeStyle(selected, flow, errors, stale, kind)} />
-      {/* begin 為負值讓粒子一開始就平均分布在線上，而不是從起點一個個出發。
-          系統設定減少動態效果時隱藏（SVG 動畫不受 CSS animation 控制） */}
-      {moving &&
-        Array.from({ length: moving.count }, (_, i) => (
-          <circle
-            key={i}
-            r={3.5}
-            className="pointer-events-none fill-(--flow-particle) motion-reduce:hidden"
-          >
-            <animateMotion
-              dur={`${moving.durationS}s`}
-              begin={`${(-i * moving.durationS) / moving.count}s`}
-              repeatCount="indefinite"
-              path={path}
-            />
-          </circle>
-        ))}
+      <BaseEdge path={path} markerEnd={markerEnd} style={edgeStyle(selected, errors, stale, kind)} />
+      <EdgeBeam
+        path={path}
+        rps={result && totalRps(result.rps)}
+        kind={kind}
+        selected={selected}
+        invalid={errors != null}
+        stale={stale}
+      />
       {(result || classTag) && (
         <EdgeLabelRenderer>
           <div

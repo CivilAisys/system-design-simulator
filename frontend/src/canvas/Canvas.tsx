@@ -7,13 +7,12 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
-import { totalRps, type Edge, type NodeType, type SimulationResult } from '@/api/client'
+import { type Edge, type NodeType, type SimulationResult } from '@/api/client'
 import { NODE_KINDS, PALETTE, type PaletteItem } from './catalog'
 import { IsoGrid } from './IsoGrid'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { arrowMarker, edgeColor } from './edgeStyle'
 import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
-import { flowRatio } from './flow'
 import { unconnectedNodeIds } from './graph'
 import { groupErrors } from './validation'
 
@@ -51,11 +50,6 @@ export function Canvas({
 
   // 結果和驗證錯誤只在畫的時候疊上去，不寫進編輯狀態
   const errors = useMemo(() => groupErrors(result?.errors ?? []), [result])
-  // 邊的粗細和粒子以畫布上最大的邊 RPS 為基準。只看目前還在的邊：結果過期時可能有已經刪掉的邊
-  const maxRps = useMemo(
-    () => Math.max(0, ...edges.map((e) => result?.edges[e.id]).map((r) => (r ? totalRps(r.rps) : 0))),
-    [edges, result],
-  )
   // 未連線看畫布就知道，不必等 Run；Auto-run 關閉或結果有驗證錯誤時也立即畫淡
   const unconnected = useMemo(() => unconnectedNodeIds(nodes.map((n) => n.data.node), edges), [nodes, edges])
   const shownNodes = useMemo<SimFlowNode[]>(
@@ -89,13 +83,12 @@ export function Canvas({
             kind: sourceType && NODE_KINDS[sourceType].outputEdgeKind,
             classTag: sourceType && classTag(sourceType, e.data.edge),
             result: edgeResult,
-            flow: edgeResult && flowRatio(totalRps(edgeResult.rps), maxRps),
             errors: edgeErrors,
             stale,
           },
         }
       }),
-    [edges, typeById, result, maxRps, errors, stale],
+    [edges, typeById, result, errors, stale],
   )
 
   function onDragOver(event: DragEvent) {
