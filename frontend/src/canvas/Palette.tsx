@@ -81,7 +81,7 @@ export function Palette({ onAdd }: PaletteProps) {
       <SidebarContent>
         {CATEGORIES.map((category) => (
           <SidebarGroup key={category.id} className="py-1">
-            <SidebarGroupLabel className="gap-2">
+            <SidebarGroupLabel className="gap-2 font-bold text-ink-soft">
               <span aria-hidden className={cn('size-2 rounded-full', CATEGORY_DOT[category.id])} />
               {category.label}
             </SidebarGroupLabel>
@@ -94,7 +94,7 @@ export function Palette({ onAdd }: PaletteProps) {
                       onDragStart={(event) => onDragStart(event, item)}
                       onClick={() => onAdd(item)}
                       title={`拖到畫布，或點擊加入 ${item.label}`}
-                      className="h-[38px] cursor-grab gap-2.5 rounded-[10px] text-[13px] active:cursor-grabbing"
+                      className="h-11 cursor-grab gap-2.5 rounded-[10px] text-[13px] transition-[translate,background-color,box-shadow] duration-150 ease-out hover:translate-x-0.5 hover:bg-card hover:shadow-[inset_0_0_0_1.5px_var(--ink)] active:cursor-grabbing"
                     >
                       <CategoryIcon icon={item.icon} category={category.id} />
                       <span>{item.label}</span>

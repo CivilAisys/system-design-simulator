@@ -2,7 +2,7 @@ import { Handle, Position, type NodeProps, type Node as FlowNode } from '@xyflow
 import { cn } from '@/lib/utils'
 import type { Node, NodeResult } from '@/api/client'
 import { NODE_KINDS } from './catalog'
-import { CATEGORY_DOT } from './category'
+import { CATEGORY_DOT, CATEGORY_SHADOW } from './category'
 import { CategoryIcon } from './CategoryIcon'
 import { formatRps, formatUtilization } from './format'
 import { hotSpotTitle, instanceRack, rackSlotStatuses, replicaLabel } from './instanceRack'
@@ -47,9 +47,15 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
     <div
       title={errorText}
       className={cn(
-        'relative max-w-64 min-w-36 rounded-card border border-input bg-card px-3 py-2.5 text-card-foreground',
-        // 沒有上游的節點（Client）是流量的來源，不是機器：虛線外框、沒有陰影
-        hasInput ? 'shadow-(--node-shadow)' : 'border-dashed',
+        'relative max-w-64 min-w-36 rounded-card border-[1.5px] border-ink px-3 py-2.5 text-card-foreground',
+        // 沒有上游的節點（Client）是流量的來源，不是機器：虛線外框、透明底、沒有陰影。
+        // 其他節點是貼在紙上的卡片：類別色的實心偏移陰影，滑過時浮起一點
+        hasInput
+          ? cn(
+              'bg-card shadow-[4px_4px_0_var(--cat-shadow)] transition-[translate,box-shadow] duration-150 ease-out hover:-translate-px hover:shadow-[6px_6px_0_var(--cat-shadow)]',
+              CATEGORY_SHADOW[category],
+            )
+          : 'border-dashed bg-transparent',
         // 選取用強調色的外圈，和狀態色的外框、光暈分開
         selected && 'outline-2 outline-offset-6 outline-primary',
         // 未連線的節點不在拓撲裡：整個畫淡、灰色虛線外框，選取或滑過時恢復，方便編輯。
@@ -74,19 +80,19 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
       )}
       {hasInput && <Handle type="target" position={Position.Left} />}
       <div className="flex items-center gap-2.5">
-        <CategoryIcon icon={icon} category={category} />
+        <CategoryIcon icon={icon} category={category} large />
         <div className="min-w-0 flex-1">
           {/* 寬度有上限，長名稱截成一行，完整名稱放在 title（節點可能很多，不用 shadcn tooltip）。
               滑過名稱時看不到外層的錯誤說明，所以一起放進來 */}
           <div
-            className="truncate text-[13px] font-semibold"
+            className="truncate text-sm font-bold"
             title={errorText ? `${node.name}\n${errorText}` : node.name}
           >
             {node.name}
           </div>
           {replicas && <div className="text-[11px] text-muted-foreground">{replicas}</div>}
           {(result || unconnected) && (
-            <div className="mt-0.5 flex items-center justify-between gap-3 text-xs">
+            <div className="mt-0.5 flex items-center justify-between gap-3 font-mono text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground">
                 {status && <span aria-hidden className={cn('size-2 rounded-full', STATUS_FILL[status])} />}
                 {/* 未連線沒有流量可看，不列 ρ */}

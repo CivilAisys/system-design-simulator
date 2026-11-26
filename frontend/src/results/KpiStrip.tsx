@@ -48,7 +48,7 @@ export function KpiStrip({ topology, result }: KpiStripProps) {
 
 type KpiCardProps = {
   label: string
-  // 強調的卡片（瓶頸）換掉底色和標題的顏色
+  // 強調的卡片（瓶頸）換掉底色、外框、陰影和標題的顏色
   className?: string
   labelClassName?: string
   children: ReactNode
@@ -56,7 +56,7 @@ type KpiCardProps = {
 
 function KpiCard({ label, className, labelClassName, children }: KpiCardProps) {
   return (
-    <div className={cn('min-w-0 rounded-card border bg-muted px-4 py-3', className)}>
+    <div className={cn('min-w-0 rounded-card border-[1.5px] border-ink bg-card px-4 py-3 shadow-[3px_3px_0_var(--kpi-shadow)]', className)}>
       <KpiNote className={labelClassName}>{label}</KpiNote>
       {children}
     </div>
@@ -65,7 +65,7 @@ function KpiCard({ label, className, labelClassName, children }: KpiCardProps) {
 
 function KpiValue({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn('mt-0.5 font-heading text-[22px] font-bold text-foreground tabular-nums', className)}>
+    <div className={cn('mt-0.5 font-mono text-2xl font-bold tracking-[-0.03em] text-foreground tabular-nums', className)}>
       {children}
     </div>
   )
@@ -148,7 +148,7 @@ function BottleneckCard({ topology, result }: KpiStripProps) {
       )
     case 'bottleneck':
       return (
-        <KpiCard label="瓶頸" className="border-strong-bg bg-strong-bg" labelClassName="text-strong-muted">
+        <KpiCard label="瓶頸" className="border-strong-border bg-strong-bg shadow-[3px_3px_0_var(--strong-shadow)]" labelClassName="text-strong-muted">
           <KpiValue className="flex items-baseline text-strong-ink">
             <span className="truncate" title={view.name}>
               {view.name}

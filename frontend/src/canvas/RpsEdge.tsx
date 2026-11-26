@@ -59,7 +59,7 @@ export function RpsEdge({
           <circle
             key={i}
             r={3.5}
-            className="pointer-events-none fill-(--flow-particle) [filter:var(--flow-particle-glow)] motion-reduce:hidden"
+            className="pointer-events-none fill-(--flow-particle) motion-reduce:hidden"
           >
             <animateMotion
               dur={`${moving.durationS}s`}
@@ -74,7 +74,7 @@ export function RpsEdge({
           <div
             className={cn(
               // 不加 nopan：有結果時標籤接收滑鼠事件，從標籤上拖曳照樣能平移畫布
-              'nodrag absolute border border-input bg-card px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-secondary-foreground',
+              'nodrag absolute border-[1.5px] border-ink bg-card px-2.5 py-0.5 font-mono text-[11px] font-semibold whitespace-nowrap text-ink shadow-[0_2px_0_var(--ink)]',
               // 只有一行時是膠囊，多了積壓、頻寬的第二行就改成圓角矩形
               result?.backlogRps || result?.bandwidth ? 'rounded-xl' : 'rounded-full',
               // 有結果時要能 hover 看 read／write 拆分；沒有時讓點擊穿過標籤落到邊上

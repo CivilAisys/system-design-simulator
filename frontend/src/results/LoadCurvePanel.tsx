@@ -3,7 +3,6 @@ import { RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { SimulationResult, Topology } from '@/api/client'
-import type { Theme } from '@/theme'
 import { STALE_RESULT_NOTE } from '@/canvas/format'
 import { cn } from '@/lib/utils'
 import { curveHeadline, latencyLines, MAX_MULTIPLIERS, parseMaxMultiplier, useStoredMaxMultiplier } from './loadCurve'
@@ -19,11 +18,10 @@ type LoadCurvePanelProps = {
   result: SimulationResult
   resultTopology: Topology | null
   stale: boolean
-  theme: Theme
 }
 
 // 負載曲線分頁（spec 第 6 節）：只在分頁開著時掛上，關著時不打 API
-export function LoadCurvePanel({ topology, result, resultTopology, stale, theme }: LoadCurvePanelProps) {
+export function LoadCurvePanel({ topology, result, resultTopology, stale }: LoadCurvePanelProps) {
   const [maxMultiplier, setMaxMultiplier] = useStoredMaxMultiplier()
   const sweep = useLoadSweep(result.valid ? resultTopology : null, maxMultiplier)
   // 只在名稱改了時才換函式：拖動節點時 topology 也會換，圖表不能因此重畫
@@ -58,7 +56,7 @@ export function LoadCurvePanel({ topology, result, resultTopology, stale, theme 
         <p className="shrink-0 text-sm font-medium">{curveHeadline(sweep.data, lines, nodeName)}</p>
         <div className="min-h-56 flex-1">
           <Suspense>
-            <LoadCurveChart sweep={sweep.data} lines={lines} nodeName={nodeName} theme={theme} />
+            <LoadCurveChart sweep={sweep.data} lines={lines} nodeName={nodeName} />
           </Suspense>
         </div>
       </div>

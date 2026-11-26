@@ -129,7 +129,7 @@ export function PropertiesPanel({
             'absolute top-2 right-11 bottom-2 z-30 overflow-hidden rounded-xl border bg-background shadow-2xl animate-in fade-in slide-in-from-right-2',
       )}
     >
-      <div className="flex items-center justify-between border-b py-1 pr-2 pl-4 text-xs font-medium text-muted-foreground">
+      <div className="flex items-center justify-between border-b py-1 pr-2 pl-4 text-xs font-bold text-ink-soft">
         屬性
         <Button
           ref={pinButtonRef}

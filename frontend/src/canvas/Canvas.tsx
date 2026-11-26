@@ -1,16 +1,15 @@
 import { useMemo, type DragEvent } from 'react'
 import {
-  Background,
   Controls,
   ReactFlow,
   useReactFlow,
-  type ColorMode,
   type Connection,
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
 import { totalRps, type Edge, type NodeType, type SimulationResult } from '@/api/client'
 import { NODE_KINDS, PALETTE, type PaletteItem } from './catalog'
+import { IsoGrid } from './IsoGrid'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { arrowMarker, edgeColor } from './edgeStyle'
 import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
@@ -30,7 +29,6 @@ type CanvasProps = {
   result: SimulationResult | null
   // 拓撲在上次 Run 之後改過
   stale: boolean
-  colorMode: ColorMode
   onNodesChange: (changes: NodeChange<SimFlowNode>[]) => void
   onEdgesChange: (changes: EdgeChange<RpsFlowEdge>[]) => void
   onConnect: (connection: Connection) => void
@@ -43,7 +41,6 @@ export function Canvas({
   edges,
   result,
   stale,
-  colorMode,
   onNodesChange,
   onEdgesChange,
   onConnect,
@@ -131,14 +128,12 @@ export function Canvas({
       onDragOver={onDragOver}
       onDrop={onDrop}
       deleteKeyCode={['Backspace', 'Delete']}
-      colorMode={colorMode}
       fitView
       // 預設 0.5 太大，節點離很遠時 fit view 框不住全部
       minZoom={0.1}
       proOptions={{ hideAttribution: true }}
     >
-      {/* 點陣格線，顏色在 index.css 跟著主題 */}
-      <Background gap={22} size={1.2} />
+      <IsoGrid />
       <Controls orientation="horizontal" />
     </ReactFlow>
   )

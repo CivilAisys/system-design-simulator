@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import { Loader2, Moon, Network, Play, Redo2, RotateCcw, Sun, Undo2 } from 'lucide-react'
+import { Loader2, Network, Play, Redo2, RotateCcw, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,7 +26,6 @@ import { ResultsPanel } from '@/results/ResultsPanel'
 import { ResultsResizer } from '@/results/ResultsResizer'
 import { MAX_RESULTS_RATIO, useResultsHeight } from '@/results/resultsHeight'
 import { useSimulation } from '@/simulation/useSimulation'
-import { useTheme } from '@/theme'
 
 export default function App() {
   // 元件面板、屬性面板和畫布共用同一個 React Flow store（座標換算、刪除）
@@ -38,7 +37,6 @@ export default function App() {
 }
 
 function Simulator() {
-  const { theme, toggleTheme } = useTheme()
   // 上次的畫布（自動存檔），讀不回來時用起始拓撲
   const [restored] = useState(() => restoreTopology(initialTopology))
   const editor = useTopologyEditor(restored.topology)
@@ -161,12 +159,15 @@ function Simulator() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-3 border-b px-4 py-2.5">
+      <header className="relative z-10 flex items-center gap-3 border-b-[1.5px] border-ink px-4 py-2.5">
         <div className="flex shrink-0 items-center gap-2.5">
-          <span aria-hidden className="flex size-7.5 items-center justify-center rounded-[10px] bg-primary text-primary-foreground">
+          <span
+            aria-hidden
+            className="flex size-7.5 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[2px_2px_0_var(--ink)] outline-[1.5px] outline-ink"
+          >
             <Network className="size-4" />
           </span>
-          <h1 className="font-heading text-base font-bold tracking-tight">System Design Simulator</h1>
+          <h1 className="font-heading text-[17px] font-bold tracking-[-0.02em]">System Design Simulator</h1>
         </div>
         <Button onClick={run} disabled={running} size="sm" className="shrink-0 font-semibold">
           {running ? <Loader2 className="animate-spin" /> : <Play />}
@@ -218,15 +219,6 @@ function Simulator() {
             起始拓撲
           </Button>
         </div>
-        <Button
-          variant="outline"
-          size="icon"
-          className="shrink-0"
-          onClick={toggleTheme}
-          aria-label={theme === 'dark' ? '切換為淺色' : '切換為深色'}
-        >
-          {theme === 'dark' ? <Sun /> : <Moon />}
-        </Button>
       </header>
       {/* relative：沒釘住的屬性面板以這裡為準，浮在畫布右側 */}
       <SidebarProvider className="relative min-h-0 flex-1">
@@ -236,7 +228,6 @@ function Simulator() {
               改成 absolute 跟著畫布（結果面板拉高時也留在畫布裡）。
               sonner 的寬度固定 356px，畫布窄時縮成剩下的寬度，不往左蓋到元件面板 */}
           <Toaster
-            theme={theme}
             position="top-right"
             offset={{ top: TOAST_GAP, right: toastRight }}
             // 視窗窄於 600px 時 sonner 改用 mobileOffset
@@ -250,7 +241,6 @@ function Simulator() {
             edges={editor.edges}
             result={result}
             stale={stale}
-            colorMode={theme}
             onNodesChange={editor.onNodesChange}
             onEdgesChange={editor.onEdgesChange}
             onConnect={editor.onConnect}
@@ -295,7 +285,6 @@ function Simulator() {
           resultTopology={resultTopology}
           stale={stale}
           running={running}
-          theme={theme}
           canFocusError={(e) => errorNodeIds(e).length > 0}
           onFocusError={focusError}
           onSelectNode={focusNode}

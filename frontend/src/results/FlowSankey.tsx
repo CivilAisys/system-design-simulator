@@ -4,7 +4,6 @@ import { TooltipComponent, type TooltipComponentOption } from 'echarts/component
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { totalRps, type NodeResult, type SimulationResult, type Topology } from '@/api/client'
-import type { Theme } from '@/theme'
 import { formatRps } from '@/canvas/format'
 import { isReplicationSource } from '@/canvas/catalog'
 import { SANKEY_COLORS, SANKEY_STATUS_COLOR, type SankeyColors } from '@/canvas/status'
@@ -37,21 +36,20 @@ function queuedExcess(node: NodeResult) {
 type FlowSankeyProps = {
   topology: Topology
   result: SimulationResult
-  theme: Theme
 }
 
-export function FlowSankey({ topology, result, theme }: FlowSankeyProps) {
+export function FlowSankey({ topology, result }: FlowSankeyProps) {
   const { containerRef, chartRef } = useECharts()
 
   useEffect(() => {
-    chartRef.current?.setOption(sankeyOption(topology, result, theme))
-  }, [chartRef, topology, result, theme])
+    chartRef.current?.setOption(sankeyOption(topology, result))
+  }, [chartRef, topology, result])
 
   return <div ref={containerRef} className="size-full" />
 }
 
-function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme): SankeyOption {
-  const colors = SANKEY_COLORS[theme]
+function sankeyOption(topology: Topology, result: SimulationResult): SankeyOption {
+  const colors = SANKEY_COLORS
   // 流量和邊上的 label 用同一個數字：read + write
   const types = new Map(topology.nodes.map((node) => [node.id, node.type]))
   const edgeLinks = topology.edges.flatMap((edge) => {
@@ -108,7 +106,7 @@ function sankeyOption(topology: Topology, result: SimulationResult, theme: Theme
   return {
     tooltip: {
       trigger: 'item',
-      // ECharts 預設白底，深色主題要自己給
+      // ECharts 預設純白底，改成卡片的紙色
       backgroundColor: colors.tooltip,
       borderColor: colors.tooltipBorder,
       textStyle: { color: colors.text },
