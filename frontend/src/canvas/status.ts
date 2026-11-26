@@ -26,7 +26,7 @@ export function isIdle(status: DisplayStatus | null): status is 'UNCONNECTED' | 
 }
 
 // 畫布節點的外框和光暈（spec 第 6 節），畫在節點後面的一層，不改底色。過載時的脈動在 SimNode 加。
-// 光暈是 index.css 的變數：深色主題發光，淺色主題是外圈的光圈；OK 只有很淡的光暈，外框維持原本的顏色
+// 光暈是 index.css 的變數：紙底上不用模糊的發光，改成外圈的實色光圈；OK 沒有光暈，外框維持原本的墨色
 export const STATUS_GLOW: Record<DisplayStatus, string> = {
   OK: 'shadow-(--status-ok-glow)',
   WARN: 'border-[1.5px] border-warn shadow-(--status-warn-glow)',

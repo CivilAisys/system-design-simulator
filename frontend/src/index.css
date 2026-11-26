@@ -37,7 +37,6 @@
     --font-mono: 'JetBrains Mono Variable', 'Noto Sans TC Variable', monospace;
     --color-ink: var(--ink);
     --color-ink-soft: var(--ink-soft);
-    --color-paper: var(--paper);
     --color-canvas: var(--canvas);
     --color-ok: var(--status-ok);
     --color-ok-bg: var(--status-ok-bg);
@@ -161,6 +160,8 @@
     --status-over-ink: #b91c1c;
     --status-over-glow: 0 0 0 4px #fecaca, 0 0 0 5px #ef444466;
     --status-over-row: #fff5f5;
+    /* KPI 卡片的淡陰影 */
+    --kpi-shadow: #ddd6c8;
     --strong-bg: #fff1f0;
     --strong-border: #b91c1c;
     --strong-shadow: #fca5a5;

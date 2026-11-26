@@ -56,7 +56,7 @@ type KpiCardProps = {
 
 function KpiCard({ label, className, labelClassName, children }: KpiCardProps) {
   return (
-    <div className={cn('min-w-0 rounded-card border-[1.5px] border-ink bg-card px-4 py-3 shadow-[3px_3px_0_#ddd6c8]', className)}>
+    <div className={cn('min-w-0 rounded-card border-[1.5px] border-ink bg-card px-4 py-3 shadow-[3px_3px_0_var(--kpi-shadow)]', className)}>
       <KpiNote className={labelClassName}>{label}</KpiNote>
       {children}
     </div>

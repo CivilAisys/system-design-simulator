@@ -172,7 +172,7 @@ function curveOption(
     ],
     tooltip: {
       trigger: 'axis',
-      // ECharts 預設白底，深色主題要自己給
+      // ECharts 預設純白底，改成卡片的紙色
       backgroundColor: colors.tooltip,
       borderColor: colors.tooltipBorder,
       textStyle: { color: colors.text },
