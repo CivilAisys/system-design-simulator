@@ -9,6 +9,7 @@ import {
 import { totalRps, type Edge, type EdgeResult } from '@/api/client'
 import { cn } from '@/lib/utils'
 import type { EdgeKind } from './catalog'
+import type { Congestion } from './congestion'
 import { EdgeBeam } from './EdgeBeam'
 import { edgeStyle } from './edgeStyle'
 import { classRatesTitle, formatBytesPerSec, formatRps } from './format'
@@ -24,6 +25,8 @@ export type RpsEdgeData = {
   errors?: string[]
   // 拓撲在上次 Run 之後改過，結果可能不準
   stale?: boolean
+  // 過載節點前後的邊（Canvas 算，見 congestion.ts）
+  congestion?: Congestion
 }
 
 // React Flow 的 edge.data 是選填，這裡一定有對應的 Edge
@@ -42,7 +45,7 @@ export function RpsEdge({
   data,
 }: EdgeProps<RpsFlowEdge>) {
   const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
-  const { kind = 'SYNC', classTag, result, errors, stale } = data
+  const { kind = 'SYNC', classTag, result, errors, stale, congestion } = data
   const store = useStoreApi()
 
   return (
@@ -55,6 +58,9 @@ export function RpsEdge({
         selected={selected}
         invalid={errors != null}
         stale={stale}
+        congestion={congestion}
+        targetX={targetX}
+        targetY={targetY}
       />
       {(result || classTag) && (
         <EdgeLabelRenderer>
@@ -62,8 +68,8 @@ export function RpsEdge({
             className={cn(
               // 不加 nopan：有結果時標籤接收滑鼠事件，從標籤上拖曳照樣能平移畫布
               'nodrag absolute border-[1.5px] border-ink bg-card px-2.5 py-0.5 font-mono text-[11px] font-semibold whitespace-nowrap text-ink shadow-[0_2px_0_var(--ink)]',
-              // 只有一行時是膠囊，多了積壓、頻寬的第二行就改成圓角矩形
-              result?.backlogRps || result?.bandwidth ? 'rounded-xl' : 'rounded-full',
+              // 只有一行時是膠囊，多了積壓、壅塞／受限、頻寬的第二行就改成圓角矩形
+              result?.backlogRps || result?.bandwidth || (result && congestion) ? 'rounded-xl' : 'rounded-full',
               // 有結果時要能 hover 看 read／write 拆分；沒有時讓點擊穿過標籤落到邊上
               result ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none',
               stale && 'opacity-50',
@@ -78,6 +84,11 @@ export function RpsEdge({
             {/* 沒有處理成功的訊息：queue 每秒增加的筆數。放第二行，不拉長標籤 */}
             {result && result.backlogRps > 0 && (
               <div className="text-critical-ink">積壓 +{formatRps(result.backlogRps)}/s</div>
+            )}
+            {/* 過載節點前後的邊：流量卡在哪裡 */}
+            {result && congestion === 'jam' && <div className="text-over-ink">壅塞・下游過載</div>}
+            {result && congestion === 'starved' && (
+              <div className="text-[10px] font-medium text-muted-foreground">受限・上游過載</div>
             )}
             {/* 只有 Client 的邊有：使用者端頻寬（spec 4.7） */}
             {result?.bandwidth && (

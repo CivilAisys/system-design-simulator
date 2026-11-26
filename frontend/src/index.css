@@ -285,6 +285,66 @@
         }
     }
 
+    /* 壅塞：白色光點，ease-out 讓它們在入口前擠成一團。長度幾乎是 0 的圓頭虛線就是一個點；
+       間隔比整條邊長，一條 path 上只有一個點 */
+    .beam-jam-dot {
+        fill: none;
+        stroke: #ffffff;
+        stroke-width: 4.8px;
+        stroke-linecap: round;
+        stroke-dasharray: 0.01 200;
+        filter: drop-shadow(0 0 2px var(--beam)) drop-shadow(0 0 5px var(--beam));
+        animation: beam-jam-dot cubic-bezier(0.05, 0.7, 0.1, 1) infinite;
+    }
+
+    /* 入口那團慢慢脈動的光 */
+    .beam-jam-pile {
+        fill: var(--beam);
+        opacity: 0.35;
+        filter: blur(3px);
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: beam-jam-pile 1.4s ease-in-out infinite;
+    }
+
+    /* 受限：整根燈管變暗，白光細、淡 */
+    .beam-starved {
+        opacity: 0.55;
+    }
+
+    .beam-sweep-starved {
+        stroke-width: 2px;
+        opacity: 0.7;
+        filter: drop-shadow(0 0 2px #ffffff);
+    }
+
+    /* 減少動態效果：光點停在擠成一團的位置（不歸零，否則全部疊在起點），入口的光不脈動 */
+    @media (prefers-reduced-motion: reduce) {
+        .beam-jam-dot {
+            animation-play-state: paused;
+        }
+
+        .beam-jam-pile {
+            animation: none;
+        }
+    }
+
+    @keyframes beam-jam-dot {
+        from {
+            stroke-dashoffset: 0;
+        }
+        to {
+            stroke-dashoffset: -100px;
+        }
+    }
+
+    @keyframes beam-jam-pile {
+        50% {
+            opacity: 0.7;
+            transform: scale(1.5);
+        }
+    }
+
     @keyframes beam-sweep {
         from {
             stroke-dashoffset: 0;
