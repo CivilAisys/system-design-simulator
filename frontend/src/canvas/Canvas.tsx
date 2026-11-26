@@ -9,6 +9,7 @@ import {
 } from '@xyflow/react'
 import { type Edge, type NodeType, type SimulationResult } from '@/api/client'
 import { NODE_KINDS, PALETTE, type PaletteItem } from './catalog'
+import { congestionOf } from './congestion'
 import { IsoGrid } from './IsoGrid'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { arrowMarker, edgeColor } from './edgeStyle'
@@ -85,6 +86,7 @@ export function Canvas({
             result: edgeResult,
             errors: edgeErrors,
             stale,
+            congestion: congestionOf(e.source, e.target, result?.nodes),
           },
         }
       }),
