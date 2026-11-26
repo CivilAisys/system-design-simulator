@@ -15,7 +15,7 @@ export function edgeColor(selected: boolean | undefined, hasErrors: boolean): st
 }
 
 // 底下的連線只是 1px 的淡線，當燈管（EdgeBeam）的軌道；流量大小由燈管的顏色和白光表達。
-// 選取、驗證錯誤時加粗到 2px；過期時畫淡；非同步的邊畫成虛線
+// 平常用 0.6 的不透明度畫淡（只淡線、不淡箭頭）；選取、驗證錯誤時加粗到 2px、不畫淡；過期時更淡；非同步的邊畫成虛線
 export function edgeStyle(
   selected: boolean | undefined,
   errors: string[] | undefined,
@@ -25,7 +25,7 @@ export function edgeStyle(
   return {
     stroke: edgeColor(selected, errors != null),
     strokeWidth: selected || errors ? 2 : 1,
-    strokeOpacity: stale ? 0.3 : 1,
+    strokeOpacity: stale ? 0.3 : selected || errors ? 1 : 0.6,
     strokeDasharray: kind === 'ASYNC' ? ASYNC_DASH : undefined,
   }
 }

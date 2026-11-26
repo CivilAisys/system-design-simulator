@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { beamOf, rpsLevel } from './flow'
+import { beamOf, rpsLevel } from './beam'
 
 describe('流量級距', () => {
   it.each([

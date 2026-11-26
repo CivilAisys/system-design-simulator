@@ -114,8 +114,8 @@
     --paper: #f6f3ec;
     --paper-grid: rgb(35 38 52 / 0.07);
     --canvas: var(--paper);
-    /* 連線的軌道（燈管底下的淡線）和箭頭 */
-    --edge: #b5ae9f;
+    /* 連線和箭頭；連線當燈管的軌道時由 edgeStyle 畫淡，箭頭不變 */
+    --edge: #8b8577;
     --background: #fbf9f4;
     --foreground: var(--ink);
     --card: #fffefb;
