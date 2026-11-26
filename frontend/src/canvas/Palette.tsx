@@ -75,13 +75,13 @@ export function Palette({ onAdd }: PaletteProps) {
   }
 
   return (
-    <Sidebar collapsible="none" className="relative w-[214px] border-r">
+    <Sidebar collapsible="none" className="palette-panel relative w-[214px] border-r">
       {/* 疊在第一個類別標題的右邊，不另外占一列 */}
       <div className="absolute top-1.5 right-1.5 z-10">{toggleButton}</div>
       <SidebarContent>
         {CATEGORIES.map((category) => (
           <SidebarGroup key={category.id} className="py-1">
-            <SidebarGroupLabel className="gap-2">
+            <SidebarGroupLabel className="panel-heading gap-2">
               <span aria-hidden className={cn('size-2 rounded-full', CATEGORY_DOT[category.id])} />
               {category.label}
             </SidebarGroupLabel>

@@ -47,9 +47,11 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
     <div
       title={errorText}
       className={cn(
-        'relative max-w-64 min-w-36 rounded-card border border-input bg-card px-3 py-2.5 text-card-foreground',
+        'sim-node relative max-w-64 min-w-36 rounded-card border border-input bg-card px-3 py-2.5 text-card-foreground',
         // 沒有上游的節點（Client）是流量的來源，不是機器：虛線外框、沒有陰影
-        hasInput ? 'shadow-(--node-shadow)' : 'border-dashed',
+        hasInput ? 'shadow-(--node-shadow)' : 'sim-node-source border-dashed',
+        status && `is-${status.toLowerCase()}`,
+        `cat-${category.toLowerCase()}`,
         // 選取用強調色的外圈，和狀態色的外框、光暈分開
         selected && 'outline-2 outline-offset-6 outline-primary',
         // 未連線的節點不在拓撲裡：整個畫淡、灰色虛線外框，選取或滑過時恢復，方便編輯。
@@ -64,7 +66,7 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
         <div
           aria-hidden
           className={cn(
-            'pointer-events-none absolute -inset-px rounded-card',
+            'sim-node-glow pointer-events-none absolute -inset-px rounded-card',
             errors ? 'ring-2 ring-destructive shadow-lg shadow-destructive/40' : status && STATUS_GLOW[status],
             stale
               ? 'opacity-30'
@@ -79,14 +81,14 @@ export function SimNode({ data, selected }: NodeProps<SimFlowNode>) {
           {/* 寬度有上限，長名稱截成一行，完整名稱放在 title（節點可能很多，不用 shadcn tooltip）。
               滑過名稱時看不到外層的錯誤說明，所以一起放進來 */}
           <div
-            className="truncate text-[13px] font-semibold"
+            className="sim-node-name truncate text-[13px] font-semibold"
             title={errorText ? `${node.name}\n${errorText}` : node.name}
           >
             {node.name}
           </div>
           {replicas && <div className="text-[11px] text-muted-foreground">{replicas}</div>}
           {(result || unconnected) && (
-            <div className="mt-0.5 flex items-center justify-between gap-3 text-xs">
+            <div className="sim-node-metric mt-0.5 flex items-center justify-between gap-3 text-xs">
               <span className="flex items-center gap-1.5 text-muted-foreground">
                 {status && <span aria-hidden className={cn('size-2 rounded-full', STATUS_FILL[status])} />}
                 {/* 未連線沒有流量可看，不列 ρ */}

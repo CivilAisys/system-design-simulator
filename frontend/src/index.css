@@ -6,6 +6,9 @@
 @import "@fontsource-variable/noto-sans-tc";
 /* 放在這裡（而不是元件裡 import）：下面覆寫 React Flow 變數的規則要排在它後面才會生效 */
 @import "@xyflow/react/dist/style.css";
+@import "@fontsource-variable/jetbrains-mono";
+/* 原型：視覺風格比較 */
+@import "./skins.css";
 
 @custom-variant dark (&:is(.dark *));
 

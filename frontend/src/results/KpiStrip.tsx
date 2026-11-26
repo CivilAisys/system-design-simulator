@@ -56,7 +56,7 @@ type KpiCardProps = {
 
 function KpiCard({ label, className, labelClassName, children }: KpiCardProps) {
   return (
-    <div className={cn('min-w-0 rounded-card border bg-muted px-4 py-3', className)}>
+    <div className={cn('kpi-card min-w-0 rounded-card border bg-muted px-4 py-3', className)}>
       <KpiNote className={labelClassName}>{label}</KpiNote>
       {children}
     </div>
@@ -65,7 +65,7 @@ function KpiCard({ label, className, labelClassName, children }: KpiCardProps) {
 
 function KpiValue({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn('mt-0.5 font-heading text-[22px] font-bold text-foreground tabular-nums', className)}>
+    <div className={cn('kpi-value mt-0.5 font-heading text-[22px] font-bold text-foreground tabular-nums', className)}>
       {children}
     </div>
   )
@@ -78,7 +78,7 @@ function KpiUnit({ className, children }: { className?: string; children: ReactN
 
 function KpiNote({ className, title, children }: { className?: string; title?: string; children: ReactNode }) {
   return (
-    <div className={cn('text-xs font-medium text-muted-foreground', className)} title={title}>
+    <div className={cn('kpi-note text-xs font-medium text-muted-foreground', className)} title={title}>
       {children}
     </div>
   )
@@ -148,7 +148,7 @@ function BottleneckCard({ topology, result }: KpiStripProps) {
       )
     case 'bottleneck':
       return (
-        <KpiCard label="瓶頸" className="border-strong-bg bg-strong-bg" labelClassName="text-strong-muted">
+        <KpiCard label="瓶頸" className="kpi-card-strong border-strong-bg bg-strong-bg" labelClassName="text-strong-muted">
           <KpiValue className="flex items-baseline text-strong-ink">
             <span className="truncate" title={view.name}>
               {view.name}

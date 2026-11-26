@@ -16,7 +16,7 @@ export function Rack({ slots, title, stale }: RackProps) {
     <div
       aria-hidden
       title={title}
-      className={cn('flex shrink-0 flex-col gap-0.5 rounded-sm border border-input p-0.5', stale && 'opacity-30')}
+      className={cn('sim-rack flex shrink-0 flex-col gap-0.5 rounded-sm border border-input p-0.5', stale && 'opacity-30')}
     >
       {slots.map((status, i) => (
         <div

@@ -14,7 +14,13 @@ export function CategoryIcon({ icon: Icon, category, className }: CategoryIconPr
   return (
     <span
       aria-hidden
-      className={cn('flex size-7 shrink-0 items-center justify-center rounded-[9px]', CATEGORY_TILE[category], className)}
+      className={cn(
+        'category-icon flex size-7 shrink-0 items-center justify-center rounded-[9px]',
+        // 原型：cat-* 讓 skins.css 依類別畫出 C 紙感的立體按鍵帽
+        `cat-${category.toLowerCase()}`,
+        CATEGORY_TILE[category],
+        className,
+      )}
     >
       <Icon className="size-4" />
     </span>

@@ -122,14 +122,14 @@ export function PropertiesPanel({
     <aside
       aria-label="屬性"
       className={cn(
-        'flex w-72 shrink-0 flex-col',
+        'props-panel flex w-72 shrink-0 flex-col',
         pinned
           ? 'border-l'
           : // 浮在畫布右側、細條的左邊（App 的版面是 relative），上下留一點空隙，看得出是蓋在畫布上
             'absolute top-2 right-11 bottom-2 z-30 overflow-hidden rounded-xl border bg-background shadow-2xl animate-in fade-in slide-in-from-right-2',
       )}
     >
-      <div className="flex items-center justify-between border-b py-1 pr-2 pl-4 text-xs font-medium text-muted-foreground">
+      <div className="panel-heading flex items-center justify-between border-b py-1 pr-2 pl-4 text-xs font-medium text-muted-foreground">
         屬性
         <Button
           ref={pinButtonRef}

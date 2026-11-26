@@ -12,6 +12,13 @@
         try {
           light = localStorage.getItem('theme') === 'light'
         } catch (e) {}
+        // 原型：外觀（src/skin.ts），C 紙感只有淺色版
+        var skin = 'current'
+        try {
+          skin = localStorage.getItem('skin') || 'current'
+        } catch (e) {}
+        document.documentElement.dataset.skin = skin
+        if (skin === 'paper') light = true
         document.documentElement.classList.toggle('dark', !light)
       })()
     </script>

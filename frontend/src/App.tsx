@@ -13,6 +13,7 @@ import { Canvas } from '@/canvas/Canvas'
 import type { PaletteItem } from '@/canvas/catalog'
 import { formatUtilization } from '@/canvas/format'
 import { initialTopology } from '@/canvas/initialTopology'
+import { testTopology } from '@/canvas/testTopology'
 import { Palette } from '@/canvas/Palette'
 import { findFreePosition } from '@/canvas/placement'
 import { hasSingleSelection, usePanelFlag, usePanelShortcut } from '@/canvas/panels'
@@ -27,6 +28,7 @@ import { ResultsResizer } from '@/results/ResultsResizer'
 import { MAX_RESULTS_RATIO, useResultsHeight } from '@/results/resultsHeight'
 import { useSimulation } from '@/simulation/useSimulation'
 import { useTheme } from '@/theme'
+import { BEAMS, SKINS, useSkin } from '@/skin'
 
 export default function App() {
   // 元件面板、屬性面板和畫布共用同一個 React Flow store（座標換算、刪除）
@@ -38,7 +40,12 @@ export default function App() {
 }
 
 function Simulator() {
-  const { theme, toggleTheme } = useTheme()
+  const { theme, setTheme, toggleTheme } = useTheme()
+  // 原型：外觀切換。C 紙感只有淺色版
+  const { skin, setSkin, beam, setBeam } = useSkin()
+  useEffect(() => {
+    if (skin === 'paper' && theme === 'dark') setTheme('light')
+  }, [skin, theme, setTheme])
   // 上次的畫布（自動存檔），讀不回來時用起始拓撲
   const [restored] = useState(() => restoreTopology(initialTopology))
   const editor = useTopologyEditor(restored.topology)
@@ -160,16 +167,16 @@ function Simulator() {
   const message = error ?? (invalidCount > 0 ? `拓撲有 ${invalidCount} 個驗證錯誤，見「錯誤」分頁` : null)
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-3 border-b px-4 py-2.5">
+    <div className="app-shell flex h-screen flex-col">
+      <header className="app-header relative z-10 flex items-center gap-3 border-b px-4 py-2.5">
         <div className="flex shrink-0 items-center gap-2.5">
-          <span aria-hidden className="flex size-7.5 items-center justify-center rounded-[10px] bg-primary text-primary-foreground">
+          <span aria-hidden className="app-logo flex size-7.5 items-center justify-center rounded-[10px] bg-primary text-primary-foreground">
             <Network className="size-4" />
           </span>
-          <h1 className="font-heading text-base font-bold tracking-tight">System Design Simulator</h1>
+          <h1 className="app-title font-heading text-base font-bold tracking-tight">System Design Simulator</h1>
         </div>
-        <Button onClick={run} disabled={running} size="sm" className="shrink-0 font-semibold">
-          {running ? <Loader2 className="animate-spin" /> : <Play />}
+        <Button onClick={run} disabled={running} size="sm" className="run-button shrink-0 font-semibold">
+          <span className="run-button-icon">{running ? <Loader2 className="animate-spin" /> : <Play />}</span>
           Run
         </Button>
         <div className="flex shrink-0 items-center gap-2">
@@ -217,11 +224,18 @@ function Simulator() {
             <RotateCcw />
             起始拓撲
           </Button>
+          {/* 原型：比較流量呈現方式用的複雜拓撲 */}
+          <Button variant="outline" size="sm" onClick={() => loadTopology(testTopology, '已載入測試拓撲')}>
+            測試拓撲
+          </Button>
         </div>
+        {/* 原型：流量呈現方式（只有 C 紙感）和外觀切換 */}
+        {skin === 'paper' && <Segmented label="流量" options={BEAMS} value={beam} onChange={setBeam} />}
+        <Segmented label="外觀" options={SKINS} value={skin} onChange={setSkin} />
         <Button
           variant="outline"
           size="icon"
-          className="shrink-0"
+          className={cn('shrink-0', skin !== 'current' && 'hidden')}
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? '切換為淺色' : '切換為深色'}
         >
@@ -231,7 +245,7 @@ function Simulator() {
       {/* relative：沒釘住的屬性面板以這裡為準，浮在畫布右側 */}
       <SidebarProvider className="relative min-h-0 flex-1">
         <Palette onAdd={addAtCenter} />
-        <main ref={canvasRef} className="relative min-w-0 flex-1">
+        <main ref={canvasRef} className="canvas-stage relative min-w-0 flex-1">
           {/* 通知放在畫布右上角：sonner 預設 fixed 貼著視窗，會蓋住屬性面板和工具列，
               改成 absolute 跟著畫布（結果面板拉高時也留在畫布裡）。
               sonner 的寬度固定 356px，畫布窄時縮成剩下的寬度，不往左蓋到元件面板 */}
@@ -251,6 +265,7 @@ function Simulator() {
             result={result}
             stale={stale}
             colorMode={theme}
+            beam={skin === 'paper' ? beam : undefined}
             onNodesChange={editor.onNodesChange}
             onEdgesChange={editor.onEdgesChange}
             onConnect={editor.onConnect}
@@ -286,7 +301,7 @@ function Simulator() {
       <section
         id="results"
         aria-label="結果"
-        className={cn('shrink-0', stale && 'opacity-60')}
+        className={cn('results-dock shrink-0', stale && 'opacity-60')}
         style={{ height: resultsHeight, maxHeight: `${MAX_RESULTS_RATIO * 100}vh` }}
       >
         <ResultsPanel
@@ -430,4 +445,39 @@ function useBottleneckToast() {
   }
 
   return { notify, clear }
+}
+
+type SegmentedProps<T extends string> = {
+  label: string
+  options: { id: T; label: string; title?: string }[]
+  value: T
+  onChange: (value: T) => void
+}
+
+// 原型：一排膠囊按鈕的單選切換
+function Segmented<T extends string>({ label, options, value, onChange }: SegmentedProps<T>) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="skin-switch flex shrink-0 items-center gap-0.5 rounded-full border bg-muted p-0.5"
+    >
+      <span className="px-1.5 text-[11px] font-semibold text-muted-foreground">{label}</span>
+      {options.map((option) => (
+        <button
+          key={option.id}
+          role="radio"
+          aria-checked={value === option.id}
+          title={option.title}
+          onClick={() => onChange(option.id)}
+          className={cn(
+            'rounded-full px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors',
+            value === option.id && 'bg-primary text-primary-foreground',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
 }

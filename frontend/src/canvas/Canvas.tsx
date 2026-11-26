@@ -13,7 +13,8 @@ import { totalRps, type Edge, type NodeType, type SimulationResult } from '@/api
 import { NODE_KINDS, PALETTE, type PaletteItem } from './catalog'
 import { SimNode, type SimFlowNode } from './SimNode'
 import { arrowMarker, edgeColor } from './edgeStyle'
-import { RpsEdge, type RpsFlowEdge } from './RpsEdge'
+import { RpsEdge, type Congestion, type RpsFlowEdge } from './RpsEdge'
+import type { Beam } from '@/skin'
 import { flowRatio } from './flow'
 import { unconnectedNodeIds } from './graph'
 import { groupErrors } from './validation'
@@ -31,6 +32,8 @@ type CanvasProps = {
   // 拓撲在上次 Run 之後改過
   stale: boolean
   colorMode: ColorMode
+  // 原型：C 紙感的流量光束樣式；沒有時照舊畫粒子
+  beam?: Beam
   onNodesChange: (changes: NodeChange<SimFlowNode>[]) => void
   onEdgesChange: (changes: EdgeChange<RpsFlowEdge>[]) => void
   onConnect: (connection: Connection) => void
@@ -44,6 +47,7 @@ export function Canvas({
   result,
   stale,
   colorMode,
+  beam,
   onNodesChange,
   onEdgesChange,
   onConnect,
@@ -95,10 +99,12 @@ export function Canvas({
             flow: edgeResult && flowRatio(totalRps(edgeResult.rps), maxRps),
             errors: edgeErrors,
             stale,
+            beam,
+            congestion: beam ? congestionOf(e.source, e.target, result) : undefined,
           },
         }
       }),
-    [edges, typeById, result, maxRps, errors, stale],
+    [edges, typeById, result, maxRps, errors, stale, beam],
   )
 
   function onDragOver(event: DragEvent) {
@@ -142,6 +148,15 @@ export function Canvas({
       <Controls orientation="horizontal" />
     </ReactFlow>
   )
+}
+
+// 原型：過載節點前後的邊。進入過載節點的邊是「壅塞」（送進去的比處理得完的多），
+// 從過載節點出去的邊是「受限」（只拿得到它處理得完的量）；兩者都是時以壅塞為準
+function congestionOf(source: string, target: string, result: SimulationResult | null): Congestion | undefined {
+  if (!result) return undefined
+  if (result.nodes[target]?.status === 'OVERLOADED') return 'jam'
+  if (result.nodes[source]?.status === 'OVERLOADED') return 'starved'
+  return undefined
 }
 
 // requestClass 只對 Service 的出邊有作用（spec 3.4），其他邊上的值計算時忽略，不顯示

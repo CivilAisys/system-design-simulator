@@ -1,0 +1,495 @@
+/* 原型：視覺風格比較（prototype/visual-refresh，不合併）。
+   沒有放進 @layer：Tailwind 的 utilities 在 layer 裡，這裡的規則一律蓋過它們。
+   @theme inline 會把 --radius-card、--font-* 直接展開成數值，所以圓角和字型要用選擇器覆寫，不能只改變數 */
+
+/* ───────────────────────── C：紙感（淺色、清爽） ─────────────────────────
+   米白紙底、墨色細線，類別色當淡彩。節點圖示是立體按鍵帽，
+   節點的實心偏移陰影用自己類別的顏色 */
+
+:root[data-skin='paper'] {
+  --ink: #232634;
+  --ink-soft: #3c4054;
+  --paper: #f6f3ec;
+  --paper-sheet: #fbf9f4;
+  --paper-line: #e3ddd0;
+  --paper-grid: rgb(35 38 52 / 0.07);
+
+  --canvas: var(--paper);
+  --canvas-dot: transparent;
+  --edge: #8b8577;
+  --flow-particle: #5b3df5;
+  --flow-particle-glow: none;
+  --node-shadow: 0 0 #0000;
+  --background: var(--paper-sheet);
+  --foreground: var(--ink);
+  --card: #fffefb;
+  --card-foreground: var(--ink);
+  --popover: #fffefb;
+  --popover-foreground: var(--ink);
+  --primary: #5b3df5;
+  --primary-foreground: #ffffff;
+  --secondary: #f3efe6;
+  --secondary-foreground: var(--ink-soft);
+  --muted: #f3efe6;
+  --muted-foreground: #6c6b74;
+  --accent: #ece6da;
+  --accent-foreground: var(--ink);
+  --border: var(--paper-line);
+  --input: #d5cdbd;
+  --ring: #5b3df5;
+  --sidebar: var(--paper-sheet);
+  --sidebar-accent: #f1ece2;
+  --sidebar-border: var(--paper-line);
+
+  --status-warn-glow: 0 0 0 3px #fde68a;
+  --status-critical-glow: 0 0 0 3px #fed7aa;
+  --status-over-glow: 0 0 0 4px #fecaca, 0 0 0 5px #ef444466;
+  --strong-bg: #fff1f0;
+  --strong-ink: #9f1d1d;
+  --strong-muted: #b45454;
+  --strong-accent: #dc2626;
+}
+
+[data-skin='paper'] body {
+  background: var(--paper);
+}
+
+/* 畫布：等角菱形格線 */
+[data-skin='paper'] .canvas-stage .react-flow {
+  --xy-background-color: transparent;
+  background-color: var(--paper);
+  background-image:
+    repeating-linear-gradient(30deg, var(--paper-grid) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(150deg, var(--paper-grid) 0 1px, transparent 1px 32px);
+}
+
+[data-skin='paper'] .app-header {
+  background: var(--paper-sheet);
+  border-bottom: 1.5px solid var(--ink);
+}
+
+[data-skin='paper'] .app-logo {
+  background: #5b3df5;
+  box-shadow: 2px 2px 0 var(--ink);
+  outline: 1.5px solid var(--ink);
+}
+
+[data-skin='paper'] .app-title {
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+/* 按鈕：墨色外框 + 往下的實心陰影，按下去會沉 */
+[data-skin='paper'] .run-button {
+  border: 1.5px solid var(--ink);
+  box-shadow: 0 3px 0 var(--ink);
+  transform: translateY(-1px);
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.12s ease-out;
+}
+
+[data-skin='paper'] .run-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 0 var(--ink);
+}
+
+[data-skin='paper'] .run-button:active {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+[data-skin='paper'] .run-button-icon {
+  display: inline-flex;
+}
+
+[data-skin='paper'] [data-slot='button'][data-variant='outline'] {
+  border: 1.5px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink);
+  background: var(--card);
+}
+
+[data-skin='paper'] .skin-switch {
+  border: 1.5px solid var(--ink);
+  background: var(--card);
+}
+
+[data-skin='paper'] .palette-panel,
+[data-skin='paper'] .props-panel {
+  background: var(--paper-sheet);
+}
+
+[data-skin='paper'] .panel-heading {
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+[data-skin='paper'] [data-sidebar='menu-button'] {
+  height: 44px;
+  transition: transform 0.15s ease-out;
+}
+
+[data-skin='paper'] [data-sidebar='menu-button']:hover {
+  background: var(--card);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+  transform: translateX(2px);
+}
+
+/* 圖示：立體按鍵帽。圖案正面朝前，靠底部的厚度和墨色陰影做出立體感 */
+[data-skin='paper'] .category-icon {
+  --cap-top: #f1ecff;
+  --cap-side: #c6b8fa;
+  --cap-ink: #4327d6;
+  width: 32px;
+  height: 30px;
+  margin-bottom: 4px;
+  border-radius: 9px;
+  color: var(--cap-ink);
+  background: linear-gradient(180deg, #ffffff 0%, var(--cap-top) 70%);
+  border: 1.5px solid var(--ink);
+  box-shadow:
+    inset 0 -3px 0 var(--cap-side),
+    0 3px 0 var(--ink);
+}
+
+[data-skin='paper'] .category-icon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.3;
+  transform: translateY(-1px);
+}
+
+[data-skin='paper'] .category-icon.cat-traffic {
+  --cap-top: #e3f0fd;
+  --cap-side: #93c3ee;
+  --cap-ink: #0b5f97;
+}
+[data-skin='paper'] .category-icon.cat-compute {
+  --cap-top: #efe9ff;
+  --cap-side: #b9a8f7;
+  --cap-ink: #4327d6;
+}
+[data-skin='paper'] .category-icon.cat-data {
+  --cap-top: #fdeaf2;
+  --cap-side: #f0a6c5;
+  --cap-ink: #a3164f;
+}
+[data-skin='paper'] .category-icon.cat-async {
+  --cap-top: #ddf7f1;
+  --cap-side: #86d9c8;
+  --cap-ink: #0f6b62;
+}
+
+[data-skin='paper'] .sim-node .category-icon {
+  width: 38px;
+  height: 36px;
+  border-radius: 11px;
+}
+
+[data-skin='paper'] .sim-node .category-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* 節點：墨色細框 + 類別色的實心偏移陰影，像一張張貼在紙上的卡片 */
+[data-skin='paper'] .rounded-card {
+  border-radius: 14px;
+}
+
+[data-skin='paper'] .sim-node {
+  --cat-shadow: #c9c2b3;
+  background: var(--card);
+  border: 1.5px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--cat-shadow);
+  transition:
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+[data-skin='paper'] .sim-node.cat-traffic {
+  --cat-shadow: #a9cdf2;
+}
+[data-skin='paper'] .sim-node.cat-compute {
+  --cat-shadow: #c6b8fa;
+}
+[data-skin='paper'] .sim-node.cat-data {
+  --cat-shadow: #f6b9d2;
+}
+[data-skin='paper'] .sim-node.cat-async {
+  --cat-shadow: #9fe2d4;
+}
+
+[data-skin='paper'] .sim-node:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--cat-shadow);
+}
+
+[data-skin='paper'] .sim-node.sim-node-source {
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+[data-skin='paper'] .sim-node-glow {
+  border-radius: 14px;
+}
+
+[data-skin='paper'] .sim-node-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+[data-skin='paper'] .sim-node-metric,
+[data-skin='paper'] .sim-edge-label,
+[data-skin='paper'] .kpi-value {
+  font-family: 'JetBrains Mono Variable', 'Noto Sans TC Variable', monospace;
+}
+
+[data-skin='paper'] .sim-rack {
+  border-color: var(--ink);
+  background: var(--card);
+}
+
+[data-skin='paper'] .sim-edge-label {
+  background: var(--card);
+  border: 1.5px solid var(--ink);
+  color: var(--ink);
+  box-shadow: 0 2px 0 var(--ink);
+}
+
+[data-skin='paper'] .react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+[data-skin='paper'] .react-flow__controls {
+  border: 1.5px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink);
+}
+
+/* 結果：紙卡片，瓶頸卡片是淡紅底 + 紅色偏移陰影 */
+[data-skin='paper'] .results-dock {
+  background: var(--paper-sheet);
+  border-top: 1.5px solid var(--ink);
+}
+
+[data-skin='paper'] .kpi-card {
+  background: var(--card);
+  border: 1.5px solid var(--ink);
+  box-shadow: 3px 3px 0 #ddd6c8;
+}
+
+[data-skin='paper'] .kpi-value {
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
+[data-skin='paper'] .kpi-card-strong {
+  background: var(--strong-bg);
+  border-color: #b91c1c;
+  box-shadow: 3px 3px 0 #fca5a5;
+}
+
+[data-skin='paper'] [data-slot='tabs-list'] {
+  background: var(--card);
+  border: 1.5px solid var(--ink);
+}
+
+[data-skin='paper'] [data-slot='tabs-trigger'][data-state='active'] {
+  background: #5b3df5;
+  color: white;
+  box-shadow: none;
+}
+
+[data-skin='paper'] [data-slot='table-container'] {
+  background: var(--card);
+}
+
+/* ───────────────────────── 流量呈現（EdgeBeam） ─────────────────────────
+   顏色依 --beam-heat 從青色混到電光紫；--beam-dur 是掃光走完一條邊的秒數 */
+
+.sim-edge-beam {
+  --beam-cold: #00c2ff;
+  --beam-hot: #7b4dff;
+  --beam: color-mix(in oklab, var(--beam-hot) var(--beam-heat), var(--beam-cold));
+}
+
+.sim-edge-beam path {
+  fill: none;
+  stroke-linecap: round;
+}
+
+[data-skin='paper'] .react-flow__edge-path {
+  stroke: #c9c4dc;
+}
+
+/* 霓虹管、細管線都自己畫線，底下原本的連線只留一條淡淡的細線 */
+.react-flow__edge:has(.sim-edge-beam) .react-flow__edge-path {
+  stroke-width: 1 !important;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sim-edge-beam path {
+    animation: none !important;
+  }
+}
+
+/* 細管線 */
+.beam-tube {
+  stroke: var(--beam);
+  opacity: 0.85;
+}
+
+.beam-pipe-ripple {
+  stroke: #ffffff;
+  stroke-dasharray: 6 18;
+  opacity: 0.75;
+  animation: beam-ripple 1.4s linear infinite;
+}
+
+@keyframes beam-ripple {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+/* 霓虹燈管本體 */
+.beam-neon-halo {
+  stroke: var(--beam);
+  opacity: 0.16;
+  filter: blur(3px);
+}
+
+.beam-neon-tube {
+  stroke: var(--beam);
+  filter: drop-shadow(0 0 2.5px var(--beam));
+}
+
+.beam-neon-core {
+  stroke: #ffffff;
+  opacity: 0.85;
+}
+
+/* 掃光（pathLength = 100） */
+.beam-neon-sweep {
+  stroke: #ffffff;
+  stroke-width: 4;
+  stroke-dasharray: 16 84;
+  filter: drop-shadow(0 0 3px #ffffff) drop-shadow(0 0 8px var(--beam));
+  animation: beam-sweep var(--beam-dur) linear infinite;
+}
+
+@keyframes beam-sweep {
+  from {
+    stroke-dashoffset: 16;
+  }
+  to {
+    stroke-dashoffset: -84;
+  }
+}
+
+/* 細霓虹：掃光短一點、光暈小一點 */
+.beam-sweep-thin {
+  stroke-dasharray: 10 90;
+  filter: drop-shadow(0 0 2px #ffffff) drop-shadow(0 0 5px var(--beam));
+}
+
+/* 多道掃光：每道間隔 --sweep-period，一起往前移一個間隔就無縫循環 */
+.beam-sweep-multi {
+  stroke-width: 3;
+  animation: beam-sweep-multi calc(var(--beam-dur) * 1.6 / var(--sweep-count)) linear infinite;
+}
+
+@keyframes beam-sweep-multi {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: calc(var(--sweep-period) * -1px);
+  }
+}
+
+/* 拖尾掃光：四段頭對齊（--sweep-shift 把短的往前推），一起移動 */
+.beam-sweep-trail {
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 3px var(--beam));
+  animation: beam-sweep-trail var(--beam-dur) linear infinite;
+}
+
+@keyframes beam-sweep-trail {
+  from {
+    stroke-dashoffset: calc(var(--sweep-shift) * -1px);
+  }
+  to {
+    stroke-dashoffset: calc(var(--sweep-shift) * -1px - 100px);
+  }
+}
+
+/* LED 燈條：4px 的燈、3px 的間隔；亮燈四顆一組，每次跳一格（7px） */
+.beam-led-off,
+.beam-led-on {
+  stroke: var(--beam);
+  stroke-width: 3.5;
+  stroke-linecap: butt !important;
+}
+
+.beam-led-off {
+  stroke-dasharray: 4 3;
+  opacity: 0.28;
+}
+
+.beam-led-on {
+  stroke-dasharray: 4 3 4 3 4 3 4 31;
+  filter: drop-shadow(0 0 2px var(--beam)) drop-shadow(0 0 5px var(--beam));
+  animation: beam-led 1s steps(8) infinite;
+}
+
+@keyframes beam-led {
+  to {
+    stroke-dashoffset: -56;
+  }
+}
+
+/* ── 過載節點前後的邊 ── */
+
+/* 壅塞：橘紅色燈管，光點在入口前擠成一團 */
+.sim-edge-beam.is-jam {
+  --beam: #ff5a2e;
+}
+
+.beam-jam-dot {
+  fill: #ffffff;
+  filter: drop-shadow(0 0 2px #ff5a2e) drop-shadow(0 0 5px #ff5a2e);
+}
+
+.beam-jam-pile {
+  fill: #ff5a2e;
+  opacity: 0.35;
+  filter: blur(3px);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .beam-jam-pile {
+    animation: beam-jam-pile 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes beam-jam-pile {
+  50% {
+    opacity: 0.7;
+    transform: scale(1.5);
+  }
+}
+
+/* 受限：灰掉、變暗、掃光很慢 */
+.sim-edge-beam.is-starved {
+  --beam: color-mix(in oklab, var(--beam-cold) 30%, #a19db0);
+  opacity: 0.55;
+}
+
+.beam-sweep-starved {
+  animation-duration: 4.5s;
+  opacity: 0.7;
+}
