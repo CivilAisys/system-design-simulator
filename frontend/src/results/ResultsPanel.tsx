@@ -9,7 +9,6 @@ import {
   type Topology,
   type ValidationError,
 } from '@/api/client'
-import type { Theme } from '@/theme'
 import { formatBitsPerSec, formatBytesPerSec, formatDays, formatPercent } from '@/canvas/format'
 import { ErrorList } from './ErrorList'
 import { KpiStrip } from './KpiStrip'
@@ -27,7 +26,6 @@ type ResultsPanelProps = {
   resultTopology: Topology | null
   stale: boolean
   running: boolean
-  theme: Theme
   canFocusError: (error: ValidationError) => boolean
   onFocusError: (error: ValidationError) => void
   // 容量估算表的算式裡點節點名稱
@@ -40,7 +38,6 @@ export function ResultsPanel({
   resultTopology,
   stale,
   running,
-  theme,
   canFocusError,
   onFocusError,
   onSelectNode,
@@ -79,7 +76,7 @@ export function ResultsPanel({
         <TabsContent value="sankey" className="min-h-40">
           {computed && hasFlow ? (
             <Suspense>
-              <FlowSankey topology={topology} result={computed} theme={theme} />
+              <FlowSankey topology={topology} result={computed} />
             </Suspense>
           ) : computed ? (
             <p className="p-4 text-sm text-muted-foreground">所有連線的流量都是 0</p>
@@ -95,7 +92,6 @@ export function ResultsPanel({
               result={result}
               resultTopology={resultTopology}
               stale={stale}
-              theme={theme}
             />
           ) : (
             empty

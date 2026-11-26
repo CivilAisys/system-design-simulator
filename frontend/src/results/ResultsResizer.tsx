@@ -92,7 +92,7 @@ export function ResultsResizer({ panelId, height, onResize }: ResultsResizerProp
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onKeyDown={onKeyDown}
-      className="group flex h-2.5 shrink-0 cursor-row-resize touch-none items-center justify-center gap-1 border-t bg-background outline-none transition-colors hover:bg-primary/15 focus-visible:bg-primary/25"
+      className="group flex h-2.5 shrink-0 cursor-row-resize touch-none items-center justify-center gap-1 border-t-[1.5px] border-ink bg-background outline-none transition-colors hover:bg-primary/15 focus-visible:bg-primary/25"
     >
       {/* 握把：平常就看得到，讓人知道這條線可以拖 */}
       {Array.from({ length: GRIP_DOT_COUNT }, (_, dot) => (

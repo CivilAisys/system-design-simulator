@@ -19,7 +19,6 @@ import {
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { SweepResult } from '@/api/client'
-import type { Theme } from '@/theme'
 import { formatMs, formatRps, formatRpsNumber } from '@/canvas/format'
 import { CURVE_COLORS, SANKEY_COLORS } from '@/canvas/status'
 import { curveBands, latencyAxis, pointTooltip, successSeries, type LatencyLine } from './loadCurve'
@@ -53,17 +52,16 @@ type LoadCurveChartProps = {
   sweep: SweepResult
   lines: LatencyLine[]
   nodeName: (id: string) => string
-  theme: Theme
 }
 
-export function LoadCurveChart({ sweep, lines, nodeName, theme }: LoadCurveChartProps) {
+export function LoadCurveChart({ sweep, lines, nodeName }: LoadCurveChartProps) {
   const { containerRef, chartRef } = useECharts()
 
   useEffect(() => {
     // notMerge：色帶消失時（例如加了 Rate Limiter）舊的不能留著。
     // nodeName 只在名稱改了時才換（見 LoadCurvePanel），拖動節點不會重畫、不會重置 legend
-    chartRef.current?.setOption(curveOption(sweep, lines, nodeName, theme), { notMerge: true })
-  }, [chartRef, sweep, lines, nodeName, theme])
+    chartRef.current?.setOption(curveOption(sweep, lines, nodeName), { notMerge: true })
+  }, [chartRef, sweep, lines, nodeName])
 
   return <div ref={containerRef} className="size-full" />
 }
@@ -79,10 +77,9 @@ function curveOption(
   sweep: SweepResult,
   lines: LatencyLine[],
   nodeName: (id: string) => string,
-  theme: Theme,
 ): CurveOption {
-  const colors = SANKEY_COLORS[theme]
-  const curve = CURVE_COLORS[theme]
+  const colors = SANKEY_COLORS
+  const curve = CURVE_COLORS
   const bands = curveBands(sweep, nodeName)
   const axis = latencyAxis(sweep.points, lines)
   const bandColor = { warn: colors.warn, overload: colors.over }

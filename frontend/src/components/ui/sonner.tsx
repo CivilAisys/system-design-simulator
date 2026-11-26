@@ -1,7 +1,7 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
-// 主題由 App 的 useTheme 透過 theme prop 傳入，不用 next-themes
+// 介面只有紙感一種外觀，用 sonner 預設的淺色，不用 next-themes
 const Toaster = ({ style, toastOptions, ...props }: ToasterProps) => {
   return (
     <Sonner

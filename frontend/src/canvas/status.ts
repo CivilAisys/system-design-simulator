@@ -1,5 +1,4 @@
 import { totalRps, type NodeResult, type NodeWarning, type Status } from '@/api/client'
-import type { Theme } from '@/theme'
 
 // 第 4.4 節的狀態色，畫布節點、指標表和 Sankey 共用。
 // Rate Limiter 的 LIMITING／NOT_LIMITING 不是 ρ 分級：限流是設計上預期的行為，不變色、不發光。
@@ -90,38 +89,24 @@ export const STATUS_FILL: Record<DisplayStatus, string> = {
 }
 
 // ECharts 畫在 canvas 上吃不到 CSS 變數，用 index.css 裡同樣的值，改配色時要一起改。
-// neutral 是 muted-foreground：Client（沒有狀態）、Rate Limiter 和配額內的 External API 的 Sankey 節點
+// neutral 是 muted-foreground：Client（沒有狀態）、Rate Limiter 和配額內的 External API 的 Sankey 節點。
+// text 是墨色，tooltip 是卡片的紙色，tooltipBorder 是 input 的外框色
 export const SANKEY_COLORS = {
-  dark: {
-    ok: '#34d399',
-    warn: '#facc15',
-    critical: '#fb923c',
-    over: '#f87171',
-    neutral: '#8b97b3',
-    text: '#eef2fa',
-    tooltip: '#121a2e',
-    tooltipBorder: '#26324f',
-  },
-  light: {
-    ok: '#10b981',
-    warn: '#f59e0b',
-    critical: '#f97316',
-    over: '#ef4444',
-    neutral: '#62677e',
-    text: '#1b1f3b',
-    tooltip: '#ffffff',
-    tooltipBorder: '#e4e6ef',
-  },
-} satisfies Record<Theme, Record<string, string>>
+  ok: '#10b981',
+  warn: '#f59e0b',
+  critical: '#f97316',
+  over: '#ef4444',
+  neutral: '#6c6b74',
+  text: '#232634',
+  tooltip: '#fffefb',
+  tooltipBorder: '#d5cdbd',
+}
 
-export type SankeyColors = (typeof SANKEY_COLORS)[Theme]
+export type SankeyColors = typeof SANKEY_COLORS
 
 // 負載曲線的線和格線（spec 第 6 節）；成功率用 OK 的綠色，色帶和「目前」用 SANKEY_COLORS 的狀態色。
-// 格線、軸線要自己給：ECharts 預設的格線在深色主題太亮
-export const CURVE_COLORS: Record<Theme, { read: string; write: string; success: string; grid: string }> = {
-  dark: { read: '#60a5fa', write: '#c084fc', success: SANKEY_COLORS.dark.ok, grid: '#26324f' },
-  light: { read: '#2563eb', write: '#9333ea', success: SANKEY_COLORS.light.ok, grid: '#e4e6ef' },
-}
+// 格線、軸線用紙色的淡線（index.css 的 border），ECharts 預設的灰在米白底上太冷
+export const CURVE_COLORS = { read: '#2563eb', write: '#9333ea', success: SANKEY_COLORS.ok, grid: '#e3ddd0' }
 
 // Sankey 節點依狀態取 SANKEY_COLORS 裡的哪個顏色
 export const SANKEY_STATUS_COLOR: Record<Status, keyof SankeyColors> = {
