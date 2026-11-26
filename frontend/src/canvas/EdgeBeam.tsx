@@ -49,8 +49,6 @@ export function EdgeBeam({ path, rps, kind, selected, invalid, stale, congestion
   const dash = kind === 'ASYNC' ? ASYNC_DASH : undefined
   // 驗證錯誤時沒有計算結果，不會有壅塞或受限
   const color = invalid || !beam ? 'var(--destructive)' : congestion ? CONGESTION_COLOR[congestion] : beam.color
-  // 過期時白光、光點停在原地
-  const paused = stale && '[animation-play-state:paused]'
   return (
     <g className="pointer-events-none">
       {/* 燈管蓋住了底下連線的選取色，外面另加一圈主色。放在畫淡的那一層外面，結果過期時也看得出選到哪一條 */}
@@ -60,7 +58,7 @@ export function EdgeBeam({ path, rps, kind, selected, invalid, stale, congestion
           <path d={path} className="beam-halo" strokeDasharray={dash} />
           <path d={path} className="beam-tube" strokeDasharray={dash} />
           <path d={path} className="beam-core" strokeDasharray={dash} />
-          {!invalid && beam && flowMarks(path, beam, congestion, paused, targetX, targetY)}
+          {!invalid && beam && flowMarks(path, beam, congestion, stale ?? false, targetX, targetY)}
         </g>
       </g>
     </g>
@@ -71,10 +69,12 @@ function flowMarks(
   path: string,
   beam: Beam,
   congestion: Congestion | undefined,
-  paused: string | false | undefined,
+  stale: boolean,
   targetX: number,
   targetY: number,
 ): ReactNode {
+  // 過期時白光、光點停在原地
+  const paused = stale && '[animation-play-state:paused]'
   switch (congestion) {
     // 壅塞：光點一開始快、越接近過載節點越慢（ease-out，見 .beam-jam-dot），在入口前擠成一團；
     // 入口有一團慢慢脈動的橘紅光。光點是長度幾乎是 0 的圓頭虛線，用 CSS 動畫移動，過期時才停得住

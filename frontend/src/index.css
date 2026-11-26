@@ -294,8 +294,7 @@
         stroke-linecap: round;
         stroke-dasharray: 0.01 200;
         filter: drop-shadow(0 0 2px var(--beam)) drop-shadow(0 0 5px var(--beam));
-        animation: beam-jam-dot linear infinite;
-        animation-timing-function: cubic-bezier(0.05, 0.7, 0.1, 1);
+        animation: beam-jam-dot cubic-bezier(0.05, 0.7, 0.1, 1) infinite;
     }
 
     /* 入口那團慢慢脈動的光 */
